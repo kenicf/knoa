@@ -1,69 +1,178 @@
 {
   "project": "knoa",
   "original_request": "フェーズ0の「環境準備: シンプルなGitリポジトリを用意し、基本的なディレクトリ構造を作成」の実装",
+  "task_hierarchy": {
+    "epics": [
+      {
+        "epic_id": "E001",
+        "title": "フェーズ0: ミニマルAI駆動開発基盤の構築",
+        "stories": ["S001"]
+      }
+    ],
+    "stories": [
+      {
+        "story_id": "S001",
+        "title": "環境準備と基本実装",
+        "tasks": ["T001", "T002", "T003", "T004", "T005", "T006", "T007", "T008", "T009"]
+      }
+    ]
+  },
   "decomposed_tasks": [
     {
       "id": "T001",
       "title": "基本ディレクトリ構造の設計",
       "description": "knoaの基本的なディレクトリ構造を設計する",
       "status": "completed",
-      "dependencies": []
+      "dependencies": [],
+      "priority": 5,
+      "estimated_hours": 2,
+      "progress_percentage": 100,
+      "progress_state": "completed",
+      "git_commits": []
     },
     {
       "id": "T002",
       "title": "コアコンポーネントの実装",
       "description": "タスク管理、セッション管理、フィードバック管理の基本実装",
       "status": "completed",
-      "dependencies": ["T001"]
+      "dependencies": [
+        {
+          "task_id": "T001",
+          "type": "strong"
+        }
+      ],
+      "priority": 5,
+      "estimated_hours": 4,
+      "progress_percentage": 100,
+      "progress_state": "completed",
+      "git_commits": []
     },
     {
       "id": "T003",
       "title": "プロジェクトテンプレートの作成",
       "description": "フロントエンドとVBAのプロジェクトテンプレート作成",
       "status": "completed",
-      "dependencies": ["T002"]
+      "dependencies": [
+        {
+          "task_id": "T002",
+          "type": "strong"
+        }
+      ],
+      "priority": 4,
+      "estimated_hours": 3,
+      "progress_percentage": 100,
+      "progress_state": "completed",
+      "git_commits": []
     },
     {
       "id": "T004",
       "title": "循環的構造の実装",
       "description": "knoa自体を開発対象とするための循環的構造の実装",
       "status": "completed",
-      "dependencies": ["T003"]
+      "dependencies": [
+        {
+          "task_id": "T003",
+          "type": "strong"
+        }
+      ],
+      "priority": 4,
+      "estimated_hours": 2,
+      "progress_percentage": 100,
+      "progress_state": "completed",
+      "git_commits": []
     },
     {
       "id": "T005",
       "title": "ディレクトリ構造の修正",
       "description": "coreをsrcにリネームし、ai-contextディレクトリを作成",
       "status": "completed",
-      "dependencies": ["T004"]
+      "dependencies": [
+        {
+          "task_id": "T004",
+          "type": "strong"
+        }
+      ],
+      "priority": 3,
+      "estimated_hours": 1,
+      "progress_percentage": 100,
+      "progress_state": "completed",
+      "git_commits": []
     },
     {
       "id": "T006",
       "title": "READMEの更新",
       "description": "新しいディレクトリ構造と循環的開発プロセスの説明を追加",
       "status": "completed",
-      "dependencies": ["T005"]
+      "dependencies": [
+        {
+          "task_id": "T005",
+          "type": "strong"
+        }
+      ],
+      "priority": 3,
+      "estimated_hours": 1,
+      "progress_percentage": 100,
+      "progress_state": "completed",
+      "git_commits": []
     },
     {
       "id": "T007",
       "title": "タスク管理JSONファイル形式の詳細化",
       "description": "タスク分解と追跡のためのJSONファイル形式を詳細化する",
-      "status": "pending",
-      "dependencies": ["T006"]
+      "status": "in_progress",
+      "dependencies": [
+        {
+          "task_id": "T006",
+          "type": "strong"
+        }
+      ],
+      "priority": 5,
+      "estimated_hours": 4,
+      "progress_percentage": 60,
+      "progress_state": "implementation_complete",
+      "git_commits": []
     },
     {
       "id": "T008",
       "title": "セッション間状態引継ぎフォーマットの改善",
       "description": "セッション間の状態引継ぎフォーマットを改善する",
       "status": "pending",
-      "dependencies": ["T006"]
+      "dependencies": [
+        {
+          "task_id": "T006",
+          "type": "strong"
+        },
+        {
+          "task_id": "T007",
+          "type": "weak"
+        }
+      ],
+      "priority": 4,
+      "estimated_hours": 3,
+      "progress_percentage": 0,
+      "progress_state": "not_started",
+      "git_commits": []
     },
     {
       "id": "T009",
       "title": "フィードバックループの確立",
       "description": "シンプルなテスト実行と結果フィードバックの流れを確立する",
       "status": "pending",
-      "dependencies": ["T006"]
+      "dependencies": [
+        {
+          "task_id": "T006",
+          "type": "strong"
+        },
+        {
+          "task_id": "T007",
+          "type": "weak"
+        }
+      ],
+      "priority": 4,
+      "estimated_hours": 3,
+      "progress_percentage": 0,
+      "progress_state": "not_started",
+      "git_commits": []
     }
   ],
   "current_focus": "T007"

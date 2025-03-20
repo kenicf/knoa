@@ -1,14 +1,78 @@
 {
-  "project": "プロジェクト名",
-  "original_request": "ユーザーからの元の指示",
+  "project": "サンプルプロジェクト",
+  "original_request": "ユーザー登録機能とプロフィール編集機能を実装してください",
+  "task_hierarchy": {
+    "epics": [
+      {
+        "epic_id": "E001",
+        "title": "ユーザー管理システム",
+        "stories": ["S001", "S002"]
+      }
+    ],
+    "stories": [
+      {
+        "story_id": "S001",
+        "title": "ユーザー登録機能",
+        "tasks": ["T001", "T002"]
+      },
+      {
+        "story_id": "S002",
+        "title": "プロフィール編集機能",
+        "tasks": ["T003"]
+      }
+    ]
+  },
   "decomposed_tasks": [
     {
       "id": "T001",
-      "title": "タスクタイトル",
-      "description": "タスクの詳細説明",
+      "title": "ユーザーエンティティ設計",
+      "description": "ユーザーの属性とメソッドを定義",
+      "status": "completed",
+      "dependencies": [],
+      "priority": 5,
+      "estimated_hours": 4,
+      "progress_percentage": 100,
+      "progress_state": "completed",
+      "git_commits": ["abc123", "def456"]
+    },
+    {
+      "id": "T002",
+      "title": "ユーザー登録API実装",
+      "description": "新規ユーザー登録エンドポイントの作成",
+      "status": "in_progress",
+      "dependencies": [
+        {
+          "task_id": "T001",
+          "type": "strong"
+        }
+      ],
+      "priority": 4,
+      "estimated_hours": 8,
+      "progress_percentage": 70,
+      "progress_state": "in_review",
+      "git_commits": ["ghi789"]
+    },
+    {
+      "id": "T003",
+      "title": "プロフィール編集API実装",
+      "description": "既存ユーザー情報更新エンドポイントの作成",
       "status": "pending",
-      "dependencies": []
+      "dependencies": [
+        {
+          "task_id": "T001",
+          "type": "strong"
+        },
+        {
+          "task_id": "T002",
+          "type": "weak"
+        }
+      ],
+      "priority": 3,
+      "estimated_hours": 6,
+      "progress_percentage": 0,
+      "progress_state": "not_started",
+      "git_commits": []
     }
   ],
-  "current_focus": "T001"
+  "current_focus": "T002"
 }
