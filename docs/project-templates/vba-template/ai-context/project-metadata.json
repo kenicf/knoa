@@ -1,0 +1,36 @@
+{
+  "project_name": "VBAプロジェクトテンプレート",
+  "project_type": "vba",
+  "version": "1.0.0",
+  "created_at": "2025-03-20T11:30:00Z",
+  "last_updated": "2025-03-20T11:30:00Z",
+  "description": "AI駆動開発のためのVBAプロジェクトの基本構造",
+  "technologies": [
+    "VBA",
+    "Excel",
+    "Access"
+  ],
+  "structure": {
+    "src": {
+      "purpose": "ソースコード",
+      "key_files": [
+        {"path": "modules/Main.bas", "purpose": "メインモジュール"},
+        {"path": "modules/Utilities.bas", "purpose": "ユーティリティモジュール"},
+        {"path": "forms/UserForm1.frm", "purpose": "サンプルフォーム"},
+        {"path": "class-modules/DataProcessor.cls", "purpose": "データ処理クラス"}
+      ]
+    },
+    "ai-context": {
+      "purpose": "AI用コンテキスト情報",
+      "key_files": [
+        {"path": "project-metadata.json", "purpose": "プロジェクト情報"},
+        {"path": "tasks/current-tasks.json", "purpose": "現在のタスク"}
+      ]
+    }
+  },
+  "domain_concepts": [],
+  "development_flow": {
+    "current_phase": "初期化",
+    "next_steps": ["要件定義", "設計", "実装"]
+  }
+}

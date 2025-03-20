@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["session_handover"],
+  "properties": {
+    "session_handover": {
+      "type": "object",
+      "required": ["project_id", "session_timestamp", "project_state_summary", "next_session_focus"],
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "description": "プロジェクトの一意識別子"
+        },
+        "session_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "セッションのタイムスタンプ（ISO 8601形式）"
+        },
+        "project_state_summary": {
+          "type": "object",
+          "required": ["completed_tasks", "current_tasks", "pending_tasks"],
+          "properties": {
+            "completed_tasks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^T[0-9]{3}$"
+              },
+              "description": "完了したタスクIDのリスト"
+            },
+            "current_tasks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^T[0-9]{3}$"
+              },
+              "description": "現在進行中のタスクIDのリスト"
+            },
+            "pending_tasks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^T[0-9]{3}$"
+              },
+              "description": "保留中のタスクIDのリスト"
+            }
+          }
+        },
+        "key_artifacts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "重要なファイルとその説明のマップ"
+        },
+        "current_challenges": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "現在の課題のリスト"
+        },
+        "next_session_focus": {
+          "type": "string",
+          "description": "次のセッションでの焦点"
+        }
+      }
+    }
+  }
+}

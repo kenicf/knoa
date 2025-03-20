@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["feedback_loop"],
+  "properties": {
+    "feedback_loop": {
+      "type": "object",
+      "required": ["task_id", "implementation_attempt", "verification_results", "iteration_plan"],
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "pattern": "^T[0-9]{3}$",
+          "description": "フィードバック対象のタスクID"
+        },
+        "implementation_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "実装の試行回数"
+        },
+        "verification_results": {
+          "type": "object",
+          "required": ["passes_tests", "failed_tests", "suggestions"],
+          "properties": {
+            "passes_tests": {
+              "type": "boolean",
+              "description": "テストに合格したかどうか"
+            },
+            "failed_tests": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["test_name", "error"],
+                "properties": {
+                  "test_name": {
+                    "type": "string",
+                    "description": "失敗したテストの名前"
+                  },
+                  "error": {
+                    "type": "string",
+                    "description": "エラーメッセージ"
+                  }
+                }
+              },
+              "description": "失敗したテストのリスト"
+            },
+            "suggestions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "改善提案のリスト"
+            }
+          }
+        },
+        "iteration_plan": {
+          "type": "object",
+          "required": ["focus_areas", "approach"],
+          "properties": {
+            "focus_areas": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "次のイテレーションでの焦点領域"
+            },
+            "approach": {
+              "type": "string",
+              "description": "次のイテレーションでのアプローチ"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "session_handover": {
+    "project_id": "プロジェクトID",
+    "session_timestamp": "2025-03-20T15:30:00Z",
+    "project_state_summary": {
+      "completed_tasks": [],
+      "current_tasks": ["T001"],
+      "pending_tasks": ["T002", "T003"]
+    },
+    "key_artifacts": {
+      "ファイル名": "ファイルの簡単な説明"
+    },
+    "current_challenges": [
+      "現在の課題1",
+      "現在の課題2"
+    ],
+    "next_session_focus": "次のセッションでの焦点"
+  }
+}

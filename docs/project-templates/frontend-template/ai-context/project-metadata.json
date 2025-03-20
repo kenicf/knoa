@@ -1,0 +1,35 @@
+{
+  "project_name": "フロントエンドプロジェクトテンプレート",
+  "project_type": "frontend",
+  "version": "1.0.0",
+  "created_at": "2025-03-20T11:30:00Z",
+  "last_updated": "2025-03-20T11:30:00Z",
+  "description": "AI駆動開発のためのフロントエンドプロジェクト（HTML/CSS/JavaScript）の基本構造",
+  "technologies": [
+    "HTML5",
+    "CSS3",
+    "JavaScript"
+  ],
+  "structure": {
+    "src": {
+      "purpose": "ソースコード",
+      "key_files": [
+        {"path": "index.html", "purpose": "メインページ"},
+        {"path": "styles/main.css", "purpose": "メインスタイル"},
+        {"path": "scripts/main.js", "purpose": "メイン機能"}
+      ]
+    },
+    "ai-context": {
+      "purpose": "AI用コンテキスト情報",
+      "key_files": [
+        {"path": "project-metadata.json", "purpose": "プロジェクト情報"},
+        {"path": "tasks/current-tasks.json", "purpose": "現在のタスク"}
+      ]
+    }
+  },
+  "domain_concepts": [],
+  "development_flow": {
+    "current_phase": "初期化",
+    "next_steps": ["要件定義", "設計", "実装"]
+  }
+}

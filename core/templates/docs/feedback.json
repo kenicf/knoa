@@ -1,0 +1,23 @@
+{
+  "feedback_loop": {
+    "task_id": "T001",
+    "implementation_attempt": 1,
+    "verification_results": {
+      "passes_tests": false,
+      "failed_tests": [
+        {
+          "test_name": "テスト名",
+          "error": "エラー内容"
+        }
+      ],
+      "suggestions": [
+        "改善提案1",
+        "改善提案2"
+      ]
+    },
+    "iteration_plan": {
+      "focus_areas": ["焦点領域1", "焦点領域2"],
+      "approach": "次の改善アプローチ"
+    }
+  }
+}

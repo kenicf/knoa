@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["project", "original_request", "decomposed_tasks", "current_focus"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "プロジェクト名"
+    },
+    "original_request": {
+      "type": "string",
+      "description": "ユーザーからの元の指示"
+    },
+    "decomposed_tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "description", "status", "dependencies"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^T[0-9]{3}$",
+            "description": "タスクID（T001形式）"
+          },
+          "title": {
+            "type": "string",
+            "description": "タスクタイトル"
+          },
+          "description": {
+            "type": "string",
+            "description": "タスクの詳細説明"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "completed"],
+            "description": "タスクの状態"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^T[0-9]{3}$"
+            },
+            "description": "依存するタスクIDのリスト"
+          }
+        }
+      }
+    },
+    "current_focus": {
+      "type": "string",
+      "pattern": "^T[0-9]{3}$",
+      "description": "現在フォーカスしているタスクID"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "project": "プロジェクト名",
+  "original_request": "ユーザーからの元の指示",
+  "decomposed_tasks": [
+    {
+      "id": "T001",
+      "title": "タスクタイトル",
+      "description": "タスクの詳細説明",
+      "status": "pending",
+      "dependencies": []
+    }
+  ],
+  "current_focus": "T001"
+}
