@@ -1,9 +1,13 @@
 # セッション引継ぎドキュメント
 
 ## セッション情報
-- **日時**: 2025年3月20日
+- **プロジェクト**: knoa
+- **日時**: 2025年3月20日 19:30
+- **セッションID**: commit-20250320-2
+- **前回のセッションID**: commit-20250320-1
+- **セッション時間**: 3時間45分
 - **フェーズ**: フェーズ0（環境準備と実装）
-- **主な実施内容**: タスク管理JSONファイル形式の詳細化（T007）の実装とJSONファイルの更新
+- **主な実施内容**: セッション間状態引継ぎフォーマットの改善（T008）の実装とJSONファイルの更新
 
 ## 実装済みの内容
 
@@ -17,18 +21,18 @@
 
 ### 2. 基本的なJSONファイルの作成と更新
 - `ai-context/project-metadata.json`: knoaプロジェクトのメタデータ
-- `ai-context/tasks/current-tasks.json`: タスクT004～T007を完了に変更し、T008～T009を保留中に設定
-- `ai-context/sessions/latest-session.json`: タイムスタンプ、完了タスク、key_artifacts等を更新
-- `ai-context/feedback/pending-feedback.json`: T008に関するフィードバックを追加
-- `ai-context/feedback/feedback-history/resolved-feedback-T004.json`: 解決済みフィードバックを履歴に移動
+- `ai-context/tasks/current-tasks.json`: タスクT004～T008を完了に変更し、T009を進行中に設定
+- `ai-context/sessions/latest-session.json`: 新しいフォーマットに更新（セッションID、Git変更情報等）
+- `ai-context/feedback/pending-feedback.json`: T009に関するフィードバックを追加
 - `ai-context/feedback/feedback-history/resolved-feedback-T007.json`: T007の解決済みフィードバックを履歴に移動
+- `ai-context/feedback/feedback-history/resolved-feedback-T008.json`: T008の解決済みフィードバックを履歴に移動
 
 ### 3. READMEの更新
 - 新しいディレクトリ構造の説明を追加
 - 循環的開発プロセスの説明を追加
 - knoa自体の開発方法の説明を追加
 
-### 4. タスク管理の詳細化（T007）
+### 4. タスク管理の詳細化（T007）- 完了済み ✓
 - `src/schemas/task.schema.json`を拡張し、以下の新しいフィールドを追加
   - 優先度管理: `priority`フィールド（1-5のスケール）
   - 時間管理: `estimated_hours`フィールド
@@ -45,6 +49,28 @@
 - `tests/task-manager.test.js`を作成し、タスク管理ユーティリティのテストを実装
 - `docs/task-management.md`を作成し、タスク管理システムの詳細なドキュメントを提供
 
+### 5. セッション間状態引継ぎフォーマットの改善（T008）- 完了済み ✓
+- `src/schemas/session.schema.json`を拡張し、以下の新しいフィールドを追加
+  - セッションID、前回のセッションIDフィールドの追加
+  - セッション開始・終了時刻の記録
+  - key_artifactsの構造化（重要度、最終更新日時、Git状態等）
+  - git_changesセクションの追加（コミット情報と変更サマリー）
+  - 課題とアクションアイテムの構造化と優先順位付け
+- `src/templates/docs/session.json`を更新し、拡張されたスキーマに対応したサンプルを提供
+- `src/templates/docs/session-handover-template.md`を作成し、マークダウン形式の引継ぎドキュメントのテンプレートを提供
+- `src/utils/session-manager.js`を新規作成し、セッション管理ユーティリティを実装
+  - セッションの検証
+  - 最新のセッションの取得
+  - セッションIDによるセッションの取得
+  - 新しいセッションの作成
+  - セッションの保存
+  - コミットメッセージからのタスクID抽出
+  - アクションアイテムとタスクの関連付け
+  - マークダウン形式の引継ぎドキュメント生成
+- `tests/session-manager.test.js`を作成し、セッション管理ユーティリティのテストを実装（24個のテストがすべて成功）
+- `docs/session-management.md`を作成し、セッション管理システムの詳細なドキュメントを提供
+- `ai-context/sessions/latest-session.json`を新しい形式に移行
+
 ## タスクの状態
 
 ### 完了したタスク
@@ -57,11 +83,13 @@
 - **T007**: タスク管理JSONファイル形式の詳細化
 
 ### 保留中のタスク
-- **T008**: セッション間状態引継ぎフォーマットの改善
 - **T009**: フィードバックループの確立
 
+### 進行中のタスク
+- **T009**: フィードバックループの確立（進捗率: 20%、設計フェーズ完了）
+
 ### 現在のフォーカス
-- **T008**: セッション間状態引継ぎフォーマットの改善
+- **T009**: フィードバックループの確立
 
 ## 解決済みの課題
 - knoaとプロジェクトテンプレートの構造の不一致を解消
@@ -71,6 +99,13 @@
   - 優先度、見積もり時間、進捗率、進捗状態フィールドを追加
   - 依存関係を詳細化（強依存/弱依存）
   - 将来的な階層構造の基盤を準備
+- セッション間状態引継ぎフォーマットの改善
+  - セッションIDとGitコミットハッシュの関連付け
+  - セッション間の連続性強化（前回のセッションIDの参照）
+  - key_artifactsの構造化（重要度、最終更新日時、Git状態等）
+  - 変更差分の効率的な記録（git_changesセクション）
+  - 課題とアクションアイテムの構造化と優先順位付け
+  - マークダウン形式の引継ぎドキュメント生成機能
 
 ## フェーズ0残り実装項目の戦略
 
@@ -750,24 +785,41 @@
    - `tests/task-manager.test.js`の作成
    - `docs/task-management.md`の作成
 
-### 2. 状態管理の改善（T008）
+### 2. 状態管理の改善（T008）- 完了済み ✓
+
+以下の実装が完了しました：
 
 1. `src/schemas/session.schema.json`を拡張して新しいフィールドを追加
    - セッションID、前回のセッションIDフィールドの追加
-   - key_artifactsの構造化
-   - git_changesセクションの追加
-   - action_itemsの追加
+   - セッション開始・終了時刻の記録
+   - key_artifactsの構造化（重要度、最終更新日時、Git状態等）
+   - git_changesセクションの追加（コミット情報と変更サマリー）
+   - 課題とアクションアイテムの構造化と優先順位付け
 
 2. `src/templates/docs/session.json`を更新して拡張されたスキーマに対応
    - 新しいフィールドのサンプル値を追加
    - 使用例のコメントを追加
 
-3. セッション管理ユーティリティの実装
-   - `src/utils/session-manager.js`の作成
-   - Gitコミットからセッション情報を生成する機能
-   - 変更差分の自動収集機能
+3. `src/templates/docs/session-handover-template.md`を作成
+   - マークダウン形式の引継ぎドキュメントのテンプレートを提供
+   - 変数プレースホルダーの定義
 
-4. `ai-context/sessions/latest-session.json`を新しい形式に移行
+4. セッション管理ユーティリティの実装
+   - `src/utils/session-manager.js`の作成
+   - セッションの検証機能
+   - 最新のセッションの取得機能
+   - セッションIDによるセッションの取得機能
+   - 新しいセッションの作成機能
+   - セッションの保存機能
+   - コミットメッセージからのタスクID抽出機能
+   - アクションアイテムとタスクの関連付け機能
+   - マークダウン形式の引継ぎドキュメント生成機能
+
+5. テストとドキュメントの整備
+   - `tests/session-manager.test.js`の作成（24個のテストがすべて成功）
+   - `docs/session-management.md`の作成
+
+6. `ai-context/sessions/latest-session.json`を新しい形式に移行
    - 既存のセッション情報に新しいフィールドを追加
    - GitコミットハッシュをセッションIDとして使用
 

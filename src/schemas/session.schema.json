@@ -5,16 +5,29 @@
   "properties": {
     "session_handover": {
       "type": "object",
-      "required": ["project_id", "session_timestamp", "project_state_summary", "next_session_focus"],
+      "required": ["project_id", "session_id", "session_timestamp", "project_state_summary", "next_session_focus"],
       "properties": {
         "project_id": {
           "type": "string",
           "description": "プロジェクトの一意識別子"
         },
+        "session_id": {
+          "type": "string",
+          "description": "セッションの一意識別子（セッション終了時のGitコミットハッシュを使用）"
+        },
+        "previous_session_id": {
+          "type": "string",
+          "description": "前回のセッションID（連続性の確保）"
+        },
         "session_timestamp": {
           "type": "string",
           "format": "date-time",
-          "description": "セッションのタイムスタンプ（ISO 8601形式）"
+          "description": "セッション終了時刻（ISO 8601形式）"
+        },
+        "session_start_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "セッション開始時刻（ISO 8601形式）"
         },
         "project_state_summary": {
           "type": "object",
@@ -43,26 +56,277 @@
                 "pattern": "^T[0-9]{3}$"
               },
               "description": "保留中のタスクIDのリスト"
+            },
+            "blocked_tasks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^T[0-9]{3}$"
+              },
+              "description": "ブロックされているタスクIDのリスト"
             }
           }
         },
         "key_artifacts": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "description"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "ファイルパス"
+              },
+              "description": {
+                "type": "string",
+                "description": "ファイルの説明"
+              },
+              "last_modified": {
+                "type": "string",
+                "format": "date-time",
+                "description": "最終更新日時（Gitコミット時刻を基準）"
+              },
+              "git_status": {
+                "type": "string",
+                "enum": ["unchanged", "modified", "added", "deleted", "renamed"],
+                "description": "Gitの状態"
+              },
+              "previous_path": {
+                "type": "string",
+                "description": "リネーム前のパス（git_statusがrenamedの場合）"
+              },
+              "related_tasks": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^T[0-9]{3}$"
+                },
+                "description": "関連するタスクID"
+              },
+              "importance": {
+                "type": "string",
+                "enum": ["high", "medium", "low"],
+                "default": "medium",
+                "description": "重要度"
+              }
+            }
           },
-          "description": "重要なファイルとその説明のマップ"
+          "description": "重要なファイルとその状態"
+        },
+        "git_changes": {
+          "type": "object",
+          "properties": {
+            "commits": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["hash", "message", "timestamp"],
+                "properties": {
+                  "hash": {
+                    "type": "string",
+                    "description": "コミットハッシュ"
+                  },
+                  "message": {
+                    "type": "string",
+                    "description": "コミットメッセージ"
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "コミット日時"
+                  },
+                  "related_tasks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^T[0-9]{3}$"
+                    },
+                    "description": "関連するタスクID"
+                  },
+                  "author": {
+                    "type": "string",
+                    "description": "コミット作者"
+                  }
+                }
+              },
+              "description": "セッション中のコミット"
+            },
+            "summary": {
+              "type": "object",
+              "properties": {
+                "files_added": {
+                  "type": "integer",
+                  "description": "追加されたファイル数"
+                },
+                "files_modified": {
+                  "type": "integer",
+                  "description": "変更されたファイル数"
+                },
+                "files_deleted": {
+                  "type": "integer",
+                  "description": "削除されたファイル数"
+                },
+                "lines_added": {
+                  "type": "integer",
+                  "description": "追加された行数"
+                },
+                "lines_deleted": {
+                  "type": "integer",
+                  "description": "削除された行数"
+                }
+              },
+              "description": "変更の要約"
+            }
+          },
+          "description": "Git変更の詳細"
+        },
+        "other_changes": {
+          "type": "object",
+          "properties": {
+            "config_changes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["config_type", "description"],
+                "properties": {
+                  "config_type": {
+                    "type": "string",
+                    "description": "設定タイプ"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "変更の説明"
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "変更日時"
+                  }
+                }
+              },
+              "description": "設定変更"
+            },
+            "external_changes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["system", "change_type", "description"],
+                "properties": {
+                  "system": {
+                    "type": "string",
+                    "description": "外部システム名"
+                  },
+                  "change_type": {
+                    "type": "string",
+                    "description": "変更タイプ"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "変更の説明"
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "変更日時"
+                  }
+                }
+              },
+              "description": "外部システムの変更"
+            }
+          },
+          "description": "Git以外の変更"
         },
         "current_challenges": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "required": ["description"],
+            "properties": {
+              "description": {
+                "type": "string",
+                "description": "課題の説明"
+              },
+              "related_tasks": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^T[0-9]{3}$"
+                },
+                "description": "関連するタスクID"
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "default": 3,
+                "description": "優先度（1:最低 〜 5:最高、ビジネス価値）"
+              },
+              "severity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "default": 3,
+                "description": "重要度（1:最低 〜 5:最高、技術的影響）"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["identified", "analyzing", "in_progress", "resolved", "wontfix"],
+                "default": "identified",
+                "description": "課題の状態"
+              },
+              "resolution_plan": {
+                "type": "string",
+                "description": "解決計画"
+              }
+            }
           },
           "description": "現在の課題のリスト"
         },
         "next_session_focus": {
           "type": "string",
           "description": "次のセッションでの焦点"
+        },
+        "action_items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["description"],
+            "properties": {
+              "description": {
+                "type": "string",
+                "description": "アクションの説明"
+              },
+              "related_task": {
+                "type": "string",
+                "pattern": "^T[0-9]{3}$",
+                "description": "関連するタスクID"
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "default": 3,
+                "description": "優先度（1:最低 〜 5:最高、ビジネス価値）"
+              },
+              "severity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "default": 3,
+                "description": "重要度（1:最低 〜 5:最高、技術的影響）"
+              },
+              "due_date": {
+                "type": "string",
+                "format": "date",
+                "description": "期限"
+              },
+              "assignee": {
+                "type": "string",
+                "description": "担当者"
+              }
+            }
+          },
+          "description": "次のセッションでのアクションアイテム"
         }
       }
     }

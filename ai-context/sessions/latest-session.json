@@ -1,33 +1,203 @@
 {
   "session_handover": {
     "project_id": "knoa",
+    "session_id": "session-20250320",
+    "previous_session_id": null,
     "session_timestamp": "2025-03-20T18:00:00Z",
+    "session_start_timestamp": "2025-03-20T15:00:00Z",
     "project_state_summary": {
       "completed_tasks": ["T001", "T002", "T003", "T004", "T005", "T006", "T007"],
-      "current_tasks": [],
-      "pending_tasks": ["T008", "T009"]
+      "current_tasks": ["T008"],
+      "pending_tasks": ["T009"],
+      "blocked_tasks": []
     },
-    "key_artifacts": {
-      "README.md": "プロジェクト概要",
-      "ai-dev-guideline.md": "AI駆動開発ガイドライン",
-      "src/templates/": "標準化テンプレート",
-      "src/schemas/": "JSONスキーマ定義",
-      "src/schemas/task.schema.json": "拡張されたタスク管理スキーマ",
-      "src/utils/task-manager.js": "タスク管理ユーティリティ",
-      "docs/project-templates/": "新規プロジェクト用テンプレート",
-      "docs/phases/phase0.md": "フェーズ0の詳細ドキュメント",
-      "docs/task-management.md": "タスク管理システム詳細ドキュメント",
-      "tests/task-manager.test.js": "タスク管理ユーティリティのテスト",
-      "ai-context/": "knoa自体のAI用コンテキスト情報",
-      "ai-context/tasks/": "タスク管理情報",
-      "ai-context/tasks/T007-implementation-strategy.md": "タスク管理詳細化の実装戦略",
-      "ai-context/sessions/": "セッション管理情報",
-      "ai-context/feedback/": "フィードバック管理情報"
+    "key_artifacts": [
+      {
+        "path": "README.md",
+        "description": "プロジェクト概要",
+        "last_modified": "2025-03-20T16:30:00Z",
+        "git_status": "modified",
+        "related_tasks": ["T006"],
+        "importance": "high"
+      },
+      {
+        "path": "ai-dev-guideline.md",
+        "description": "AI駆動開発ガイドライン",
+        "last_modified": "2025-03-20T16:00:00Z",
+        "git_status": "unchanged",
+        "related_tasks": [],
+        "importance": "high"
+      },
+      {
+        "path": "src/schemas/task.schema.json",
+        "description": "拡張されたタスク管理スキーマ",
+        "last_modified": "2025-03-20T17:30:00Z",
+        "git_status": "modified",
+        "related_tasks": ["T007"],
+        "importance": "high"
+      },
+      {
+        "path": "src/utils/task-manager.js",
+        "description": "タスク管理ユーティリティ",
+        "last_modified": "2025-03-20T17:45:00Z",
+        "git_status": "added",
+        "related_tasks": ["T007"],
+        "importance": "high"
+      },
+      {
+        "path": "docs/task-management.md",
+        "description": "タスク管理システム詳細ドキュメント",
+        "last_modified": "2025-03-20T17:50:00Z",
+        "git_status": "added",
+        "related_tasks": ["T007"],
+        "importance": "medium"
+      },
+      {
+        "path": "tests/task-manager.test.js",
+        "description": "タスク管理ユーティリティのテスト",
+        "last_modified": "2025-03-20T17:55:00Z",
+        "git_status": "added",
+        "related_tasks": ["T007"],
+        "importance": "medium"
+      },
+      {
+        "path": "ai-context/tasks/T007-implementation-strategy.md",
+        "description": "タスク管理詳細化の実装戦略",
+        "last_modified": "2025-03-20T16:45:00Z",
+        "git_status": "added",
+        "related_tasks": ["T007"],
+        "importance": "medium"
+      },
+      {
+        "path": "src/schemas/session.schema.json",
+        "description": "セッションスキーマ定義",
+        "last_modified": "2025-03-20T18:00:00Z",
+        "git_status": "modified",
+        "related_tasks": ["T008"],
+        "importance": "high"
+      },
+      {
+        "path": "src/templates/docs/session.json",
+        "description": "セッションテンプレート",
+        "last_modified": "2025-03-20T18:00:00Z",
+        "git_status": "modified",
+        "related_tasks": ["T008"],
+        "importance": "medium"
+      },
+      {
+        "path": "src/templates/docs/session-handover-template.md",
+        "description": "セッション引継ぎマークダウンテンプレート",
+        "last_modified": "2025-03-20T18:00:00Z",
+        "git_status": "added",
+        "related_tasks": ["T008"],
+        "importance": "medium"
+      },
+      {
+        "path": "src/utils/session-manager.js",
+        "description": "セッション管理ユーティリティ",
+        "last_modified": "2025-03-20T18:00:00Z",
+        "git_status": "added",
+        "related_tasks": ["T008"],
+        "importance": "high"
+      },
+      {
+        "path": "tests/session-manager.test.js",
+        "description": "セッション管理ユーティリティのテスト",
+        "last_modified": "2025-03-20T18:00:00Z",
+        "git_status": "added",
+        "related_tasks": ["T008"],
+        "importance": "medium"
+      },
+      {
+        "path": "docs/session-management.md",
+        "description": "セッション管理システム詳細ドキュメント",
+        "last_modified": "2025-03-20T18:00:00Z",
+        "git_status": "added",
+        "related_tasks": ["T008"],
+        "importance": "medium"
+      },
+      {
+        "path": "ai-context/tasks/T008-implementation-strategy.md",
+        "description": "セッション間状態引継ぎフォーマット改善の実装戦略",
+        "last_modified": "2025-03-20T17:00:00Z",
+        "git_status": "added",
+        "related_tasks": ["T008"],
+        "importance": "medium"
+      }
+    ],
+    "git_changes": {
+      "commits": [
+        {
+          "hash": "commit-20250320-1",
+          "message": "タスク管理JSONファイル形式の詳細化 #T007",
+          "timestamp": "2025-03-20T17:45:00Z",
+          "related_tasks": ["T007"],
+          "author": "AI Developer"
+        },
+        {
+          "hash": "commit-20250320-2",
+          "message": "セッション間状態引継ぎフォーマットの改善 #T008",
+          "timestamp": "2025-03-20T18:00:00Z",
+          "related_tasks": ["T008"],
+          "author": "AI Developer"
+        }
+      ],
+      "summary": {
+        "files_added": 8,
+        "files_modified": 3,
+        "files_deleted": 0,
+        "lines_added": 2500,
+        "lines_deleted": 100
+      }
+    },
+    "other_changes": {
+      "config_changes": [],
+      "external_changes": []
     },
     "current_challenges": [
-      "セッション間の状態引継ぎフォーマットの改善が必要",
-      "フィードバックループの確立が必要"
+      {
+        "description": "セッション間の状態引継ぎフォーマットの改善が必要",
+        "related_tasks": ["T008"],
+        "priority": 4,
+        "severity": 3,
+        "status": "in_progress",
+        "resolution_plan": "セッションスキーマの拡張とセッション管理ユーティリティの実装"
+      },
+      {
+        "description": "フィードバックループの確立が必要",
+        "related_tasks": ["T009"],
+        "priority": 4,
+        "severity": 3,
+        "status": "identified",
+        "resolution_plan": "フィードバックスキーマの拡張とフィードバック管理ユーティリティの実装"
+      }
     ],
-    "next_session_focus": "T008: セッション間状態引継ぎフォーマットの改善"
+    "next_session_focus": "T009: フィードバックループの確立",
+    "action_items": [
+      {
+        "description": "セッション管理ユーティリティの機能テスト",
+        "related_task": "T008",
+        "priority": 5,
+        "severity": 4,
+        "due_date": "2025-03-21",
+        "assignee": "AI Developer"
+      },
+      {
+        "description": "フィードバックスキーマの拡張",
+        "related_task": "T009",
+        "priority": 4,
+        "severity": 3,
+        "due_date": "2025-03-22",
+        "assignee": "AI Developer"
+      },
+      {
+        "description": "フィードバック管理ユーティリティの実装",
+        "related_task": "T009",
+        "priority": 4,
+        "severity": 3,
+        "due_date": "2025-03-23",
+        "assignee": "AI Developer"
+      }
+    ]
   }
 }

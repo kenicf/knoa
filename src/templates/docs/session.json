@@ -1,19 +1,121 @@
 {
   "session_handover": {
-    "project_id": "プロジェクトID",
+    "project_id": "knoa",
+    "session_id": "abc123def456",
+    "previous_session_id": "789ghi012jkl",
     "session_timestamp": "2025-03-20T15:30:00Z",
+    "session_start_timestamp": "2025-03-20T13:45:00Z",
     "project_state_summary": {
-      "completed_tasks": [],
-      "current_tasks": ["T001"],
-      "pending_tasks": ["T002", "T003"]
+      "completed_tasks": ["T001", "T002", "T003"],
+      "current_tasks": ["T004"],
+      "pending_tasks": ["T005", "T006"],
+      "blocked_tasks": []
     },
-    "key_artifacts": {
-      "ファイル名": "ファイルの簡単な説明"
+    "key_artifacts": [
+      {
+        "path": "src/schemas/session.schema.json",
+        "description": "セッションスキーマ定義",
+        "last_modified": "2025-03-20T14:25:00Z",
+        "git_status": "modified",
+        "related_tasks": ["T004"],
+        "importance": "high"
+      },
+      {
+        "path": "src/utils/session-manager.js",
+        "description": "セッション管理ユーティリティ",
+        "last_modified": "2025-03-20T15:10:00Z",
+        "git_status": "added",
+        "related_tasks": ["T004"],
+        "importance": "high"
+      },
+      {
+        "path": "src/templates/docs/session.json",
+        "description": "セッションテンプレート",
+        "last_modified": "2025-03-20T14:30:00Z",
+        "git_status": "renamed",
+        "previous_path": "src/templates/session-template.json",
+        "related_tasks": ["T004"],
+        "importance": "medium"
+      }
+    ],
+    "git_changes": {
+      "commits": [
+        {
+          "hash": "abc123def456",
+          "message": "セッションスキーマの拡張 #T004",
+          "timestamp": "2025-03-20T15:20:00Z",
+          "related_tasks": ["T004"],
+          "author": "AI Developer"
+        },
+        {
+          "hash": "def456ghi789",
+          "message": "セッション管理ユーティリティの追加 #T004",
+          "timestamp": "2025-03-20T14:50:00Z",
+          "related_tasks": ["T004"],
+          "author": "AI Developer"
+        }
+      ],
+      "summary": {
+        "files_added": 1,
+        "files_modified": 2,
+        "files_deleted": 0,
+        "lines_added": 120,
+        "lines_deleted": 30
+      }
+    },
+    "other_changes": {
+      "config_changes": [
+        {
+          "config_type": "environment",
+          "description": "NODE_ENV=development に設定",
+          "timestamp": "2025-03-20T13:50:00Z"
+        }
+      ],
+      "external_changes": [
+        {
+          "system": "Issue Tracker",
+          "change_type": "status_update",
+          "description": "Issue #42 を 'In Progress' に更新",
+          "timestamp": "2025-03-20T14:15:00Z"
+        }
+      ]
     },
     "current_challenges": [
-      "現在の課題1",
-      "現在の課題2"
+      {
+        "description": "セッションIDとGitコミットハッシュの関連付けの最適化",
+        "related_tasks": ["T004"],
+        "priority": 4,
+        "severity": 3,
+        "status": "in_progress",
+        "resolution_plan": "複数コミットを1セッションとして扱うロジックの実装"
+      },
+      {
+        "description": "複数のコミットがある場合のセッション管理",
+        "related_tasks": ["T004"],
+        "priority": 3,
+        "severity": 4,
+        "status": "analyzing",
+        "resolution_plan": "セッション開始・終了時のコミットを明示的に記録する仕組みの導入"
+      }
     ],
-    "next_session_focus": "次のセッションでの焦点"
+    "next_session_focus": "T005: フィードバックループの確立",
+    "action_items": [
+      {
+        "description": "セッション管理ユーティリティのテスト作成",
+        "related_task": "T004",
+        "priority": 5,
+        "severity": 4,
+        "due_date": "2025-03-21",
+        "assignee": "AI Developer"
+      },
+      {
+        "description": "マークダウン生成機能の実装",
+        "related_task": "T004",
+        "priority": 4,
+        "severity": 3,
+        "due_date": "2025-03-22",
+        "assignee": "AI Developer"
+      }
+    ]
   }
 }

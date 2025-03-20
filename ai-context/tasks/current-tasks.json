@@ -119,7 +119,7 @@
       "id": "T007",
       "title": "タスク管理JSONファイル形式の詳細化",
       "description": "タスク分解と追跡のためのJSONファイル形式を詳細化する",
-      "status": "in_progress",
+      "status": "completed",
       "dependencies": [
         {
           "task_id": "T006",
@@ -128,15 +128,15 @@
       ],
       "priority": 5,
       "estimated_hours": 4,
-      "progress_percentage": 60,
-      "progress_state": "implementation_complete",
-      "git_commits": []
+      "progress_percentage": 100,
+      "progress_state": "completed",
+      "git_commits": ["commit-20250320-1"]
     },
     {
       "id": "T008",
       "title": "セッション間状態引継ぎフォーマットの改善",
       "description": "セッション間の状態引継ぎフォーマットを改善する",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         {
           "task_id": "T006",
@@ -149,15 +149,15 @@
       ],
       "priority": 4,
       "estimated_hours": 3,
-      "progress_percentage": 0,
-      "progress_state": "not_started",
-      "git_commits": []
+      "progress_percentage": 100,
+      "progress_state": "completed",
+      "git_commits": ["commit-20250320-2"]
     },
     {
       "id": "T009",
       "title": "フィードバックループの確立",
       "description": "シンプルなテスト実行と結果フィードバックの流れを確立する",
-      "status": "pending",
+      "status": "in_progress",
       "dependencies": [
         {
           "task_id": "T006",
@@ -166,14 +166,18 @@
         {
           "task_id": "T007",
           "type": "weak"
+        },
+        {
+          "task_id": "T008",
+          "type": "weak"
         }
       ],
       "priority": 4,
       "estimated_hours": 3,
-      "progress_percentage": 0,
-      "progress_state": "not_started",
-      "git_commits": []
+      "progress_percentage": 20,
+      "progress_state": "design_complete",
+      "git_commits": ["commit-20250320-3"]
     }
   ],
-  "current_focus": "T007"
+  "current_focus": "T009"
 }
