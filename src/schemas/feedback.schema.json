@@ -17,6 +17,38 @@
           "minimum": 1,
           "description": "実装の試行回数"
         },
+        "git_commit": {
+          "type": "string",
+          "description": "関連するGitコミットハッシュ"
+        },
+        "test_execution": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "実行されたテストコマンド"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time",
+              "description": "テスト実行日時"
+            },
+            "duration_ms": {
+              "type": "integer",
+              "description": "テスト実行時間（ミリ秒）"
+            },
+            "test_types": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["unit", "integration", "e2e", "performance", "security"]
+              },
+              "description": "実行されたテストの種類"
+            }
+          },
+          "required": ["command", "timestamp"],
+          "description": "テスト実行の詳細"
+        },
         "verification_results": {
           "type": "object",
           "required": ["passes_tests", "failed_tests", "suggestions"],
@@ -24,6 +56,28 @@
             "passes_tests": {
               "type": "boolean",
               "description": "テストに合格したかどうか"
+            },
+            "test_summary": {
+              "type": "object",
+              "properties": {
+                "total": {
+                  "type": "integer",
+                  "description": "総テスト数"
+                },
+                "passed": {
+                  "type": "integer",
+                  "description": "合格したテスト数"
+                },
+                "failed": {
+                  "type": "integer",
+                  "description": "失敗したテスト数"
+                },
+                "skipped": {
+                  "type": "integer",
+                  "description": "スキップされたテスト数"
+                }
+              },
+              "description": "テスト結果の要約"
             },
             "failed_tests": {
               "type": "array",
@@ -38,6 +92,22 @@
                   "error": {
                     "type": "string",
                     "description": "エラーメッセージ"
+                  },
+                  "expected": {
+                    "type": "string",
+                    "description": "期待される結果"
+                  },
+                  "actual": {
+                    "type": "string",
+                    "description": "実際の結果"
+                  },
+                  "file_path": {
+                    "type": "string",
+                    "description": "テストファイルのパス"
+                  },
+                  "line_number": {
+                    "type": "integer",
+                    "description": "エラーが発生した行番号"
                   }
                 }
               },
@@ -46,7 +116,33 @@
             "suggestions": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "description": "提案内容"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["functional", "performance", "security", "ux", "code_quality"],
+                    "description": "提案の種類"
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "default": 3,
+                    "description": "優先度（1:最低 〜 5:最高）"
+                  },
+                  "affected_files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "影響を受けるファイル"
+                  }
+                },
+                "required": ["content"]
               },
               "description": "改善提案のリスト"
             }
@@ -66,8 +162,61 @@
             "approach": {
               "type": "string",
               "description": "次のイテレーションでのアプローチ"
+            },
+            "specific_actions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string",
+                    "description": "アクションの説明"
+                  },
+                  "file_path": {
+                    "type": "string",
+                    "description": "対象ファイルパス"
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "default": 3,
+                    "description": "優先度（1:最低 〜 5:最高）"
+                  },
+                  "related_task": {
+                    "type": "string",
+                    "pattern": "^T[0-9]{3}$",
+                    "description": "関連するタスクID"
+                  }
+                },
+                "required": ["description"]
+              },
+              "description": "具体的なアクション"
             }
           }
+        },
+        "feedback_status": {
+          "type": "string",
+          "enum": ["open", "in_progress", "resolved", "wontfix"],
+          "default": "open",
+          "description": "フィードバックの状態"
+        },
+        "related_sessions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "関連するセッションIDの配列"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "フィードバック作成日時"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "フィードバック更新日時"
         }
       }
     }

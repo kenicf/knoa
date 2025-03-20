@@ -157,7 +157,7 @@
       "id": "T009",
       "title": "フィードバックループの確立",
       "description": "シンプルなテスト実行と結果フィードバックの流れを確立する",
-      "status": "in_progress",
+      "status": "completed",
       "dependencies": [
         {
           "task_id": "T006",
@@ -174,9 +174,9 @@
       ],
       "priority": 4,
       "estimated_hours": 3,
-      "progress_percentage": 20,
-      "progress_state": "design_complete",
-      "git_commits": ["commit-20250320-3"]
+      "progress_percentage": 100,
+      "progress_state": "completed",
+      "git_commits": ["commit-20250320-3", "commit-20250321-1"]
     }
   ],
   "current_focus": "T009"

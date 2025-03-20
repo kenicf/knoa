@@ -1,0 +1,25 @@
+{
+  "name": "knoa",
+  "version": "0.1.0",
+  "description": "AI駆動開発のための包括的フレームワーク",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "feedback": "node src/cli/feedback.js"
+  },
+  "keywords": [
+    "ai",
+    "development",
+    "framework"
+  ],
+  "author": "AI Developer",
+  "license": "MIT",
+  "dependencies": {
+    "fs": "0.0.1-security",
+    "handlebars": "^4.7.8",
+    "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0"
+  }
+}

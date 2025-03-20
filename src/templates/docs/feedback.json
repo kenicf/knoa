@@ -2,22 +2,67 @@
   "feedback_loop": {
     "task_id": "T001",
     "implementation_attempt": 1,
+    "git_commit": "abcdef1234567890",
+    "test_execution": {
+      "command": "npm test",
+      "timestamp": "2025-03-20T15:30:00Z",
+      "duration_ms": 1500,
+      "test_types": ["unit"]
+    },
     "verification_results": {
       "passes_tests": false,
+      "test_summary": {
+        "total": 10,
+        "passed": 8,
+        "failed": 2,
+        "skipped": 0
+      },
       "failed_tests": [
         {
           "test_name": "テスト名",
-          "error": "エラー内容"
+          "error": "エラー内容",
+          "expected": "期待値",
+          "actual": "実際値",
+          "file_path": "tests/example.test.js",
+          "line_number": 42
         }
       ],
       "suggestions": [
-        "改善提案1",
-        "改善提案2"
+        {
+          "content": "改善提案1",
+          "type": "functional",
+          "priority": 5,
+          "affected_files": ["src/example.js"]
+        },
+        {
+          "content": "改善提案2",
+          "type": "performance",
+          "priority": 3,
+          "affected_files": ["src/utils/helper.js"]
+        }
       ]
     },
     "iteration_plan": {
       "focus_areas": ["焦点領域1", "焦点領域2"],
-      "approach": "次の改善アプローチ"
-    }
+      "approach": "次の改善アプローチ",
+      "specific_actions": [
+        {
+          "description": "アクション1",
+          "file_path": "src/example.js",
+          "priority": 4,
+          "related_task": "T001"
+        },
+        {
+          "description": "アクション2",
+          "file_path": "tests/example.test.js",
+          "priority": 3,
+          "related_task": "T001"
+        }
+      ]
+    },
+    "feedback_status": "open",
+    "related_sessions": ["session-123", "session-456"],
+    "created_at": "2025-03-20T15:00:00Z",
+    "updated_at": "2025-03-20T15:30:00Z"
   }
 }
