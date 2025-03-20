@@ -2,8 +2,8 @@
 
 ## セッション情報
 - **日時**: 2025年3月20日
-- **フェーズ**: フェーズ0（環境準備）
-- **主な実施内容**: 循環的開発構造の実装
+- **フェーズ**: フェーズ0（環境準備と残り実装項目の戦略立案）
+- **主な実施内容**: JSONファイルの更新とフェーズ0残り実装項目の戦略立案
 
 ## 実装済みの内容
 
@@ -15,11 +15,12 @@
   - `ai-context/feedback/`
   - 各ディレクトリに履歴保存用のサブディレクトリを作成
 
-### 2. 基本的なJSONファイルの作成
+### 2. 基本的なJSONファイルの作成と更新
 - `ai-context/project-metadata.json`: knoaプロジェクトのメタデータ
-- `ai-context/tasks/current-tasks.json`: 現在進行中のタスク
-- `ai-context/sessions/latest-session.json`: 最新のセッション状態
-- `ai-context/feedback/pending-feedback.json`: 未対応のフィードバック
+- `ai-context/tasks/current-tasks.json`: タスクT004～T006を完了に変更し、新タスクT007～T009を追加
+- `ai-context/sessions/latest-session.json`: タイムスタンプ、完了タスク、key_artifacts等を更新
+- `ai-context/feedback/pending-feedback.json`: 新しいフィードバックを追加
+- `ai-context/feedback/feedback-history/resolved-feedback-T004.json`: 解決済みフィードバックを履歴に移動
 
 ### 3. READMEの更新
 - 新しいディレクトリ構造の説明を追加
@@ -28,7 +29,7 @@
 
 ## タスクの状態
 
-以下のタスクが完了しています：
+### 完了したタスク
 - **T001**: 基本ディレクトリ構造の設計
 - **T002**: コアコンポーネントの実装
 - **T003**: プロジェクトテンプレートの作成
@@ -36,60 +37,769 @@
 - **T005**: ディレクトリ構造の修正（coreをsrcにリネーム）
 - **T006**: READMEの更新
 
+### 保留中のタスク
+- **T007**: タスク管理JSONファイル形式の詳細化
+- **T008**: セッション間状態引継ぎフォーマットの改善
+- **T009**: フィードバックループの確立
+
+### 現在のフォーカス
+- **T007**: タスク管理JSONファイル形式の詳細化
+
 ## 解決済みの課題
 - knoaとプロジェクトテンプレートの構造の不一致を解消
 - coreディレクトリをsrcにリネームして構造を統一
 - ai-contextディレクトリをルートに配置して循環的構造を明確化
 
-## 次のセッションでの焦点
+## フェーズ0残り実装項目の戦略
 
-### 1. JSONファイルの更新
-次のセッションでは、以下のJSONファイルを更新する必要があります：
+### 1. タスク管理: JSONファイル形式の詳細化
+
+#### 拡張されたタスクスキーマ
+タスク管理のJSONスキーマを以下のように拡張します：
 
 ```json
-// ai-context/tasks/current-tasks.json
-// タスクT004、T005、T006のstatusを"completed"に変更
-// 新しいタスクを追加
-
-// ai-context/sessions/latest-session.json
-// session_timestampを更新
-// project_state_summaryを更新（完了したタスクを反映）
-// key_artifactsを更新（coreをsrcに変更）
-// current_challengesとnext_session_focusを更新
-
-// ai-context/feedback/pending-feedback.json
-// 解決済みのフィードバックを履歴に移動
-// 新しいフィードバックがあれば追加
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["project", "original_request", "decomposed_tasks", "current_focus"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "プロジェクト名"
+    },
+    "original_request": {
+      "type": "string",
+      "description": "ユーザーからの元の指示"
+    },
+    "task_hierarchy": {
+      "type": "object",
+      "description": "タスクの階層構造（将来的な拡張用）",
+      "properties": {
+        "epics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "epic_id": {
+                "type": "string",
+                "pattern": "^E[0-9]{3}$"
+              },
+              "title": { "type": "string" },
+              "stories": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^S[0-9]{3}$"
+                }
+              }
+            }
+          }
+        },
+        "stories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "story_id": {
+                "type": "string",
+                "pattern": "^S[0-9]{3}$"
+              },
+              "title": { "type": "string" },
+              "tasks": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^T[0-9]{3}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "decomposed_tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "description", "status", "dependencies"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^T[0-9]{3}$",
+            "description": "タスクID（T001形式）"
+          },
+          "title": {
+            "type": "string",
+            "description": "タスクタイトル"
+          },
+          "description": {
+            "type": "string",
+            "description": "タスクの詳細説明"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "completed", "blocked"],
+            "description": "タスクの状態"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "task_id": {
+                  "type": "string",
+                  "pattern": "^T[0-9]{3}$"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["strong", "weak"],
+                  "default": "strong"
+                }
+              },
+              "required": ["task_id"]
+            },
+            "description": "依存するタスクIDと依存タイプのリスト"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 3,
+            "description": "優先度（1:最低 〜 5:最高）"
+          },
+          "estimated_hours": {
+            "type": "number",
+            "minimum": 0,
+            "description": "見積もり時間（時間単位）"
+          },
+          "progress_percentage": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "default": 0,
+            "description": "進捗率（0-100%）"
+          },
+          "git_commits": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "関連するGitコミットハッシュのリスト"
+          }
+        }
+      }
+    },
+    "current_focus": {
+      "type": "string",
+      "pattern": "^T[0-9]{3}$",
+      "description": "現在フォーカスしているタスクID"
+    }
+  }
+}
 ```
 
-### 2. フェーズ0の残りの実装項目
-- タスク管理: タスク分解と追跡のためのJSONファイル形式の詳細化
-- 状態管理: セッション間の状態引継ぎフォーマットの改善
-- フィードバック: シンプルなテスト実行と結果フィードバックの流れの確立
+#### 実装アプローチ
 
-### 3. セッション引継ぎの改善
-- セッション情報の集約方法の検討
-- 参照手続きの明確化
-- 情報の分散問題の解決策の検討
+1. **段階的導入**: 
+   - 最初は基本的なタスク構造を維持しつつ、優先度、見積もり時間、進捗率を追加
+   - 階層構造（エピック、ストーリー）は将来的な拡張として準備しておく
 
-## 提案：セッション引継ぎの改善方法
+2. **Git連携**: 
+   - タスクとGitコミットを関連付ける仕組みを導入
+   - コミットメッセージに `#T001` のようなタスクIDを含めることで自動的に関連付け
 
-現状の仕組みでは情報が分散しており、参照手続きも不明瞭です。以下の改善策を検討してください：
+3. **依存関係の強化**:
+   - 強依存（タスク完了が必須）と弱依存（参照のみ）を区別
+   - 依存関係の可視化ツールの基盤を準備
 
-1. **統合ダッシュボードの作成**:
-   - 各セッションの開始時に参照する単一のMarkdownファイル
-   - 重要な情報へのリンクと概要を含む
+### 2. 状態管理: セッション間の状態引継ぎフォーマットの改善
 
-2. **セッションサマリーの自動生成**:
-   - セッション終了時に、変更内容、完了タスク、次のステップを自動的に要約
-   - このサマリーを履歴として保存
+#### 拡張されたセッションスキーマ
 
-3. **構造化コメントの活用**:
-   - 各ファイルの先頭に標準化されたメタデータブロックを追加
-   - 最終更新セッションIDを含める
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["session_handover"],
+  "properties": {
+    "session_handover": {
+      "type": "object",
+      "required": ["project_id", "session_id", "session_timestamp", "project_state_summary", "next_session_focus"],
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "description": "プロジェクトの一意識別子"
+        },
+        "session_id": {
+          "type": "string",
+          "description": "セッションの一意識別子（Gitコミットハッシュ）"
+        },
+        "previous_session_id": {
+          "type": "string",
+          "description": "前回のセッションID（Gitコミットハッシュ）"
+        },
+        "session_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "セッションのタイムスタンプ（ISO 8601形式）"
+        },
+        "project_state_summary": {
+          "type": "object",
+          "required": ["completed_tasks", "current_tasks", "pending_tasks"],
+          "properties": {
+            "completed_tasks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^T[0-9]{3}$"
+              },
+              "description": "完了したタスクIDのリスト"
+            },
+            "current_tasks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^T[0-9]{3}$"
+              },
+              "description": "現在進行中のタスクIDのリスト"
+            },
+            "pending_tasks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^T[0-9]{3}$"
+              },
+              "description": "保留中のタスクIDのリスト"
+            },
+            "blocked_tasks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^T[0-9]{3}$"
+              },
+              "description": "ブロックされているタスクIDのリスト"
+            }
+          }
+        },
+        "key_artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "description"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "ファイルパス"
+              },
+              "description": {
+                "type": "string",
+                "description": "ファイルの説明"
+              },
+              "last_modified": {
+                "type": "string",
+                "format": "date-time",
+                "description": "最終更新日時"
+              },
+              "git_status": {
+                "type": "string",
+                "enum": ["unchanged", "modified", "added", "deleted", "renamed"],
+                "description": "Gitの状態"
+              }
+            }
+          },
+          "description": "重要なファイルとその状態"
+        },
+        "git_changes": {
+          "type": "object",
+          "properties": {
+            "commits": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "hash": {
+                    "type": "string",
+                    "description": "コミットハッシュ"
+                  },
+                  "message": {
+                    "type": "string",
+                    "description": "コミットメッセージ"
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "コミット日時"
+                  },
+                  "related_tasks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^T[0-9]{3}$"
+                    },
+                    "description": "関連するタスクID"
+                  }
+                }
+              },
+              "description": "セッション中のコミット"
+            },
+            "summary": {
+              "type": "object",
+              "properties": {
+                "files_added": {
+                  "type": "integer",
+                  "description": "追加されたファイル数"
+                },
+                "files_modified": {
+                  "type": "integer",
+                  "description": "変更されたファイル数"
+                },
+                "files_deleted": {
+                  "type": "integer",
+                  "description": "削除されたファイル数"
+                }
+              },
+              "description": "変更の要約"
+            }
+          },
+          "description": "Git変更の詳細"
+        },
+        "current_challenges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string",
+                "description": "課題の説明"
+              },
+              "related_tasks": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^T[0-9]{3}$"
+                },
+                "description": "関連するタスクID"
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "default": 3,
+                "description": "優先度（1:最低 〜 5:最高）"
+              }
+            },
+            "required": ["description"]
+          },
+          "description": "現在の課題のリスト"
+        },
+        "next_session_focus": {
+          "type": "string",
+          "description": "次のセッションでの焦点"
+        },
+        "action_items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string",
+                "description": "アクションの説明"
+              },
+              "related_task": {
+                "type": "string",
+                "pattern": "^T[0-9]{3}$",
+                "description": "関連するタスクID"
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "default": 3,
+                "description": "優先度（1:最低 〜 5:最高）"
+              }
+            },
+            "required": ["description"]
+          },
+          "description": "次のセッションでのアクションアイテム"
+        }
+      }
+    }
+  }
+}
+```
 
-4. **セッションIDの導入**:
-   - 各セッションに一意のIDを割り当て
-   - すべての変更をこのIDで追跡可能に
+#### 実装アプローチ
 
-これらの改善は、フェーズ1「情報フロー基盤の構築」で本格的に実装することを推奨します。
+1. **Gitとの統合**:
+   - セッションIDにGitコミットハッシュを使用
+   - セッション開始時に自動的にコミットを作成し、そのハッシュをセッションIDとして使用
+   - セッション終了時に変更をコミットし、次のセッションの準備を行う
+
+2. **変更差分の効率的な記録**:
+   - Gitの差分管理機能を活用して変更を追跡
+   - メタデータとしてkey_artifactsに重要なファイルの状態を記録
+   - git_changesセクションでコミット情報と変更の要約を管理
+
+3. **セッション間の連続性強化**:
+   - previous_session_idによるセッションの連鎖
+   - action_itemsによる次のセッションでの具体的なタスクの明確化
+   - current_challengesの優先順位付けによる重要な課題の強調
+
+### 3. フィードバック: テスト実行と結果フィードバックの流れの確立
+
+#### 拡張されたフィードバックスキーマ
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["feedback_loop"],
+  "properties": {
+    "feedback_loop": {
+      "type": "object",
+      "required": ["task_id", "implementation_attempt", "verification_results", "iteration_plan"],
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "pattern": "^T[0-9]{3}$",
+          "description": "フィードバック対象のタスクID"
+        },
+        "implementation_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "実装の試行回数"
+        },
+        "git_commit": {
+          "type": "string",
+          "description": "関連するGitコミットハッシュ"
+        },
+        "test_execution": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "実行されたテストコマンド"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time",
+              "description": "テスト実行日時"
+            },
+            "duration_ms": {
+              "type": "integer",
+              "description": "テスト実行時間（ミリ秒）"
+            },
+            "test_types": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["unit", "integration", "e2e", "performance", "security"]
+              },
+              "description": "実行されたテストの種類"
+            }
+          },
+          "required": ["command", "timestamp"],
+          "description": "テスト実行の詳細"
+        },
+        "verification_results": {
+          "type": "object",
+          "required": ["passes_tests", "failed_tests", "suggestions"],
+          "properties": {
+            "passes_tests": {
+              "type": "boolean",
+              "description": "テストに合格したかどうか"
+            },
+            "test_summary": {
+              "type": "object",
+              "properties": {
+                "total": {
+                  "type": "integer",
+                  "description": "総テスト数"
+                },
+                "passed": {
+                  "type": "integer",
+                  "description": "合格したテスト数"
+                },
+                "failed": {
+                  "type": "integer",
+                  "description": "失敗したテスト数"
+                },
+                "skipped": {
+                  "type": "integer",
+                  "description": "スキップされたテスト数"
+                }
+              },
+              "description": "テスト結果の要約"
+            },
+            "failed_tests": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["test_name", "error"],
+                "properties": {
+                  "test_name": {
+                    "type": "string",
+                    "description": "失敗したテストの名前"
+                  },
+                  "error": {
+                    "type": "string",
+                    "description": "エラーメッセージ"
+                  },
+                  "expected": {
+                    "type": "string",
+                    "description": "期待される結果"
+                  },
+                  "actual": {
+                    "type": "string",
+                    "description": "実際の結果"
+                  },
+                  "file_path": {
+                    "type": "string",
+                    "description": "テストファイルのパス"
+                  },
+                  "line_number": {
+                    "type": "integer",
+                    "description": "エラーが発生した行番号"
+                  }
+                }
+              },
+              "description": "失敗したテストのリスト"
+            },
+            "suggestions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "description": "提案内容"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["functional", "performance", "security", "ux", "code_quality"],
+                    "description": "提案の種類"
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "default": 3,
+                    "description": "優先度（1:最低 〜 5:最高）"
+                  }
+                },
+                "required": ["content"]
+              },
+              "description": "改善提案のリスト"
+            }
+          }
+        },
+        "iteration_plan": {
+          "type": "object",
+          "required": ["focus_areas", "approach"],
+          "properties": {
+            "focus_areas": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "次のイテレーションでの焦点領域"
+            },
+            "approach": {
+              "type": "string",
+              "description": "次のイテレーションでのアプローチ"
+            },
+            "specific_actions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string",
+                    "description": "アクションの説明"
+                  },
+                  "file_path": {
+                    "type": "string",
+                    "description": "対象ファイルパス"
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "default": 3,
+                    "description": "優先度（1:最低 〜 5:最高）"
+                  }
+                },
+                "required": ["description"]
+              },
+              "description": "具体的なアクション"
+            }
+          }
+        },
+        "feedback_status": {
+          "type": "string",
+          "enum": ["open", "in_progress", "resolved", "wontfix"],
+          "default": "open",
+          "description": "フィードバックの状態"
+        }
+      }
+    }
+  }
+}
+```
+
+#### 実装アプローチ
+
+1. **テスト自動化の段階的導入**:
+   - 最初はユニットテストと基本的な非機能テストに焦点
+   - GitHub Actionsを活用した自動テスト実行環境の構築
+   - テスト結果の自動収集と構造化されたフィードバックの生成
+
+2. **フィードバックの種類と優先順位**:
+   - 機能的、性能的、セキュリティ、UX、コード品質などの種類を区別
+   - 優先度によるフィードバックの重要性の明確化
+   - 具体的なアクションアイテムによる改善の方向性の明確化
+
+3. **Gitとの統合**:
+   - フィードバックとGitコミットの関連付け
+   - テスト実行結果とコミットの自動的な関連付け
+   - フィードバックに基づく修正のコミットとの関連付け
+
+## 統合ワークフロー
+
+3つのコンポーネントを統合した効率的なワークフローを以下のように設計します：
+
+1. **タスク分解と計画**:
+   - ユーザー要求をタスクに分解
+   - タスクの優先順位付けと依存関係の定義
+   - 初期のGitコミットを作成し、セッションIDとして使用
+
+2. **タスク実装**:
+   - 現在のフォーカスタスクの実装
+   - 実装中の変更をGitで追跡
+   - 実装完了時にコミットを作成
+
+3. **テストとフィードバック**:
+   - 自動テストの実行
+   - テスト結果の収集と構造化
+   - フィードバックの生成と優先順位付け
+
+4. **改善と反復**:
+   - フィードバックに基づく改善
+   - 改善後の再テスト
+   - 成功したらタスクを完了としてマーク
+
+5. **セッション状態の更新**:
+   - セッション情報の更新
+   - 次のセッションのためのアクションアイテムの定義
+   - セッション終了時のコミット作成
+
+6. **次のタスクへの移行**:
+   - 次のフォーカスタスクの選択
+   - 新しいセッションの開始
+   - プロセスの繰り返し
+
+## 次のセッションでの実装手順
+
+### 1. タスク管理の詳細化（T007）
+
+1. `src/schemas/task.schema.json`を拡張して新しいフィールドを追加
+   - 優先度、見積もり時間、進捗率フィールドの追加
+   - 依存関係の強化（強依存/弱依存の区別）
+   - 将来的な階層構造の基盤準備
+
+2. `src/templates/docs/task.json`を更新して拡張されたスキーマに対応
+   - 新しいフィールドのサンプル値を追加
+   - 使用例のコメントを追加
+
+3. タスク管理ユーティリティの実装
+   - `src/utils/task-manager.js`の作成
+   - タスクの依存関係チェック機能
+   - タスクの進捗計算機能
+
+4. `ai-context/tasks/current-tasks.json`を新しい形式に移行
+   - 既存のタスクに新しいフィールドを追加
+   - 依存関係の詳細化
+
+### 2. 状態管理の改善（T008）
+
+1. `src/schemas/session.schema.json`を拡張して新しいフィールドを追加
+   - セッションID、前回のセッションIDフィールドの追加
+   - key_artifactsの構造化
+   - git_changesセクションの追加
+   - action_itemsの追加
+
+2. `src/templates/docs/session.json`を更新して拡張されたスキーマに対応
+   - 新しいフィールドのサンプル値を追加
+   - 使用例のコメントを追加
+
+3. セッション管理ユーティリティの実装
+   - `src/utils/session-manager.js`の作成
+   - Gitコミットからセッション情報を生成する機能
+   - 変更差分の自動収集機能
+
+4. `ai-context/sessions/latest-session.json`を新しい形式に移行
+   - 既存のセッション情報に新しいフィールドを追加
+   - GitコミットハッシュをセッションIDとして使用
+
+### 3. フィードバックループの確立（T009）
+
+1. `src/schemas/feedback.schema.json`を拡張して新しいフィールドを追加
+   - test_executionセクションの追加
+   - test_summaryの追加
+   - フィードバックの種類と優先順位の追加
+   - フィードバック状態の追加
+
+2. `src/templates/docs/feedback.json`を更新して拡張されたスキーマに対応
+   - 新しいフィールドのサンプル値を追加
+   - 使用例のコメントを追加
+
+3. フィードバック管理ユーティリティの実装
+   - `src/utils/feedback-manager.js`の作成
+   - テスト実行と結果収集の自動化機能
+   - フィードバックの優先順位付け機能
+
+4. `ai-context/feedback/pending-feedback.json`を新しい形式に移行
+   - 既存のフィードバックに新しいフィールドを追加
+   - フィードバックの種類と優先順位を設定
+
+## 実装ロードマップ
+
+1. **基盤整備（1週目）**:
+   - スキーマの拡張と更新
+   - Gitとの統合基盤の構築
+   - 基本的なテスト自動化環境の構築
+
+2. **コンポーネント実装（2週目）**:
+   - タスク管理の詳細化実装
+   - セッション状態管理の改善実装
+   - フィードバックループの基本実装
+
+3. **統合とテスト（3週目）**:
+   - 3つのコンポーネントの統合
+   - 統合ワークフローのテスト
+   - 初期のフィードバックに基づく調整
+
+4. **自動化と最適化（4週目）**:
+   - テスト自動化の拡張
+   - ワークフローの最適化
+   - ドキュメントの整備
+
+## 注意点と推奨事項
+
+1. **段階的な導入**:
+   - 一度にすべての機能を実装するのではなく、段階的に導入することを推奨
+   - まずは基本的な機能を実装し、徐々に高度な機能を追加
+
+2. **Gitとの統合**:
+   - GitコミットハッシュをセッションIDとして使用することで、変更履歴との一貫性を確保
+   - コミットメッセージにタスクIDを含めることで、タスクとコミットの関連付けを自動化
+
+3. **テスト自動化**:
+   - 最初はユニットテストと基本的な非機能テストに焦点を当て、徐々に拡張
+   - GitHub Actionsを活用して自動テスト環境を構築
+
+4. **ドキュメント整備**:
+   - 各コンポーネントの使用方法を詳細に文書化
+   - サンプルコードと使用例を提供
+
+この実装戦略により、フェーズ0の残りの実装項目を効率的に完了し、フェーズ1への移行準備が整います。Gitの機能を最大限に活用することで、開発プロセスの透明性と追跡可能性が向上し、AI駆動開発の効率が大幅に向上することが期待されます。

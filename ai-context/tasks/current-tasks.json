@@ -27,23 +27,44 @@
       "id": "T004",
       "title": "循環的構造の実装",
       "description": "knoa自体を開発対象とするための循環的構造の実装",
-      "status": "in_progress",
+      "status": "completed",
       "dependencies": ["T003"]
     },
     {
       "id": "T005",
       "title": "ディレクトリ構造の修正",
       "description": "coreをsrcにリネームし、ai-contextディレクトリを作成",
-      "status": "in_progress",
+      "status": "completed",
       "dependencies": ["T004"]
     },
     {
       "id": "T006",
       "title": "READMEの更新",
       "description": "新しいディレクトリ構造と循環的開発プロセスの説明を追加",
-      "status": "pending",
+      "status": "completed",
       "dependencies": ["T005"]
+    },
+    {
+      "id": "T007",
+      "title": "タスク管理JSONファイル形式の詳細化",
+      "description": "タスク分解と追跡のためのJSONファイル形式を詳細化する",
+      "status": "pending",
+      "dependencies": ["T006"]
+    },
+    {
+      "id": "T008",
+      "title": "セッション間状態引継ぎフォーマットの改善",
+      "description": "セッション間の状態引継ぎフォーマットを改善する",
+      "status": "pending",
+      "dependencies": ["T006"]
+    },
+    {
+      "id": "T009",
+      "title": "フィードバックループの確立",
+      "description": "シンプルなテスト実行と結果フィードバックの流れを確立する",
+      "status": "pending",
+      "dependencies": ["T006"]
     }
   ],
-  "current_focus": "T005"
+  "current_focus": "T007"
 }
