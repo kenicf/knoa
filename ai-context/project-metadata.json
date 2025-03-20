@@ -1,0 +1,52 @@
+{
+  "project_name": "knoa",
+  "project_type": "meta-framework",
+  "version": "1.0.0",
+  "created_at": "2025-03-20T13:35:00Z",
+  "last_updated": "2025-03-20T13:35:00Z",
+  "description": "AI駆動開発を統制された情報フローの下で効率的に実施するためのプロジェクト",
+  "technologies": [
+    "JSON",
+    "JavaScript",
+    "TypeScript",
+    "VBA",
+    "HTML",
+    "CSS"
+  ],
+  "structure": {
+    "src": {
+      "purpose": "AI駆動開発の共通コアコンポーネント",
+      "key_components": [
+        {"name": "templates", "purpose": "標準化テンプレート"},
+        {"name": "schemas", "purpose": "JSONスキーマ定義"},
+        {"name": "utils", "purpose": "ユーティリティスクリプト"}
+      ]
+    },
+    "projects": {
+      "purpose": "個別プロジェクト管理ディレクトリ",
+      "key_components": [
+        {"name": "project-a", "purpose": "プロジェクトAのサブモジュール参照"},
+        {"name": "project-b", "purpose": "プロジェクトBのサブモジュール参照"}
+      ]
+    },
+    "docs": {
+      "purpose": "プロジェクト全体のドキュメント",
+      "key_components": [
+        {"name": "project-templates", "purpose": "新規プロジェクト用テンプレート"},
+        {"name": "phases", "purpose": "フェーズ別ドキュメント"}
+      ]
+    },
+    "ai-context": {
+      "purpose": "knoa自体のAI用コンテキスト情報",
+      "key_components": [
+        {"name": "tasks", "purpose": "knoaのタスク情報"},
+        {"name": "sessions", "purpose": "knoaのセッション情報"},
+        {"name": "feedback", "purpose": "knoaのフィードバック情報"}
+      ]
+    }
+  },
+  "development_flow": {
+    "current_phase": "フェーズ0",
+    "next_steps": ["フェーズ1", "フェーズ2", "フェーズ3", "フェーズ4", "フェーズ5"]
+  }
+}

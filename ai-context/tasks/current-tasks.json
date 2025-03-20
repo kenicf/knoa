@@ -1,0 +1,49 @@
+{
+  "project": "knoa",
+  "original_request": "フェーズ0の「環境準備: シンプルなGitリポジトリを用意し、基本的なディレクトリ構造を作成」の実装",
+  "decomposed_tasks": [
+    {
+      "id": "T001",
+      "title": "基本ディレクトリ構造の設計",
+      "description": "knoaの基本的なディレクトリ構造を設計する",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "T002",
+      "title": "コアコンポーネントの実装",
+      "description": "タスク管理、セッション管理、フィードバック管理の基本実装",
+      "status": "completed",
+      "dependencies": ["T001"]
+    },
+    {
+      "id": "T003",
+      "title": "プロジェクトテンプレートの作成",
+      "description": "フロントエンドとVBAのプロジェクトテンプレート作成",
+      "status": "completed",
+      "dependencies": ["T002"]
+    },
+    {
+      "id": "T004",
+      "title": "循環的構造の実装",
+      "description": "knoa自体を開発対象とするための循環的構造の実装",
+      "status": "in_progress",
+      "dependencies": ["T003"]
+    },
+    {
+      "id": "T005",
+      "title": "ディレクトリ構造の修正",
+      "description": "coreをsrcにリネームし、ai-contextディレクトリを作成",
+      "status": "in_progress",
+      "dependencies": ["T004"]
+    },
+    {
+      "id": "T006",
+      "title": "READMEの更新",
+      "description": "新しいディレクトリ構造と循環的開発プロセスの説明を追加",
+      "status": "pending",
+      "dependencies": ["T005"]
+    }
+  ],
+  "current_focus": "T005"
+}

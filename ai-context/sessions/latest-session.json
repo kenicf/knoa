@@ -1,0 +1,25 @@
+{
+  "session_handover": {
+    "project_id": "knoa",
+    "session_timestamp": "2025-03-20T13:36:00Z",
+    "project_state_summary": {
+      "completed_tasks": ["T001", "T002", "T003"],
+      "current_tasks": ["T004", "T005"],
+      "pending_tasks": ["T006"]
+    },
+    "key_artifacts": {
+      "README.md": "プロジェクト概要",
+      "ai-dev-guideline.md": "AI駆動開発ガイドライン",
+      "core/templates/": "標準化テンプレート",
+      "core/schemas/": "JSONスキーマ定義",
+      "docs/project-templates/": "新規プロジェクト用テンプレート",
+      "docs/phases/phase0.md": "フェーズ0の詳細ドキュメント",
+      "ai-context/": "knoa自体のAI用コンテキスト情報"
+    },
+    "current_challenges": [
+      "coreディレクトリをsrcにリネームする際の問題",
+      "循環的構造の実装における一貫性の確保"
+    ],
+    "next_session_focus": "ディレクトリ構造の修正完了とREADMEの更新"
+  }
+}
