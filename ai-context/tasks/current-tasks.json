@@ -13,7 +13,7 @@
       {
         "story_id": "S001",
         "title": "環境準備と基本実装",
-        "tasks": ["T001", "T002", "T003", "T004", "T005", "T006", "T007", "T008", "T009"]
+        "tasks": ["T001", "T002", "T003", "T004", "T005", "T006", "T007", "T008", "T009", "T010"]
       }
     ]
   },
@@ -177,7 +177,32 @@
       "progress_percentage": 100,
       "progress_state": "completed",
       "git_commits": ["commit-20250320-3", "commit-20250321-1"]
+    },
+    {
+      "id": "T010",
+      "title": "統合フローの確立",
+      "description": "タスク管理、セッション管理、フィードバック管理の統合フローを確立する",
+      "status": "in_progress",
+      "dependencies": [
+        {
+          "task_id": "T007",
+          "type": "strong"
+        },
+        {
+          "task_id": "T008",
+          "type": "strong"
+        },
+        {
+          "task_id": "T009",
+          "type": "strong"
+        }
+      ],
+      "priority": 5,
+      "estimated_hours": 8,
+      "progress_percentage": 50,
+      "progress_state": "in_progress",
+      "git_commits": ["commit-20250322-1"]
     }
   ],
-  "current_focus": "T009"
+  "current_focus": "T010"
 }
