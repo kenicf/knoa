@@ -138,11 +138,18 @@
 
 ### 1. システム統合リファクタリング（T011）フェーズ2の残りの実装
 
-#### 1.1 エラー処理フレームワークの完全実装
+#### 1.1 エラー処理フレームワークの完全実装（完了）
 - `src/lib/core/error-handler.js`の実装
   - エラー処理を一元化
   - 回復戦略の実装
   - 運用監視とトレーサビリティの強化
+- `src/lib/core/error-migration-helper.js`の実装
+  - 既存のエラークラスとの統合を支援
+  - 段階的な移行のためのプロキシとヘルパー関数
+- `src/examples/error-handler-example.js`の実装
+  - エラー処理フレームワークの使用例
+- `tests/lib/core/error-handler.test.js`の実装
+  - 新しいErrorHandlerクラスのテスト
 
 #### 1.2 依存性注入の導入
 - `src/lib/core/service-container.js`の実装

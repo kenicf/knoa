@@ -197,32 +197,8 @@
         "importance": "medium"
       },
       {
-        "path": "src/utils/integration-manager_1.js",
-        "description": "統合マネージャー（パート1）",
-        "last_modified": "2025-03-22T10:15:00Z",
-        "git_status": "added",
-        "related_tasks": ["T010"],
-        "importance": "high"
-      },
-      {
-        "path": "src/utils/integration-manager_2.js",
-        "description": "統合マネージャー（パート2）",
-        "last_modified": "2025-03-22T10:17:00Z",
-        "git_status": "added",
-        "related_tasks": ["T010"],
-        "importance": "high"
-      },
-      {
-        "path": "src/utils/integration-manager_3.js",
-        "description": "統合マネージャー（パート3）",
-        "last_modified": "2025-03-22T10:18:00Z",
-        "git_status": "added",
-        "related_tasks": ["T010"],
-        "importance": "high"
-      },
-      {
-        "path": "src/utils/integration-manager_4.js",
-        "description": "統合マネージャー（パート4）",
+        "path": "src/utils/integration-manager.js",
+        "description": "統合マネージャー",
         "last_modified": "2025-03-22T10:22:00Z",
         "git_status": "added",
         "related_tasks": ["T010"],
@@ -599,7 +575,9 @@
         "priority": 5,
         "severity": 3,
         "due_date": "2025-03-26",
-        "assignee": "AI Developer"
+        "assignee": "AI Developer",
+        "status": "completed",
+        "completion_date": "2025-03-22T17:50:00Z"
       },
       {
         "description": "依存性注入の導入",

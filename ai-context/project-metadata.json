@@ -63,7 +63,7 @@
   "development_flow": {
     "current_phase": "フェーズ0",
     "next_steps": ["フェーズ1", "フェーズ2", "フェーズ3", "フェーズ4", "フェーズ5"],
-    "phase0_progress": 95,
+    "phase0_progress": 97,
     "remaining_tasks": ["T010の完了", "T011の完了"]
   }
 }
