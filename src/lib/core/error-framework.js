@@ -266,9 +266,27 @@ class ErrorHandler {
       context: error.context
     });
 
-    // エラーイベントを発行
+    // 標準化されたエラーイベントを発行
     if (this.eventEmitter) {
-      this.eventEmitter.emit('error', { error, component, operation });
+      // 標準化されたイベント発行を使用
+      if (typeof this.eventEmitter.emitStandardized === 'function') {
+        this.eventEmitter.emitStandardized('error', 'occurred', {
+          error,
+          component,
+          operation,
+          errorCode: error.code,
+          recoverable: error.recoverable,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        // 後方互換性のために従来のイベント発行も維持
+        this.eventEmitter.emit('error', {
+          error,
+          component,
+          operation,
+          timestamp: new Date().toISOString()
+        });
+      }
     }
 
     // 回復可能なエラーの場合は回復を試みる
@@ -289,7 +307,49 @@ class ErrorHandler {
    * @param {Function} strategy - 回復戦略関数
    */
   registerRecoveryStrategy(errorCode, strategy) {
-    this.recoveryStrategies.set(errorCode, strategy);
+    this.recoveryStrategies.set(errorCode, async (error, component, operation) => {
+      try {
+        // 回復処理の開始をイベントで通知
+        if (this.eventEmitter) {
+          this.eventEmitter.emit('error:recovery_started', {
+            error,
+            component,
+            operation,
+            errorCode
+          });
+        }
+        
+        // 回復戦略を実行
+        const result = await Promise.resolve(strategy(error, component, operation));
+        
+        // 回復成功をイベントで通知
+        if (this.eventEmitter) {
+          this.eventEmitter.emit('error:recovery_succeeded', {
+            error,
+            component,
+            operation,
+            errorCode,
+            result
+          });
+        }
+        
+        return result;
+      } catch (recoveryError) {
+        // 回復失敗をイベントで通知
+        if (this.eventEmitter) {
+          this.eventEmitter.emit('error:recovery_failed', {
+            error,
+            recoveryError,
+            component,
+            operation,
+            errorCode
+          });
+        }
+        
+        this.logger.error(`Recovery failed for ${errorCode}:`, recoveryError);
+        throw recoveryError;
+      }
+    });
   }
 
   /**

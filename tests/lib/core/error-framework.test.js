@@ -195,9 +195,9 @@ describe('エラー処理フレームワーク', () => {
       errorHandler = new ErrorHandler(mockLogger, mockEventEmitter);
     });
     
-    test('通常のエラーをApplicationErrorにラップする', () => {
+    test('通常のエラーをApplicationErrorにラップする', async () => {
       const originalError = new Error('通常のエラー');
-      const result = errorHandler.handle(originalError, 'TestComponent', 'testOperation');
+      const result = await errorHandler.handle(originalError, 'TestComponent', 'testOperation');
       
       expect(result).toBeInstanceOf(ApplicationError);
       expect(result.message).toBe(originalError.message);
@@ -205,16 +205,16 @@ describe('エラー処理フレームワーク', () => {
       expect(result.context).toEqual({ component: 'TestComponent', operation: 'testOperation' });
     });
     
-    test('ApplicationErrorはそのまま処理される', () => {
+    test('ApplicationErrorはそのまま処理される', async () => {
       const originalError = new ValidationError('検証エラー');
-      const result = errorHandler.handle(originalError, 'TestComponent', 'testOperation');
+      const result = await errorHandler.handle(originalError, 'TestComponent', 'testOperation');
       
       expect(result).toBe(originalError);
     });
     
-    test('エラーがログに記録される', () => {
+    test('エラーがログに記録される', async () => {
       const error = new ValidationError('検証エラー');
-      errorHandler.handle(error, 'TestComponent', 'testOperation');
+      await errorHandler.handle(error, 'TestComponent', 'testOperation');
       
       expect(mockLogger.error).toHaveBeenCalled();
       const logArgs = mockLogger.error.mock.calls[0];
@@ -223,60 +223,67 @@ describe('エラー処理フレームワーク', () => {
       expect(logArgs[1].error_message).toBe('検証エラー');
     });
     
-    test('エラーイベントが発行される', () => {
+    test('エラーイベントが発行される', async () => {
       const error = new ValidationError('検証エラー');
-      errorHandler.handle(error, 'TestComponent', 'testOperation');
+      await errorHandler.handle(error, 'TestComponent', 'testOperation');
       
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('error', {
-        error,
-        component: 'TestComponent',
-        operation: 'testOperation'
-      });
+      expect(mockEventEmitter.emit).toHaveBeenCalled();
+      const callArgs = mockEventEmitter.emit.mock.calls[0];
+      expect(callArgs[0]).toBe('error');
+      expect(callArgs[1].error).toBe(error);
+      expect(callArgs[1].component).toBe('TestComponent');
+      expect(callArgs[1].operation).toBe('testOperation');
+      expect(callArgs[1].timestamp).toBeDefined();
     });
     
-    test('回復戦略が登録され実行される', () => {
+    test('回復戦略が登録され実行される', async () => {
       const error = new ValidationError('検証エラー', { code: 'TEST_RECOVERY' });
       const mockRecovery = jest.fn().mockReturnValue('recovered');
       
       errorHandler.registerRecoveryStrategy('TEST_RECOVERY', mockRecovery);
-      const result = errorHandler.handle(error, 'TestComponent', 'testOperation');
+      const result = await errorHandler.handle(error, 'TestComponent', 'testOperation');
       
       expect(mockRecovery).toHaveBeenCalledWith(error, 'TestComponent', 'testOperation');
       expect(result).toBe('recovered');
     });
     
-    test('回復戦略が失敗した場合、元のエラーが返される', () => {
+    test('回復戦略が失敗した場合、元のエラーが返される', async () => {
       const error = new ValidationError('検証エラー', { code: 'TEST_RECOVERY_FAIL' });
       const mockRecovery = jest.fn().mockImplementation(() => {
         throw new Error('回復失敗');
       });
       
       errorHandler.registerRecoveryStrategy('TEST_RECOVERY_FAIL', mockRecovery);
-      const result = errorHandler.handle(error, 'TestComponent', 'testOperation');
       
-      expect(mockRecovery).toHaveBeenCalled();
-      expect(mockLogger.error).toHaveBeenCalledTimes(2); // 元のエラーと回復失敗のエラー
-      expect(result).toBe(error);
+      try {
+        await errorHandler.handle(error, 'TestComponent', 'testOperation');
+        // 例外が発生するはずなので、ここには到達しないはず
+        fail('例外が発生しませんでした');
+      } catch (e) {
+        expect(mockRecovery).toHaveBeenCalled();
+        expect(mockLogger.error).toHaveBeenCalled(); // 回復失敗のエラーログ
+        expect(e.message).toBe('回復失敗');
+      }
     });
     
-    test('回復不可能なエラーは回復戦略が実行されない', () => {
+    test('回復不可能なエラーは回復戦略が実行されない', async () => {
       const error = new StateError('状態エラー', { code: 'NO_RECOVERY' });
       const mockRecovery = jest.fn();
       
       errorHandler.registerRecoveryStrategy('NO_RECOVERY', mockRecovery);
-      const result = errorHandler.handle(error, 'TestComponent', 'testOperation');
+      const result = await errorHandler.handle(error, 'TestComponent', 'testOperation');
       
       expect(mockRecovery).not.toHaveBeenCalled();
       expect(result).toBe(error);
     });
     
-    test('回復戦略を削除できる', () => {
+    test('回復戦略を削除できる', async () => {
       const error = new ValidationError('検証エラー', { code: 'REMOVE_RECOVERY' });
       const mockRecovery = jest.fn();
       
       errorHandler.registerRecoveryStrategy('REMOVE_RECOVERY', mockRecovery);
       errorHandler.removeRecoveryStrategy('REMOVE_RECOVERY');
-      const result = errorHandler.handle(error, 'TestComponent', 'testOperation');
+      const result = await errorHandler.handle(error, 'TestComponent', 'testOperation');
       
       expect(mockRecovery).not.toHaveBeenCalled();
       expect(result).toBe(error);

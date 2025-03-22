@@ -1,9 +1,12 @@
 /**
  * イベントシステム
- * 
+ *
  * コンポーネント間の疎結合な連携を実現するためのイベント駆動アーキテクチャを提供します。
  * 標準的なイベントエミッターの機能に加え、ワイルドカードパターンのサポート、
  * イベント名の標準化、非同期イベント処理などの拡張機能を提供します。
+ *
+ * イベント名の標準化とイベントカタログの機能を強化し、
+ * イベント駆動アーキテクチャへの移行を支援します。
  */
 
 const { ApplicationError } = require('./error-framework');
@@ -281,28 +284,70 @@ class EnhancedEventEmitter {
   }
 
   /**
+   * イベント名が標準形式に準拠しているか検証
+   * @param {string} eventName - 検証するイベント名
+   * @returns {boolean} 準拠している場合はtrue
+   */
+  validateEventName(eventName) {
+    // グローバルイベントは例外
+    if (eventName === 'event' || eventName === 'error') {
+      return true;
+    }
+    
+    const pattern = /^[a-z][a-z0-9]*:[a-z][a-z0-9]*$/;
+    return pattern.test(eventName);
+  }
+  
+  /**
+   * 標準化されたイベント名を生成
+   * @param {string} component - コンポーネント名
+   * @param {string} action - アクション名
+   * @returns {string} 標準化されたイベント名
+   */
+  createStandardEventName(component, action) {
+    const normalizedComponent = component.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normalizedAction = action.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return `${normalizedComponent}:${normalizedAction}`;
+  }
+
+  /**
    * イベントをシステム全体で標準化された名前で発行
    * @param {string} component - コンポーネント名
    * @param {string} action - アクション名
    * @param {Object} data - イベントデータ
+   * @param {Object} options - オプション
+   * @param {boolean} options.validateName - イベント名を検証するかどうか
    */
-  emitStandardized(component, action, data = {}) {
-    const standardEvent = `${component}:${action}`;
+  emitStandardized(component, action, data = {}, options = {}) {
+    const standardEvent = this.createStandardEventName(component, action);
+    
+    // イベント名の検証（オプション）
+    if (options.validateName !== false) {
+      const isValid = this.validateEventName(standardEvent);
+      if (!isValid) {
+        this.logger.warn(`非標準のイベント名: ${standardEvent}`);
+      }
+    }
+    
     const timestamp = new Date().toISOString();
-    const standardizedData = { 
-      ...data, 
-      timestamp, 
-      component, 
-      action 
+    const standardizedData = {
+      ...data,
+      timestamp,
+      component,
+      action
     };
     
     this.emit(standardEvent, standardizedData);
     
     // グローバルイベントも発行
-    this.emit('event', { 
-      type: standardEvent, 
-      ...standardizedData 
+    this.emit('event', {
+      type: standardEvent,
+      ...standardizedData
     });
+    
+    if (this.debugMode) {
+      this.logger.debug(`[EVENT] ${standardEvent}`, standardizedData);
+    }
   }
 
   /**
@@ -310,25 +355,37 @@ class EnhancedEventEmitter {
    * @param {string} component - コンポーネント名
    * @param {string} action - アクション名
    * @param {Object} data - イベントデータ
+   * @param {Object} options - オプション
+   * @param {boolean} options.validateName - イベント名を検証するかどうか
    * @returns {Promise<void>}
    */
-  async emitStandardizedAsync(component, action, data = {}) {
-    const standardEvent = `${component}:${action}`;
+  async emitStandardizedAsync(component, action, data = {}, options = {}) {
+    const standardEvent = this.createStandardEventName(component, action);
+    
+    // イベント名の検証（オプション）
+    if (options.validateName !== false && !this.validateEventName(standardEvent)) {
+      this.logger.warn(`非標準のイベント名: ${standardEvent}`);
+    }
+    
     const timestamp = new Date().toISOString();
-    const standardizedData = { 
-      ...data, 
-      timestamp, 
-      component, 
-      action 
+    const standardizedData = {
+      ...data,
+      timestamp,
+      component,
+      action
     };
     
     await this.emitAsync(standardEvent, standardizedData);
     
     // グローバルイベントも発行
-    await this.emitAsync('event', { 
-      type: standardEvent, 
-      ...standardizedData 
+    await this.emitAsync('event', {
+      type: standardEvent,
+      ...standardizedData
     });
+    
+    if (this.debugMode) {
+      this.logger.debug(`[ASYNC EVENT] ${standardEvent}`, standardizedData);
+    }
   }
 
   /**
@@ -398,9 +455,125 @@ class EnhancedEventEmitter {
       this.logger.debug('すべてのリスナーを削除しました');
     }
   }
+
+  /**
+   * イベントカタログを設定
+   * @param {EventCatalog} catalog - イベントカタログ
+   */
+  setCatalog(catalog) {
+    this.catalog = catalog;
+  }
+  
+  /**
+   * イベントカタログからイベント定義を取得
+   * @param {string} eventName - イベント名
+   * @returns {Object|null} イベント定義またはnull
+   */
+  getEventDefinition(eventName) {
+    return this.catalog ? this.catalog.getEventDefinition(eventName) : null;
+  }
+  
+  /**
+   * カタログに登録されているイベントを発行
+   * @param {string} eventName - カタログに登録されているイベント名
+   * @param {Object} data - イベントデータ
+   * @throws {EventError} イベントがカタログに登録されていない場合
+   */
+  emitCataloged(eventName, data = {}) {
+    if (!this.catalog) {
+      throw new EventError('イベントカタログが設定されていません');
+    }
+    
+    const definition = this.catalog.getEventDefinition(eventName);
+    if (!definition) {
+      throw new EventError(`イベント "${eventName}" はカタログに登録されていません`);
+    }
+    
+    // イベント名からコンポーネントとアクションを抽出
+    const [component, action] = eventName.split(':');
+    
+    // 標準化されたイベントを発行
+    this.emitStandardized(component, action, data);
+  }
+}
+
+/**
+ * イベントカタログクラス
+ * システム全体で使用されるイベントの定義と説明を管理
+ */
+class EventCatalog {
+  /**
+   * コンストラクタ
+   */
+  constructor() {
+    this.events = new Map();
+    this.categories = new Set();
+  }
+  
+  /**
+   * イベント定義を登録
+   * @param {string} eventName - イベント名
+   * @param {Object} definition - イベント定義
+   * @param {string} definition.description - イベントの説明
+   * @param {Object} definition.schema - イベントデータのスキーマ
+   * @param {string} definition.category - イベントのカテゴリ
+   * @param {string[]} definition.examples - 使用例
+   */
+  registerEvent(eventName, definition) {
+    this.events.set(eventName, {
+      name: eventName,
+      description: definition.description || '',
+      schema: definition.schema || {},
+      category: definition.category || 'uncategorized',
+      examples: definition.examples || []
+    });
+    
+    this.categories.add(definition.category || 'uncategorized');
+  }
+  
+  /**
+   * イベント定義を取得
+   * @param {string} eventName - イベント名
+   * @returns {Object|null} イベント定義またはnull
+   */
+  getEventDefinition(eventName) {
+    return this.events.get(eventName) || null;
+  }
+  
+  /**
+   * カテゴリ別のイベント一覧を取得
+   * @param {string} category - カテゴリ名
+   * @returns {Array<Object>} イベント定義の配列
+   */
+  getEventsByCategory(category) {
+    const result = [];
+    for (const [name, definition] of this.events.entries()) {
+      if (definition.category === category) {
+        result.push(definition);
+      }
+    }
+    return result;
+  }
+  
+  /**
+   * すべてのイベント定義を取得
+   * @returns {Array<Object>} イベント定義の配列
+   */
+  getAllEvents() {
+    return Array.from(this.events.values());
+  }
+  
+  /**
+   * すべてのカテゴリを取得
+   * @returns {Array<string>} カテゴリの配列
+   */
+  getAllCategories() {
+    return Array.from(this.categories);
+  }
 }
 
 module.exports = {
   EnhancedEventEmitter,
-  EventError
+  EventError,
+  EventCatalog
 };

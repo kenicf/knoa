@@ -50,29 +50,58 @@ class GitService {
       const output = execSync(fullCommand, execOptions).toString().trim();
       
       if (this.eventEmitter) {
-        this.eventEmitter.emit('git:command_executed', { 
-          command: fullCommand,
-          success: true
-        });
+        // 標準化されたイベント発行を使用
+        if (typeof this.eventEmitter.emitStandardized === 'function') {
+          this.eventEmitter.emitStandardized('git', 'command_executed', {
+            command: fullCommand,
+            success: true,
+            cwd: execOptions.cwd,
+            outputLength: output.length
+          });
+        } else {
+          // 後方互換性のために従来のイベント発行も維持
+          this.eventEmitter.emit('git:command_executed', {
+            command: fullCommand,
+            success: true
+          });
+        }
       }
       
       return output;
     } catch (error) {
       if (this.eventEmitter) {
-        this.eventEmitter.emit('git:command_failed', { 
-          command: `git ${command}`,
-          error: error.message
-        });
+        // 標準化されたイベント発行を使用
+        if (typeof this.eventEmitter.emitStandardized === 'function') {
+          this.eventEmitter.emitStandardized('git', 'command_failed', {
+            command: `git ${command}`,
+            error: error.message,
+            exitCode: error.status || -1,
+            errorOutput: error.stderr ? error.stderr.toString() : null
+          });
+        } else {
+          // 後方互換性のために従来のイベント発行も維持
+          this.eventEmitter.emit('git:command_failed', {
+            command: `git ${command}`,
+            error: error.message
+          });
+        }
       }
       
-      throw new GitError(`Gitコマンドの実行に失敗しました: git ${command}`, { 
+      // エラーハンドラーが設定されている場合は使用
+      const gitError = new GitError(`Gitコマンドの実行に失敗しました: git ${command}`, {
         cause: error,
-        context: { 
+        context: {
           command,
           errorOutput: error.stderr ? error.stderr.toString() : null,
           exitCode: error.status
         }
       });
+      
+      if (this.errorHandler) {
+        this.errorHandler.handle(gitError, 'GitService', '_execGit');
+      }
+      
+      throw gitError;
     }
   }
 
@@ -431,22 +460,42 @@ class GitService {
       
       const commitHash = this.getCurrentCommitHash();
       
+      // タスクIDを抽出
+      const taskIds = this.extractTaskIdsFromCommitMessage(message);
+      
       if (this.eventEmitter) {
-        this.eventEmitter.emit('git:commit_created', { 
-          hash: commitHash,
-          message
-        });
+        // 標準化されたイベント発行を使用
+        if (typeof this.eventEmitter.emitStandardized === 'function') {
+          this.eventEmitter.emitStandardized('git', 'commit_created', {
+            hash: commitHash,
+            shortHash: this.getCurrentCommitHash(true),
+            message,
+            taskIds,
+            author: options.author,
+            allowEmpty: options.allowEmpty || false
+          });
+        } else {
+          // 後方互換性のために従来のイベント発行も維持
+          this.eventEmitter.emit('git:commit_created', {
+            hash: commitHash,
+            message
+          });
+        }
       }
       
       return commitHash;
     } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError('コミットの作成に失敗しました', { 
+      // エラーハンドラーが設定されている場合は使用
+      const gitError = error instanceof GitError ? error : new GitError('コミットの作成に失敗しました', {
         cause: error,
         context: { message, options }
       });
+      
+      if (this.errorHandler) {
+        this.errorHandler.handle(gitError, 'GitService', 'createCommit');
+      }
+      
+      throw gitError;
     }
   }
 

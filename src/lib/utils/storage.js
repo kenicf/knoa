@@ -52,14 +52,38 @@ class StorageService {
         fs.mkdirSync(dirPath, { recursive: true });
         
         if (this.eventEmitter) {
-          this.eventEmitter.emit('storage:directory_created', { path: dirPath });
+          // 標準化されたイベント発行を使用
+          if (typeof this.eventEmitter.emitStandardized === 'function') {
+            this.eventEmitter.emitStandardized('storage', 'directory_created', {
+              path: dirPath,
+              recursive: true
+            });
+          } else {
+            // 後方互換性のために従来のイベント発行も維持
+            this.eventEmitter.emit('storage:directory_created', { path: dirPath });
+          }
         }
         
         this.logger.debug(`ディレクトリを作成しました: ${dirPath}`);
       }
       return true;
     } catch (error) {
-      throw new StorageError(`ディレクトリの作成に失敗しました: ${dirPath}`, { cause: error });
+      // エラーハンドラーが設定されている場合は使用
+      if (this.errorHandler) {
+        this.errorHandler.handle(
+          error instanceof StorageError ? error : new StorageError(
+            `ディレクトリの作成に失敗しました: ${dirPath}`,
+            { cause: error, context: { dirPath } }
+          ),
+          'StorageService',
+          'ensureDirectoryExists'
+        );
+      }
+      
+      throw error instanceof StorageError ? error : new StorageError(
+        `ディレクトリの作成に失敗しました: ${dirPath}`,
+        { cause: error, context: { dirPath } }
+      );
     }
   }
 
@@ -144,16 +168,41 @@ class StorageService {
       fs.writeFileSync(filePath, content, this.encoding);
       
       if (this.eventEmitter) {
-        this.eventEmitter.emit('storage:file_written', { 
-          path: filePath,
-          size: content.length
-        });
+        // 標準化されたイベント発行を使用
+        if (typeof this.eventEmitter.emitStandardized === 'function') {
+          this.eventEmitter.emitStandardized('storage', 'file_written', {
+            path: filePath,
+            size: content.length,
+            encoding: this.encoding
+          });
+        } else {
+          // 後方互換性のために従来のイベント発行も維持
+          this.eventEmitter.emit('storage:file_written', {
+            path: filePath,
+            size: content.length
+          });
+        }
       }
       
       this.logger.debug(`ファイルを書き込みました: ${filePath}`);
       return true;
     } catch (error) {
-      throw new StorageError(`ファイルの書き込みに失敗しました: ${directory}/${filename}`, { cause: error });
+      // エラーハンドラーが設定されている場合は使用
+      if (this.errorHandler) {
+        this.errorHandler.handle(
+          error instanceof StorageError ? error : new StorageError(
+            `ファイルの書き込みに失敗しました: ${directory}/${filename}`,
+            { cause: error, context: { directory, filename, contentSize: content.length } }
+          ),
+          'StorageService',
+          'writeFile'
+        );
+      }
+      
+      throw error instanceof StorageError ? error : new StorageError(
+        `ファイルの書き込みに失敗しました: ${directory}/${filename}`,
+        { cause: error, context: { directory, filename, contentSize: content.length } }
+      );
     }
   }
 

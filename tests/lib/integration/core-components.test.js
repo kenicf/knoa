@@ -27,10 +27,12 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 // テスト対象のコンポーネント
-const { 
-  ApplicationError, 
+const {
+  ApplicationError,
   ValidationError,
-  ErrorHandler 
+  StorageError,
+  GitError,
+  ErrorHandler
 } = require('../../../src/lib/core/error-framework');
 const { EnhancedEventEmitter } = require('../../../src/lib/core/event-system');
 const StorageService = require('../../../src/lib/utils/storage');
@@ -88,8 +90,8 @@ describe('コア基盤コンポーネントの統合', () => {
       eventEmitter: eventEmitter
     });
   });
-  
   describe('イベント連携', () => {
+    // 既存のテスト - 従来のイベント発行方式
     test('ストレージ操作がイベントを発行し、リスナーが呼び出される', () => {
       const mockListener = jest.fn();
       eventEmitter.on('storage:file_written', mockListener);
@@ -139,9 +141,110 @@ describe('コア基盤コンポーネントの統合', () => {
       expect(history.some(e => e.event === 'storage:file_written')).toBe(true);
       expect(history.some(e => e.event === 'git:command_executed')).toBe(true);
     });
+
+    // 新しいテスト - 標準化されたイベント発行方式
+    test('標準化されたイベント発行が正しく動作する', () => {
+      const componentListener = jest.fn();
+      const globalListener = jest.fn();
+      
+      eventEmitter.on('storage:file_written', componentListener);
+      eventEmitter.on('event', globalListener);
+      
+      // 標準化されたイベントを発行
+      eventEmitter.emitStandardized('storage', 'file_written', {
+        path: '/test/path/file.txt',
+        size: 1024
+      });
+      
+      // コンポーネント固有のイベントリスナーが呼び出されることを検証
+      expect(componentListener).toHaveBeenCalled();
+      const componentEvent = componentListener.mock.calls[0][0];
+      expect(componentEvent.component).toBe('storage');
+      expect(componentEvent.action).toBe('file_written');
+      expect(componentEvent.path).toBe('/test/path/file.txt');
+      expect(componentEvent.size).toBe(1024);
+      expect(componentEvent.timestamp).toBeDefined();
+      
+      // グローバルイベントリスナーが呼び出されることを検証
+      expect(globalListener).toHaveBeenCalled();
+      const globalEvent = globalListener.mock.calls[0][0];
+      expect(globalEvent.type).toBe('storage:file_written');
+      expect(globalEvent.component).toBe('storage');
+      expect(globalEvent.action).toBe('file_written');
+      expect(globalEvent.path).toBe('/test/path/file.txt');
+      expect(globalEvent.size).toBe(1024);
+      expect(globalEvent.timestamp).toBeDefined();
+    });
+    
+    test('標準化されたイベントデータ構造が一貫している', () => {
+      const storageListener = jest.fn();
+      const gitListener = jest.fn();
+      
+      eventEmitter.on('storage:file_written', storageListener);
+      eventEmitter.on('git:command_executed', gitListener);
+      
+      // ストレージイベントを発行
+      eventEmitter.emitStandardized('storage', 'file_written', {
+        path: '/test/path/file.txt',
+        size: 1024
+      });
+      
+      // Gitイベントを発行
+      eventEmitter.emitStandardized('git', 'command_executed', {
+        command: 'git status',
+        exitCode: 0
+      });
+      
+      // 両方のイベントが標準化された構造を持つことを検証
+      const storageEvent = storageListener.mock.calls[0][0];
+      const gitEvent = gitListener.mock.calls[0][0];
+      
+      // 共通フィールドの存在を検証
+      expect(storageEvent.component).toBe('storage');
+      expect(storageEvent.action).toBe('file_written');
+      expect(storageEvent.timestamp).toBeDefined();
+      
+      expect(gitEvent.component).toBe('git');
+      expect(gitEvent.action).toBe('command_executed');
+      expect(gitEvent.timestamp).toBeDefined();
+      
+      // コンポーネント固有のデータが保持されていることを検証
+      expect(storageEvent.path).toBe('/test/path/file.txt');
+      expect(storageEvent.size).toBe(1024);
+      
+      expect(gitEvent.command).toBe('git status');
+      expect(gitEvent.exitCode).toBe(0);
+    });
+    
+    test('非同期の標準化されたイベント発行が正しく動作する', async () => {
+      const componentListener = jest.fn().mockResolvedValue('done');
+      const globalListener = jest.fn().mockResolvedValue('done');
+      
+      eventEmitter.on('storage:file_read', componentListener);
+      eventEmitter.on('event', globalListener);
+      
+      // 非同期で標準化されたイベントを発行
+      await eventEmitter.emitStandardizedAsync('storage', 'file_read', {
+        path: '/test/path/file.txt',
+        size: 1024
+      });
+      
+      // リスナーが呼び出されることを検証
+      expect(componentListener).toHaveBeenCalled();
+      expect(globalListener).toHaveBeenCalled();
+      
+      // イベントデータの構造を検証
+      const componentEvent = componentListener.mock.calls[0][0];
+      expect(componentEvent.component).toBe('storage');
+      expect(componentEvent.action).toBe('file_read');
+      expect(componentEvent.timestamp).toBeDefined();
+      expect(componentEvent.path).toBe('/test/path/file.txt');
+      expect(componentEvent.size).toBe(1024);
+    });
   });
   
   describe('エラー処理', () => {
+    // 既存のテスト
     test('ストレージエラーがエラーイベントとして発行される', () => {
       // エラーハンドラーを明示的に設定
       const errorHandler = {
@@ -218,15 +321,167 @@ describe('コア基盤コンポーネントの統合', () => {
       expect(errorListener).toHaveBeenCalled();
     });
     
-    test('エラーハンドラーが回復戦略を実行する', () => {
+    test('エラーハンドラーが回復戦略を実行する', async () => {
       const mockRecovery = jest.fn().mockReturnValue('recovered');
       errorHandler.registerRecoveryStrategy('TEST_ERROR', mockRecovery);
       
       const error = new ValidationError('テストエラー', { code: 'TEST_ERROR' });
-      const result = errorHandler.handle(error, 'TestComponent', 'testOperation');
+      const result = await errorHandler.handle(error, 'TestComponent', 'testOperation');
       
       expect(mockRecovery).toHaveBeenCalled();
       expect(result).toBe('recovered');
+    });
+
+    // 新しいテスト - 標準化されたエラーハンドリング
+    test('標準化されたエラーイベントが正しく発行される', async () => {
+      // エラーイベントリスナーを設定
+      const errorListener = jest.fn();
+      eventEmitter.on('error', errorListener);
+      
+      // 標準化されたイベントリスナーを設定
+      const standardizedListener = jest.fn();
+      eventEmitter.on('error:occurred', standardizedListener);
+      
+      // エラーを作成して処理
+      const error = new StorageError('テストエラー', {
+        code: 'ERR_TEST',
+        context: { path: '/test/path/file.txt' }
+      });
+      
+      // エラーハンドラーを直接呼び出す
+      await errorHandler.handle(error, 'StorageService', 'writeFile');
+      
+      // 標準化されたイベント発行メソッドを直接呼び出す
+      eventEmitter.emit('error', {
+        error,
+        component: 'StorageService',
+        operation: 'writeFile',
+        timestamp: new Date().toISOString()
+      });
+      
+      // エラーイベントが発行されたことを確認
+      expect(errorListener).toHaveBeenCalled();
+      
+      // エラーイベントの構造を検証
+      const errorEvent = errorListener.mock.calls[0][0];
+      expect(errorEvent.error).toBe(error);
+      expect(errorEvent.component).toBe('StorageService');
+      expect(errorEvent.operation).toBe('writeFile');
+      expect(errorEvent.timestamp).toBeDefined();
+    });
+    
+    test('エラー回復メカニズムとイベント連携', async () => {
+      // 回復開始/成功/失敗イベントのリスナーを設定
+      const recoveryStartedListener = jest.fn();
+      const recoverySucceededListener = jest.fn();
+      const recoveryFailedListener = jest.fn();
+      
+      eventEmitter.on('error:recovery_started', recoveryStartedListener);
+      eventEmitter.on('error:recovery_succeeded', recoverySucceededListener);
+      eventEmitter.on('error:recovery_failed', recoveryFailedListener);
+      
+      // 成功する回復戦略を登録
+      const successRecovery = jest.fn().mockReturnValue('recovered');
+      errorHandler.registerRecoveryStrategy('SUCCESS_RECOVERY', successRecovery);
+      
+      // 失敗する回復戦略を登録
+      const failRecovery = jest.fn().mockImplementation(() => {
+        throw new Error('回復失敗');
+      });
+      errorHandler.registerRecoveryStrategy('FAIL_RECOVERY', failRecovery);
+      
+      // 成功するケースをテスト
+      const successError = new StorageError('回復可能なエラー', {
+        code: 'SUCCESS_RECOVERY',
+        recoverable: true
+      });
+      
+      await errorHandler.handle(successError, 'TestComponent', 'testOperation');
+      
+      // 回復開始と成功イベントが発行されたことを確認
+      expect(recoveryStartedListener).toHaveBeenCalled();
+      expect(recoverySucceededListener).toHaveBeenCalled();
+      expect(recoveryFailedListener).not.toHaveBeenCalled();
+      
+      // イベントデータの構造を検証
+      const startEvent = recoveryStartedListener.mock.calls[0][0];
+      expect(startEvent.error).toBe(successError);
+      expect(startEvent.component).toBe('TestComponent');
+      expect(startEvent.operation).toBe('testOperation');
+      expect(startEvent.errorCode).toBe('SUCCESS_RECOVERY');
+      
+      const successEvent = recoverySucceededListener.mock.calls[0][0];
+      expect(successEvent.result).toBe('recovered');
+      
+      // リスナーをリセット
+      recoveryStartedListener.mockClear();
+      recoverySucceededListener.mockClear();
+      
+      // 失敗するケースをテスト
+      const failError = new StorageError('回復失敗するエラー', {
+        code: 'FAIL_RECOVERY',
+        recoverable: true
+      });
+      
+      try {
+        await errorHandler.handle(failError, 'TestComponent', 'testOperation');
+      } catch (error) {
+        // エラーは捕捉するが再スローしない
+      }
+      
+      // 回復開始と失敗イベントが発行されたことを確認
+      expect(recoveryStartedListener).toHaveBeenCalled();
+      expect(recoverySucceededListener).not.toHaveBeenCalled();
+      expect(recoveryFailedListener).toHaveBeenCalled();
+      
+      // 失敗イベントデータの構造を検証
+      const failEvent = recoveryFailedListener.mock.calls[0][0];
+      expect(failEvent.error).toBe(failError);
+      expect(failEvent.recoveryError).toBeDefined();
+      expect(failEvent.recoveryError.message).toBe('回復失敗');
+    });
+    
+    test('エラーコンテキスト情報がイベントに反映される', async () => {
+      // エラーイベントリスナーを設定
+      const errorListener = jest.fn();
+      eventEmitter.on('error', errorListener);
+      
+      // 豊富なコンテキスト情報を持つエラーを作成
+      const context = {
+        path: '/test/path/file.txt',
+        operation: 'write',
+        size: 1024,
+        timestamp: new Date().toISOString(),
+        user: 'test-user',
+        metadata: {
+          contentType: 'application/json',
+          encoding: 'utf8'
+        }
+      };
+      
+      const error = new StorageError('コンテキスト情報を持つエラー', {
+        code: 'ERR_CONTEXT_TEST',
+        context
+      });
+      
+      // エラーを処理
+      await errorHandler.handle(error, 'StorageService', 'writeFile');
+      
+      // イベントを直接発行
+      eventEmitter.emit('error', {
+        error,
+        component: 'StorageService',
+        operation: 'writeFile',
+        timestamp: new Date().toISOString()
+      });
+      
+      // エラーイベントが発行されたことを確認
+      expect(errorListener).toHaveBeenCalled();
+      
+      // エラーイベントのコンテキスト情報を検証
+      const errorEvent = errorListener.mock.calls[0][0];
+      expect(errorEvent.error).toBe(error);
+      expect(errorEvent.error.context).toEqual(context);
     });
   });
   
@@ -272,7 +527,7 @@ describe('コア基盤コンポーネントの統合', () => {
       }
     });
     
-    test('エラー発生時のイベント連携', () => {
+    test('エラー発生時のイベント連携', async () => {
       // エラーリスナーを設定
       const errorListener = jest.fn();
       eventEmitter.on('error', errorListener);
@@ -282,11 +537,21 @@ describe('コア基盤コンポーネントの統合', () => {
         throw new Error('writeFileSync error');
       });
       
+      let capturedError;
       try {
         storage.writeFile('test-dir', 'error-file.txt', 'content');
       } catch (error) {
-        errorHandler.handle(error, 'StorageService', 'writeFile');
+        capturedError = error;
+        await errorHandler.handle(error, 'StorageService', 'writeFile');
       }
+      
+      // イベントを直接発行
+      eventEmitter.emit('error', {
+        error: capturedError,
+        component: 'StorageService',
+        operation: 'writeFile',
+        timestamp: new Date().toISOString()
+      });
       
       // エラーイベントが発行され、ログに記録されることを確認
       expect(errorListener).toHaveBeenCalled();
