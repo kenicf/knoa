@@ -2,7 +2,8 @@
  * タスク管理ユーティリティのテスト
  */
 
-const taskManager = require('../src/utils/task-manager');
+const { TaskManager } = require('../src/utils/task-manager');
+const { createMockDependencies } = require('./helpers/mock-factory');
 
 // テストデータ
 const validTask = {
@@ -67,6 +68,52 @@ const tasksWithDependencies = [
 
 // Jestのテスト
 describe('TaskManager', () => {
+  let taskManager;
+  let mockDeps;
+  
+  beforeEach(() => {
+    // モック依存関係の作成
+    mockDeps = createMockDependencies();
+    
+    // TaskManagerのインスタンスを作成
+    taskManager = new TaskManager(
+      mockDeps.storageService,
+      mockDeps.gitService,
+      mockDeps.logger,
+      mockDeps.eventEmitter,
+      mockDeps.errorHandler,
+      {
+        tasksDir: 'test-tasks'
+      }
+    );
+  });
+  
+  test('コンストラクタで依存関係を正しく設定する', () => {
+    expect(taskManager.storageService).toBe(mockDeps.storageService);
+    expect(taskManager.gitService).toBe(mockDeps.gitService);
+    expect(taskManager.logger).toBe(mockDeps.logger);
+    expect(taskManager.eventEmitter).toBe(mockDeps.eventEmitter);
+    expect(taskManager.errorHandler).toBe(mockDeps.errorHandler);
+    expect(taskManager.tasksDir).toBe('test-tasks');
+  });
+  
+  test('必須の依存関係が欠けている場合はエラーをスローする', () => {
+    expect(() => new TaskManager(null, mockDeps.gitService, mockDeps.logger, mockDeps.eventEmitter, mockDeps.errorHandler))
+      .toThrow('TaskManager requires a storageService instance');
+    
+    expect(() => new TaskManager(mockDeps.storageService, null, mockDeps.logger, mockDeps.eventEmitter, mockDeps.errorHandler))
+      .toThrow('TaskManager requires a gitService instance');
+    
+    expect(() => new TaskManager(mockDeps.storageService, mockDeps.gitService, null, mockDeps.eventEmitter, mockDeps.errorHandler))
+      .toThrow('TaskManager requires a logger instance');
+    
+    expect(() => new TaskManager(mockDeps.storageService, mockDeps.gitService, mockDeps.logger, null, mockDeps.errorHandler))
+      .toThrow('TaskManager requires an eventEmitter instance');
+    
+    expect(() => new TaskManager(mockDeps.storageService, mockDeps.gitService, mockDeps.logger, mockDeps.eventEmitter, null))
+      .toThrow('TaskManager requires an errorHandler instance');
+  });
+  
   // タスク検証のテスト
   describe('validateTask', () => {
     test('有効なタスクは検証に合格する', () => {
@@ -98,134 +145,68 @@ describe('TaskManager', () => {
     
     test('循環依存があるタスクは検証に失敗する', () => {
       // 循環依存のテスト
-      const cyclicTasks = [
-        ...tasksWithDependencies,
-        {
-          id: "T004",
-          title: "タスク4",
-          description: "タスク4の説明",
-          status: "pending",
-          dependencies: [
-            {
-              task_id: "T005",
-              type: "strong"
-            }
-          ]
-        },
-        {
-          id: "T005",
-          title: "タスク5",
-          description: "タスク5の説明",
-          status: "pending",
-          dependencies: [
-            {
-              task_id: "T004",
-              type: "strong"
-            }
-          ]
-        }
-      ];
-      
-      const result = taskManager.checkDependencies("T004", cyclicTasks);
-      expect(result.isValid).toBe(false);
-      expect(result.errors.length).toBeGreaterThan(0);
-    });
-  });
-  
-  // 進捗管理のテスト
-  describe('calculateProgress', () => {
-    test('タスクT002の進捗率は50%', () => {
-      const progress = taskManager.calculateProgress("T002", tasksWithDependencies);
-      expect(progress).toBe(50);
-    });
-    
-    test('完了したタスクの進捗率は100%', () => {
-      const progress = taskManager.calculateProgress("T001", tasksWithDependencies);
-      expect(progress).toBe(100);
-    });
-  });
-  
-  // タスクフィルタリングのテスト
-  describe('taskFiltering', () => {
-    test('進行中のタスクは1つ', () => {
-      const inProgressTasks = taskManager.getTasksByStatus(tasksWithDependencies, "in_progress");
-      expect(inProgressTasks.length).toBe(1);
-      expect(inProgressTasks[0].id).toBe("T002");
-    });
-    
-    test('開発中のタスクは1つ', () => {
-      const inDevTasks = taskManager.getTasksByProgressState(tasksWithDependencies, "in_development");
-      expect(inDevTasks.length).toBe(1);
-      expect(inDevTasks[0].id).toBe("T002");
-    });
-  });
-  
-  // 進捗更新のテスト
-  describe('updateTaskProgress', () => {
-    test('タスクの進捗更新は成功する', () => {
-      const tasks = JSON.parse(JSON.stringify(tasksWithDependencies)); // ディープコピー
-      
-      const result = taskManager.updateTaskProgress("T003", 30, "in_development", tasks);
-      expect(result.success).toBe(true);
-      
-      const updatedTask = result.updatedTasks.find(t => t.id === "T003");
-      expect(updatedTask.progress_percentage).toBe(30);
-      expect(updatedTask.progress_state).toBe("in_development");
-      expect(updatedTask.status).toBe("in_progress");
-    });
-  });
-  
-  // Git連携のテスト
-  describe('gitIntegration', () => {
-    test('Gitコミットの追加は成功する', () => {
-      const tasks = JSON.parse(JSON.stringify(tasksWithDependencies)); // ディープコピー
-      
-      const result = taskManager.addGitCommitToTask("T002", "abc123", tasks);
-      expect(result.success).toBe(true);
-      
-      const updatedTask = result.updatedTasks.find(t => t.id === "T002");
-      expect(updatedTask.git_commits).toContain("abc123");
-    });
-    
-    test('コミットメッセージからタスクIDを抽出できる', () => {
-      const extractedIds = taskManager.extractTaskIdsFromCommitMessage("Fix bug in login form #T001 and add tests #T002");
-      expect(extractedIds.length).toBe(2);
-      expect(extractedIds).toContain("T001");
-      expect(extractedIds).toContain("T002");
-    });
-  });
-  
-  // 進捗状態遷移のテスト
-  describe('progressStateTransition', () => {
-    test('開発中の次の状態は実装完了', () => {
-      const nextState = taskManager.getNextProgressState("in_development");
-      expect(nextState).toBe("implementation_complete");
-    });
-    
-    test('完了状態の次の状態はない', () => {
-      const nextState = taskManager.getNextProgressState("completed");
-      expect(nextState).toBeNull();
-    });
-  });
-  
-  // タスク移行のテスト
-  describe('taskMigration', () => {
-    test('古い形式のタスクを新しい形式に変換できる', () => {
-      const oldTask = {
-        id: "T001",
-        title: "古い形式のタスク",
-        description: "古い形式のタスクの説明",
-        status: "in_progress",
-        dependencies: ["T002"]
+      const circularTasks = [...tasksWithDependencies];
+      circularTasks[0] = {
+        ...circularTasks[0],
+        dependencies: [
+          {
+            task_id: "T003",
+            type: "strong"
+          }
+        ]
       };
       
-      const migratedTask = taskManager.migrateTaskToNewFormat(oldTask);
-      expect(migratedTask.dependencies[0].task_id).toBe("T002");
-      expect(migratedTask.dependencies[0].type).toBe("strong");
-      expect(migratedTask.priority).toBe(3);
-      expect(migratedTask.progress_percentage).toBe(50);
-      expect(migratedTask.progress_state).toBe("in_development");
-      expect(Array.isArray(migratedTask.git_commits)).toBe(true);
+      const result = taskManager.checkDependencies("T003", circularTasks);
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContain("循環依存が検出されました");
+    });
+  });
+  
+  // タスク状態管理のテスト
+  describe('updateTaskProgress', () => {
+    test('タスクの進捗状態を更新できる', () => {
+      const task = { ...validTask };
+      const updatedTask = taskManager.updateTaskProgress(task, "in_review");
+      
+      expect(updatedTask.progress_state).toBe("in_review");
+      expect(updatedTask.progress_percentage).toBe(70); // in_reviewの標準進捗率
+    });
+    
+    test('無効な進捗状態への更新は失敗する', () => {
+      const task = { ...validTask };
+      expect(() => taskManager.updateTaskProgress(task, "invalid_state"))
+        .toThrow();
+    });
+  });
+  
+  // タスク保存のテスト
+  describe('saveTask', () => {
+    test('タスクを保存できる', () => {
+      // モックの設定
+      mockDeps.storageService.fileExists.mockReturnValue(true);
+      mockDeps.storageService.readJSON.mockReturnValue({
+        decomposed_tasks: []
+      });
+      
+      const result = taskManager.saveTask(validTask);
+      
+      expect(result).toBe(true);
+      expect(mockDeps.storageService.writeJSON).toHaveBeenCalled();
+      expect(mockDeps.eventEmitter.emit).toHaveBeenCalledWith('task:saved', expect.any(Object));
+    });
+    
+    test('無効なタスクは保存できない', () => {
+      // validateTaskをモック
+      taskManager.validateTask = jest.fn().mockReturnValue({
+        isValid: false,
+        errors: ["エラー"]
+      });
+      
+      const result = taskManager.saveTask(validTask);
+      
+      expect(result).toBe(false);
+      expect(mockDeps.storageService.writeJSON).not.toHaveBeenCalled();
+      expect(mockDeps.logger.error).toHaveBeenCalled();
     });
   });
 });

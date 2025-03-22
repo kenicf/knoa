@@ -2,11 +2,26 @@
  * Gitサービス
  * 
  * Git操作を抽象化し、一貫したインターフェースを提供します。
- * コミット情報取得、差分取得、タスクID抽出などの共通機能を提供します。
+ * コミット情報の取得、タスクIDの抽出、変更ファイルの取得などの機能を提供します。
  */
 
 const { execSync } = require('child_process');
-const { GitError } = require('../core/error-framework');
+
+/**
+ * Gitエラークラス
+ */
+class GitError extends Error {
+  /**
+   * コンストラクタ
+   * @param {string} message - エラーメッセージ
+   * @param {Error} cause - 原因となったエラー
+   */
+  constructor(message, cause) {
+    super(message);
+    this.name = 'GitError';
+    this.cause = cause;
+  }
+}
 
 /**
  * Gitサービスクラス
@@ -15,644 +30,636 @@ class GitService {
   /**
    * コンストラクタ
    * @param {Object} options - オプション
-   * @param {string} options.repoPath - リポジトリのパス
-   * @param {Object} options.logger - ロガーインスタンス
-   * @param {Object} options.eventEmitter - イベントエミッターインスタンス
+   * @param {string} options.repoPath - リポジトリパス
+   * @param {Object} options.logger - ロガー
+   * @param {Object} options.eventEmitter - イベントエミッター
+   * @param {Object} options.errorHandler - エラーハンドラー
    */
   constructor(options = {}) {
     this.repoPath = options.repoPath || process.cwd();
     this.logger = options.logger || console;
     this.eventEmitter = options.eventEmitter;
-    this.taskIdPattern = options.taskIdPattern || /\b(T[0-9]{3})\b/g;
-    this.execOptions = {
-      cwd: this.repoPath,
-      encoding: 'utf8',
-      maxBuffer: 10 * 1024 * 1024 // 10MB
-    };
+    this.errorHandler = options.errorHandler;
   }
 
   /**
-   * Gitコマンドを実行
-   * @param {string} command - Gitコマンド
-   * @param {Object} options - 実行オプション
-   * @returns {string} コマンドの出力
+   * コマンドを実行
    * @private
+   * @param {string} command - 実行するコマンド
+   * @param {Object} options - オプション
+   * @returns {string} コマンドの出力
    */
-  _execGit(command, options = {}) {
+  _executeCommand(command, options = {}) {
     try {
-      const fullCommand = `git ${command}`;
-      const execOptions = { ...this.execOptions, ...options };
+      const execOptions = {
+        cwd: this.repoPath,
+        encoding: 'utf8',
+        ...options
+      };
       
-      if (options.debug || process.env.DEBUG_GIT) {
-        this.logger.debug(`実行: ${fullCommand}`, { cwd: execOptions.cwd });
-      }
+      this._emitEvent('command:execute:before', { command });
       
-      const output = execSync(fullCommand, execOptions).toString().trim();
+      const output = execSync(command, execOptions).toString().trim();
       
-      if (this.eventEmitter) {
-        // 標準化されたイベント発行を使用
-        if (typeof this.eventEmitter.emitStandardized === 'function') {
-          this.eventEmitter.emitStandardized('git', 'command_executed', {
-            command: fullCommand,
-            success: true,
-            cwd: execOptions.cwd,
-            outputLength: output.length
-          });
-        } else {
-          // 後方互換性のために従来のイベント発行も維持
-          this.eventEmitter.emit('git:command_executed', {
-            command: fullCommand,
-            success: true
-          });
-        }
-      }
+      this._emitEvent('command:execute:after', { command, success: true });
       
       return output;
     } catch (error) {
-      if (this.eventEmitter) {
-        // 標準化されたイベント発行を使用
-        if (typeof this.eventEmitter.emitStandardized === 'function') {
-          this.eventEmitter.emitStandardized('git', 'command_failed', {
-            command: `git ${command}`,
-            error: error.message,
-            exitCode: error.status || -1,
-            errorOutput: error.stderr ? error.stderr.toString() : null
-          });
-        } else {
-          // 後方互換性のために従来のイベント発行も維持
-          this.eventEmitter.emit('git:command_failed', {
-            command: `git ${command}`,
-            error: error.message
-          });
-        }
-      }
+      this._emitEvent('command:execute:after', { command, success: false, error });
       
-      // エラーハンドラーが設定されている場合は使用
-      const gitError = new GitError(`Gitコマンドの実行に失敗しました: git ${command}`, {
-        cause: error,
-        context: {
-          command,
-          errorOutput: error.stderr ? error.stderr.toString() : null,
-          exitCode: error.status
-        }
+      return this._handleError(`コマンド実行に失敗しました: ${command}`, error, {
+        command,
+        operation: '_executeCommand'
       });
-      
-      if (this.errorHandler) {
-        this.errorHandler.handle(gitError, 'GitService', '_execGit');
-      }
-      
-      throw gitError;
     }
-  }
-
-  /**
-   * リポジトリが有効かどうかを確認
-   * @returns {boolean} リポジトリが有効かどうか
-   */
-  isValidRepository() {
-    try {
-      this._execGit('rev-parse --is-inside-work-tree');
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-
-  /**
-   * 現在のブランチ名を取得
-   * @returns {string} ブランチ名
-   */
-  getCurrentBranch() {
-    return this._execGit('rev-parse --abbrev-ref HEAD');
   }
 
   /**
    * 現在のコミットハッシュを取得
-   * @param {boolean} short - 短いハッシュを取得するかどうか
    * @returns {string} コミットハッシュ
    */
-  getCurrentCommitHash(short = false) {
-    const command = short ? 'rev-parse --short HEAD' : 'rev-parse HEAD';
-    return this._execGit(command);
-  }
-
-  /**
-   * 指定したコミットの情報を取得
-   * @param {string} commitHash - コミットハッシュ
-   * @returns {Object} コミット情報
-   */
-  getCommitInfo(commitHash = 'HEAD') {
+  getCurrentCommitHash() {
     try {
-      const format = {
-        hash: '%H',
-        shortHash: '%h',
-        author: '%an',
-        authorEmail: '%ae',
-        authorDate: '%aI',
-        committer: '%cn',
-        committerEmail: '%ce',
-        committerDate: '%cI',
-        subject: '%s',
-        body: '%b'
-      };
+      this._emitEvent('commit:get_hash:before', {});
       
-      const formatStr = Object.values(format).join('%n');
-      const command = `show -s --format="${formatStr}" ${commitHash}`;
-      const output = this._execGit(command);
-      const lines = output.split('\n');
+      const hash = this._executeCommand('git rev-parse HEAD');
       
-      const result = {};
-      let i = 0;
+      this._emitEvent('commit:get_hash:after', { hash, success: true });
       
-      for (const [key, _] of Object.entries(format)) {
-        result[key] = lines[i++] || '';
-      }
-      
-      // bodyは複数行の可能性があるため、残りの行を結合
-      if (i < lines.length) {
-        result.body = lines.slice(i).join('\n');
-      }
-      
-      return result;
+      return hash;
     } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError(`コミット情報の取得に失敗しました: ${commitHash}`, { cause: error });
+      this._emitEvent('commit:get_hash:after', { success: false, error });
+      
+      return this._handleError('コミットハッシュの取得に失敗しました', error, {
+        operation: 'getCurrentCommitHash'
+      });
     }
   }
+/**
+ * Gitコマンドを実行（互換性のためのエイリアス）
+ * @param {string} command - 実行するGitコマンド（git プレフィックスなし）
+ * @param {Object} options - オプション
+ * @returns {string} コマンドの出力
+ */
+_execGit(command, options = {}) {
+  const fullCommand = `git ${command}`;
+  try {
+    const result = this._executeCommand(fullCommand, options);
+    
+    // イベント発行
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('git:command_executed', {
+        command: fullCommand,
+        result,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    if (this.errorHandler) {
+      this.errorHandler.handle(error, 'GitService', '_execGit');
+    }
+    throw error;
+  }
+}
+/**
+ * ファイルをステージングする
+ * @param {string} filePath - ステージングするファイルパス
+ * @returns {boolean} 成功したかどうか
+ */
+stageFiles(filePath) {
+  try {
+    this._emitEvent('git:stage:before', { filePath });
+    
+    const result = this._executeCommand(`git add ${filePath}`);
+    
+    this._emitEvent('git:stage:after', { filePath, success: true });
+    
+    // イベント発行
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('git:files_staged', {
+        filePath,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    return true;
+  } catch (error) {
+    this._emitEvent('git:stage:after', { filePath, success: false, error });
+    
+    return this._handleError(`ファイルのステージングに失敗しました: ${filePath}`, error, {
+      filePath,
+      operation: 'stageFiles'
+    });
+  }
+}
 
-  /**
-   * コミットメッセージからタスクIDを抽出
-   * @param {string} message - コミットメッセージ
-   * @returns {Array<string>} タスクIDの配列
-   */
+/**
+ * コミットを作成する
+ * @param {string} message - コミットメッセージ
+ * @returns {string} コミットハッシュ
+ */
+createCommit(message) {
+  try {
+    this._emitEvent('git:commit:before', { message });
+    
+    const result = this._executeCommand(`git commit -m "${message}"`);
+    
+    // コミットハッシュを取得
+    const hash = this.getCurrentCommitHash();
+    
+    this._emitEvent('git:commit:after', { message, hash, success: true });
+    
+    // イベント発行
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('git:commit_created', {
+        message,
+        hash,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    return hash;
+  } catch (error) {
+    this._emitEvent('git:commit:after', { message, success: false, error });
+    
+    return this._handleError(`コミットの作成に失敗しました: ${message}`, error, {
+      message,
+      operation: 'createCommit'
+    });
+  }
+}
+
+/**
+ * コミットメッセージからタスクIDを抽出
+ * @param {string} message - コミットメッセージ
+ * @returns {Array<string>} タスクIDの配列
+ */
+extractTaskIdsFromCommitMessage(message) {
   extractTaskIdsFromCommitMessage(message) {
     try {
-      const matches = message.match(this.taskIdPattern) || [];
-      return [...new Set(matches)]; // 重複を削除
+      this._emitEvent('commit:extract_task_ids:before', { message });
+      
+      const regex = /#(T[0-9]{3})/g;
+      const matches = message.match(regex) || [];
+      const taskIds = matches.map(match => match.substring(1)); // #を除去
+      
+      this._emitEvent('commit:extract_task_ids:after', { message, taskIds, success: true });
+      
+      return taskIds;
     } catch (error) {
-      throw new GitError('タスクIDの抽出に失敗しました', { 
-        cause: error,
-        context: { message }
+      this._emitEvent('commit:extract_task_ids:after', { message, success: false, error });
+      
+      return this._handleError('タスクIDの抽出に失敗しました', error, {
+        message,
+        operation: 'extractTaskIdsFromCommitMessage'
       });
     }
   }
 
   /**
-   * 指定したコミットのタスクIDを取得
-   * @param {string} commitHash - コミットハッシュ
-   * @returns {Array<string>} タスクIDの配列
-   */
-  getTaskIdsFromCommit(commitHash = 'HEAD') {
-    try {
-      const commitInfo = this.getCommitInfo(commitHash);
-      const message = `${commitInfo.subject}\n${commitInfo.body}`;
-      return this.extractTaskIdsFromCommitMessage(message);
-    } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError(`コミットからのタスクID取得に失敗しました: ${commitHash}`, { cause: error });
-    }
-  }
-
-  /**
-   * 2つのコミット間のコミット一覧を取得
-   * @param {string} startCommit - 開始コミット
-   * @param {string} endCommit - 終了コミット
+   * コミット間のコミット情報を取得
+   * @param {string} startCommit - 開始コミットハッシュ
+   * @param {string} endCommit - 終了コミットハッシュ
    * @returns {Array<Object>} コミット情報の配列
    */
-  getCommitsBetween(startCommit, endCommit = 'HEAD') {
+  getCommitsBetween(startCommit, endCommit) {
     try {
-      const command = `log --pretty=format:"%H|%h|%an|%aI|%s" ${startCommit}..${endCommit}`;
-      const output = this._execGit(command);
+      this._emitEvent('commit:get_between:before', { startCommit, endCommit });
+      
+      const command = `git log ${startCommit}..${endCommit} --pretty=format:"%H|%s|%ai|%an"`;
+      const output = this._executeCommand(command);
       
       if (!output) {
+        this._emitEvent('commit:get_between:after', { startCommit, endCommit, commits: [], success: true });
         return [];
       }
       
-      return output.split('\n').map(line => {
-        const [hash, shortHash, author, timestamp, subject] = line.split('|');
-        const taskIds = this.extractTaskIdsFromCommitMessage(subject);
+      const commits = output.split('\n').map(line => {
+        const [hash, message, timestamp, author] = line.split('|');
+        const related_tasks = this.extractTaskIdsFromCommitMessage(message);
         
         return {
           hash,
-          shortHash,
-          author,
+          message,
           timestamp,
-          subject,
-          taskIds
+          author,
+          related_tasks
         };
       });
+      
+      this._emitEvent('commit:get_between:after', { startCommit, endCommit, commits, success: true });
+      
+      return commits;
     } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError(`コミット一覧の取得に失敗しました: ${startCommit}..${endCommit}`, { cause: error });
+      this._emitEvent('commit:get_between:after', { startCommit, endCommit, success: false, error });
+      
+      return this._handleError('コミット情報の取得に失敗しました', error, {
+        startCommit,
+        endCommit,
+        operation: 'getCommitsBetween'
+      });
     }
   }
 
   /**
-   * 指定したコミットの変更ファイル一覧を取得
+   * コミットで変更されたファイルを取得
    * @param {string} commitHash - コミットハッシュ
-   * @returns {Array<Object>} 変更ファイル情報の配列
+   * @returns {Array<Object>} 変更されたファイル情報の配列
    */
-  getChangedFilesInCommit(commitHash = 'HEAD') {
+  getChangedFilesInCommit(commitHash) {
     try {
-      const command = `show --name-status --pretty=format:"" ${commitHash}`;
-      const output = this._execGit(command);
+      this._emitEvent('commit:get_changed_files:before', { commitHash });
+      
+      const command = `git show --name-status --format="" ${commitHash}`;
+      const output = this._executeCommand(command);
       
       if (!output) {
+        this._emitEvent('commit:get_changed_files:after', { commitHash, files: [], success: true });
         return [];
       }
       
-      return output.trim().split('\n').filter(Boolean).map(line => {
-        const [status, ...pathParts] = line.trim().split('\t');
-        const path = pathParts.join('\t'); // タブを含むパス名に対応
+      const files = output.split('\n').map(line => {
+        const [status, ...pathParts] = line.split('\t');
         
-        return {
-          status: this._mapGitStatusToAction(status),
-          path
-        };
+        // リネームの場合は元のパスと新しいパスの両方が含まれる
+        if (status.startsWith('R')) {
+          const [previousPath, path] = pathParts;
+          return { status: 'renamed', path, previous_path: previousPath };
+        }
+        
+        const path = pathParts.join('\t'); // タブが含まれるパス名に対応
+        
+        let fileStatus;
+        switch (status.charAt(0)) {
+          case 'A':
+            fileStatus = 'added';
+            break;
+          case 'M':
+            fileStatus = 'modified';
+            break;
+          case 'D':
+            fileStatus = 'deleted';
+            break;
+          default:
+            fileStatus = status;
+        }
+        
+        return { status: fileStatus, path };
       });
+      
+      this._emitEvent('commit:get_changed_files:after', { commitHash, files, success: true });
+      
+      return files;
     } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError(`変更ファイル一覧の取得に失敗しました: ${commitHash}`, { cause: error });
+      this._emitEvent('commit:get_changed_files:after', { commitHash, success: false, error });
+      
+      return this._handleError('変更されたファイルの取得に失敗しました', error, {
+        commitHash,
+        operation: 'getChangedFilesInCommit'
+      });
     }
   }
 
   /**
-   * Gitのステータスコードをアクション名にマッピング
-   * @param {string} status - Gitのステータスコード
-   * @returns {string} アクション名
-   * @private
-   */
-  _mapGitStatusToAction(status) {
-    const statusMap = {
-      'A': 'added',
-      'M': 'modified',
-      'D': 'deleted',
-      'R': 'renamed',
-      'C': 'copied',
-      'U': 'unmerged',
-      'T': 'type_changed'
-    };
-    
-    const firstChar = status.charAt(0);
-    return statusMap[firstChar] || 'unknown';
-  }
-
-  /**
-   * 指定したコミットの差分統計情報を取得
+   * コミットの差分統計を取得
    * @param {string} commitHash - コミットハッシュ
-   * @returns {Object} 差分統計情報
+   * @returns {Object} 差分統計
    */
-  getCommitDiffStats(commitHash = 'HEAD') {
+  getCommitDiffStats(commitHash) {
     try {
-      const command = `diff --stat ${commitHash}^ ${commitHash}`;
-      const output = this._execGit(command);
+      this._emitEvent('commit:get_diff_stats:before', { commitHash });
       
-      // 最後の行から統計情報を抽出
-      const lines = output.split('\n');
-      const lastLine = lines[lines.length - 1] || '';
+      // 変更されたファイルを取得
+      const files = this.getChangedFilesInCommit(commitHash);
       
-      const filesChanged = (lastLine.match(/(\d+) files? changed/) || [])[1] || 0;
-      const insertions = (lastLine.match(/(\d+) insertions?/) || [])[1] || 0;
-      const deletions = (lastLine.match(/(\d+) deletions?/) || [])[1] || 0;
+      // 行数の変更を取得
+      const command = `git show --numstat --format="" ${commitHash}`;
+      const output = this._executeCommand(command);
       
-      return {
-        filesChanged: parseInt(filesChanged, 10),
-        insertions: parseInt(insertions, 10),
-        deletions: parseInt(deletions, 10)
-      };
-    } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
+      let lines_added = 0;
+      let lines_deleted = 0;
+      
+      if (output) {
+        output.split('\n').forEach(line => {
+          const [added, deleted] = line.split('\t');
+          
+          // バイナリファイルなどで '-' が返ってくる場合はスキップ
+          if (added !== '-' && deleted !== '-') {
+            lines_added += parseInt(added, 10) || 0;
+            lines_deleted += parseInt(deleted, 10) || 0;
+          }
+        });
       }
-      throw new GitError(`差分統計情報の取得に失敗しました: ${commitHash}`, { cause: error });
+      
+      const result = {
+        files,
+        lines_added,
+        lines_deleted
+      };
+      
+      this._emitEvent('commit:get_diff_stats:after', { commitHash, stats: result, success: true });
+      
+      return result;
+    } catch (error) {
+      this._emitEvent('commit:get_diff_stats:after', { commitHash, success: false, error });
+      
+      return this._handleError('差分統計の取得に失敗しました', error, {
+        commitHash,
+        operation: 'getCommitDiffStats'
+      });
     }
   }
 
   /**
-   * 作業ディレクトリの状態を取得
-   * @returns {Object} 作業ディレクトリの状態
+   * ブランチ一覧を取得
+   * @returns {Array<string>} ブランチ名の配列
    */
-  getWorkingDirectoryStatus() {
+  getBranches() {
     try {
-      const command = 'status --porcelain';
-      const output = this._execGit(command);
+      this._emitEvent('branch:get_all:before', {});
+      
+      const command = 'git branch';
+      const output = this._executeCommand(command);
       
       if (!output) {
+        this._emitEvent('branch:get_all:after', { branches: [], success: true });
+        return [];
+      }
+      
+      const branches = output.split('\n').map(branch => {
+        // 現在のブランチには '*' が付いているので削除
+        return branch.replace(/^\*\s+/, '').trim();
+      });
+      
+      this._emitEvent('branch:get_all:after', { branches, success: true });
+      
+      return branches;
+    } catch (error) {
+      this._emitEvent('branch:get_all:after', { success: false, error });
+      
+      return this._handleError('ブランチ一覧の取得に失敗しました', error, {
+        operation: 'getBranches'
+      });
+    }
+  }
+
+  /**
+   * 現在のブランチを取得
+   * @returns {string} ブランチ名
+   */
+  getCurrentBranch() {
+    try {
+      this._emitEvent('branch:get_current:before', {});
+      
+      const command = 'git branch --show-current';
+      const branch = this._executeCommand(command);
+      
+      this._emitEvent('branch:get_current:after', { branch, success: true });
+      
+      return branch;
+    } catch (error) {
+      this._emitEvent('branch:get_current:after', { success: false, error });
+      
+      return this._handleError('現在のブランチの取得に失敗しました', error, {
+        operation: 'getCurrentBranch'
+      });
+    }
+  }
+
+  /**
+   * コミット履歴を取得
+   * @param {number} limit - 取得するコミット数
+   * @returns {Array<Object>} コミット情報の配列
+   */
+  getCommitHistory(limit = 10) {
+    try {
+      this._emitEvent('commit:get_history:before', { limit });
+      
+      const command = `git log -${limit} --pretty=format:"%H|%s|%ai|%an"`;
+      const output = this._executeCommand(command);
+      
+      if (!output) {
+        this._emitEvent('commit:get_history:after', { limit, commits: [], success: true });
+        return [];
+      }
+      
+      const commits = output.split('\n').map(line => {
+        const [hash, message, timestamp, author] = line.split('|');
+        const related_tasks = this.extractTaskIdsFromCommitMessage(message);
+        
         return {
-          clean: true,
-          staged: [],
-          unstaged: [],
-          untracked: []
-        };
-      }
-      
-      const staged = [];
-      const unstaged = [];
-      const untracked = [];
-      
-      output.split('\n').filter(Boolean).forEach(line => {
-        const statusCode = line.substring(0, 2);
-        const path = line.substring(3);
-        
-        // ステータスコードの解釈
-        // X = インデックス、Y = 作業ツリー
-        // ' ' = 変更なし、M = 変更あり、A = 追加、D = 削除、R = 名前変更、C = コピー、U = 更新（マージ時）、? = 追跡されていない
-        const [indexStatus, workTreeStatus] = statusCode;
-        
-        if (indexStatus !== ' ' && indexStatus !== '?') {
-          staged.push({
-            path,
-            status: this._mapGitStatusToAction(indexStatus)
-          });
-        }
-        
-        if (workTreeStatus !== ' ') {
-          if (indexStatus === '?') {
-            untracked.push({ path });
-          } else {
-            unstaged.push({
-              path,
-              status: this._mapGitStatusToAction(workTreeStatus)
-            });
-          }
-        }
-      });
-      
-      return {
-        clean: staged.length === 0 && unstaged.length === 0 && untracked.length === 0,
-        staged,
-        unstaged,
-        untracked
-      };
-    } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError('作業ディレクトリの状態取得に失敗しました', { cause: error });
-    }
-  }
-
-  /**
-   * ファイルをステージング
-   * @param {string|Array<string>} paths - ファイルパスまたはパスの配列
-   * @returns {boolean} 成功したかどうか
-   */
-  stageFiles(paths) {
-    try {
-      const pathsArray = Array.isArray(paths) ? paths : [paths];
-      
-      if (pathsArray.length === 0) {
-        return false;
-      }
-      
-      const escapedPaths = pathsArray.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ');
-      const command = `add ${escapedPaths}`;
-      
-      this._execGit(command);
-      
-      if (this.eventEmitter) {
-        this.eventEmitter.emit('git:files_staged', { paths: pathsArray });
-      }
-      
-      return true;
-    } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError('ファイルのステージングに失敗しました', { 
-        cause: error,
-        context: { paths }
-      });
-    }
-  }
-
-  /**
-   * コミットを作成
-   * @param {string} message - コミットメッセージ
-   * @param {Object} options - オプション
-   * @param {boolean} options.allowEmpty - 空のコミットを許可するかどうか
-   * @param {string} options.author - 作者（"Name <email>"形式）
-   * @returns {string} 作成されたコミットのハッシュ
-   */
-  createCommit(message, options = {}) {
-    try {
-      let command = 'commit';
-      
-      if (options.allowEmpty) {
-        command += ' --allow-empty';
-      }
-      
-      if (options.author) {
-        command += ` --author="${options.author}"`;
-      }
-      
-      command += ` -m "${message.replace(/"/g, '\\"')}"`;
-      
-      this._execGit(command);
-      
-      const commitHash = this.getCurrentCommitHash();
-      
-      // タスクIDを抽出
-      const taskIds = this.extractTaskIdsFromCommitMessage(message);
-      
-      if (this.eventEmitter) {
-        // 標準化されたイベント発行を使用
-        if (typeof this.eventEmitter.emitStandardized === 'function') {
-          this.eventEmitter.emitStandardized('git', 'commit_created', {
-            hash: commitHash,
-            shortHash: this.getCurrentCommitHash(true),
-            message,
-            taskIds,
-            author: options.author,
-            allowEmpty: options.allowEmpty || false
-          });
-        } else {
-          // 後方互換性のために従来のイベント発行も維持
-          this.eventEmitter.emit('git:commit_created', {
-            hash: commitHash,
-            message
-          });
-        }
-      }
-      
-      return commitHash;
-    } catch (error) {
-      // エラーハンドラーが設定されている場合は使用
-      const gitError = error instanceof GitError ? error : new GitError('コミットの作成に失敗しました', {
-        cause: error,
-        context: { message, options }
-      });
-      
-      if (this.errorHandler) {
-        this.errorHandler.handle(gitError, 'GitService', 'createCommit');
-      }
-      
-      throw gitError;
-    }
-  }
-
-  /**
-   * ブランチを作成
-   * @param {string} branchName - ブランチ名
-   * @param {string} startPoint - 開始ポイント
-   * @param {boolean} checkout - 作成後にチェックアウトするかどうか
-   * @returns {boolean} 成功したかどうか
-   */
-  createBranch(branchName, startPoint = 'HEAD', checkout = false) {
-    try {
-      let command = `branch ${branchName} ${startPoint}`;
-      
-      this._execGit(command);
-      
-      if (checkout) {
-        this._execGit(`checkout ${branchName}`);
-      }
-      
-      if (this.eventEmitter) {
-        this.eventEmitter.emit('git:branch_created', { 
-          name: branchName,
-          startPoint,
-          checkout
-        });
-      }
-      
-      return true;
-    } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError('ブランチの作成に失敗しました', { 
-        cause: error,
-        context: { branchName, startPoint, checkout }
-      });
-    }
-  }
-
-  /**
-   * ブランチをチェックアウト
-   * @param {string} branchName - ブランチ名
-   * @returns {boolean} 成功したかどうか
-   */
-  checkoutBranch(branchName) {
-    try {
-      this._execGit(`checkout ${branchName}`);
-      
-      if (this.eventEmitter) {
-        this.eventEmitter.emit('git:branch_checked_out', { name: branchName });
-      }
-      
-      return true;
-    } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError('ブランチのチェックアウトに失敗しました', { 
-        cause: error,
-        context: { branchName }
-      });
-    }
-  }
-
-  /**
-   * タグを作成
-   * @param {string} tagName - タグ名
-   * @param {string} message - タグメッセージ
-   * @param {string} commitHash - コミットハッシュ
-   * @returns {boolean} 成功したかどうか
-   */
-  createTag(tagName, message, commitHash = 'HEAD') {
-    try {
-      const command = `tag -a ${tagName} -m "${message.replace(/"/g, '\\"')}" ${commitHash}`;
-      
-      this._execGit(command);
-      
-      if (this.eventEmitter) {
-        this.eventEmitter.emit('git:tag_created', { 
-          name: tagName,
+          hash,
           message,
-          commitHash
+          timestamp,
+          author,
+          related_tasks
+        };
+      });
+      
+      this._emitEvent('commit:get_history:after', { limit, commits, success: true });
+      
+      return commits;
+    } catch (error) {
+      this._emitEvent('commit:get_history:after', { limit, success: false, error });
+      
+      return this._handleError('コミット履歴の取得に失敗しました', error, {
+        limit,
+        operation: 'getCommitHistory'
+      });
+    }
+  }
+
+  /**
+   * ファイルの変更履歴を取得
+   * @param {string} filePath - ファイルパス
+   * @param {number} limit - 取得するコミット数
+   * @returns {Array<Object>} コミット情報の配列
+   */
+  getFileHistory(filePath, limit = 10) {
+    try {
+      this._emitEvent('file:get_history:before', { filePath, limit });
+      
+      const command = `git log -${limit} --pretty=format:"%H|%s|%ai|%an" -- "${filePath}"`;
+      const output = this._executeCommand(command);
+      
+      if (!output) {
+        this._emitEvent('file:get_history:after', { filePath, limit, commits: [], success: true });
+        return [];
+      }
+      
+      const commits = output.split('\n').map(line => {
+        const [hash, message, timestamp, author] = line.split('|');
+        const related_tasks = this.extractTaskIdsFromCommitMessage(message);
+        
+        return {
+          hash,
+          message,
+          timestamp,
+          author,
+          related_tasks
+        };
+      });
+      
+      this._emitEvent('file:get_history:after', { filePath, limit, commits, success: true });
+      
+      return commits;
+    } catch (error) {
+      this._emitEvent('file:get_history:after', { filePath, limit, success: false, error });
+      
+      return this._handleError('ファイル変更履歴の取得に失敗しました', error, {
+        filePath,
+        limit,
+        operation: 'getFileHistory'
+      });
+    }
+  }
+
+  /**
+   * コミットの詳細情報を取得
+   * @param {string} commitHash - コミットハッシュ
+   * @returns {Object} コミット詳細情報
+   */
+  getCommitDetails(commitHash) {
+    try {
+      this._emitEvent('commit:get_details:before', { commitHash });
+      
+      // コミットメッセージを取得
+      const messageCommand = `git show -s --format="%B" ${commitHash}`;
+      const message = this._executeCommand(messageCommand);
+      
+      // コミット情報を取得
+      const infoCommand = `git show -s --format="%H|%an|%ae|%ai|%cn|%ce|%ci|%P" ${commitHash}`;
+      const info = this._executeCommand(infoCommand);
+      
+      const [
+        hash,
+        authorName,
+        authorEmail,
+        authorDate,
+        committerName,
+        committerEmail,
+        committerDate,
+        parents
+      ] = info.split('|');
+      
+      // 変更されたファイルと差分統計を取得
+      const diffStats = this.getCommitDiffStats(commitHash);
+      
+      const result = {
+        hash,
+        message,
+        author: {
+          name: authorName,
+          email: authorEmail,
+          date: authorDate
+        },
+        committer: {
+          name: committerName,
+          email: committerEmail,
+          date: committerDate
+        },
+        parents: parents.split(' ').filter(Boolean),
+        files: diffStats.files,
+        stats: {
+          lines_added: diffStats.lines_added,
+          lines_deleted: diffStats.lines_deleted,
+          files_changed: diffStats.files.length
+        },
+        related_tasks: this.extractTaskIdsFromCommitMessage(message)
+      };
+      
+      this._emitEvent('commit:get_details:after', { commitHash, details: result, success: true });
+      
+      return result;
+    } catch (error) {
+      this._emitEvent('commit:get_details:after', { commitHash, success: false, error });
+      
+      return this._handleError('コミット詳細の取得に失敗しました', error, {
+        commitHash,
+        operation: 'getCommitDetails'
+      });
+    }
+  }
+
+  /**
+   * イベントを発行
+   * @private
+   * @param {string} eventName - イベント名
+   * @param {Object} data - イベントデータ
+   */
+  _emitEvent(eventName, data) {
+    if (this.eventEmitter) {
+      // 標準化されたイベント発行メソッドがあれば使用
+      if (typeof this.eventEmitter.emitStandardized === 'function') {
+        const [category, action] = eventName.split(':');
+        this.eventEmitter.emitStandardized('git', eventName, {
+          ...data,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        // 後方互換性のために従来のイベント発行も維持
+        this.eventEmitter.emit(`git:${eventName}`, {
+          ...data,
+          timestamp: new Date().toISOString()
         });
       }
-      
-      return true;
-    } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError('タグの作成に失敗しました', { 
-        cause: error,
-        context: { tagName, message, commitHash }
-      });
     }
   }
 
   /**
-   * リモートリポジトリからプル
-   * @param {string} remote - リモート名
-   * @param {string} branch - ブランチ名
-   * @returns {boolean} 成功したかどうか
+   * エラーを処理
+   * @private
+   * @param {string} message - エラーメッセージ
+   * @param {Error} error - 原因となったエラー
+   * @param {Object} context - エラーコンテキスト
+   * @returns {null|Array|Object} エラー処理の結果
    */
-  pull(remote = 'origin', branch = '') {
-    try {
-      const command = `pull ${remote} ${branch}`.trim();
-      
-      this._execGit(command);
-      
-      if (this.eventEmitter) {
-        this.eventEmitter.emit('git:pulled', { remote, branch });
-      }
-      
-      return true;
-    } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError('プルに失敗しました', { 
-        cause: error,
-        context: { remote, branch }
+  _handleError(message, error, context = {}) {
+    const gitError = new GitError(message, error);
+    
+    // エラーハンドラーがあれば使用
+    if (this.errorHandler && typeof this.errorHandler.handle === 'function') {
+      return this.errorHandler.handle(gitError, 'GitService', context.operation, {
+        additionalContext: context
       });
     }
-  }
-
-  /**
-   * リモートリポジトリにプッシュ
-   * @param {string} remote - リモート名
-   * @param {string} branch - ブランチ名
-   * @param {boolean} force - 強制プッシュするかどうか
-   * @returns {boolean} 成功したかどうか
-   */
-  push(remote = 'origin', branch = '', force = false) {
-    try {
-      let command = `push ${remote} ${branch}`.trim();
-      
-      if (force) {
-        command += ' --force';
-      }
-      
-      this._execGit(command);
-      
-      if (this.eventEmitter) {
-        this.eventEmitter.emit('git:pushed', { remote, branch, force });
-      }
-      
-      return true;
-    } catch (error) {
-      if (error instanceof GitError) {
-        throw error;
-      }
-      throw new GitError('プッシュに失敗しました', { 
-        cause: error,
-        context: { remote, branch, force }
-      });
+    
+    // エラーハンドラーがなければログに出力
+    this.logger.error(`[GitService] ${message}:`, {
+      error_name: error.name,
+      error_message: error.message,
+      stack: error.stack,
+      context
+    });
+    
+    // 操作に応じてデフォルト値を返す
+    if (
+      context.operation === 'getCurrentCommitHash' || 
+      context.operation === 'getCurrentBranch'
+    ) {
+      return '';
+    } else if (
+      context.operation === 'extractTaskIdsFromCommitMessage' || 
+      context.operation === 'getCommitsBetween' || 
+      context.operation === 'getChangedFilesInCommit' || 
+      context.operation === 'getBranches' || 
+      context.operation === 'getCommitHistory' || 
+      context.operation === 'getFileHistory'
+    ) {
+      return [];
+    } else if (
+      context.operation === 'getCommitDiffStats' || 
+      context.operation === 'getCommitDetails'
+    ) {
+      return {};
+    } else if (context.operation === '_executeCommand') {
+      return '';
     }
+    
+    // デフォルトはnull
+    return null;
   }
 }
 

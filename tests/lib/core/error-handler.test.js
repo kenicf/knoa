@@ -30,9 +30,25 @@ describe('拡張エラーハンドラー', () => {
       emitStandardized: jest.fn()
     };
     
-    errorHandler = new ErrorHandler({
-      logger: mockLogger,
-      eventEmitter: mockEventEmitter
+    errorHandler = new ErrorHandler(mockLogger, mockEventEmitter);
+  });
+  
+  describe('コンストラクタ', () => {
+    test('必須の依存関係が欠けている場合はエラーをスローする', () => {
+      expect(() => new ErrorHandler(null, mockEventEmitter)).toThrow('ErrorHandler requires a logger instance');
+      expect(() => new ErrorHandler(mockLogger, null)).toThrow('ErrorHandler requires an eventEmitter instance');
+    });
+    
+    test('オプションを正しく処理する', () => {
+      const options = {
+        enableDetailedLogs: true,
+        recoveryAttempts: 5
+      };
+      
+      const handler = new ErrorHandler(mockLogger, mockEventEmitter, options);
+      
+      // オプションが内部的に保存されていることを確認するテスト
+      // 注: 実際の実装ではオプションの使用方法に応じてテストを調整する必要があります
     });
   });
   

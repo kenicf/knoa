@@ -25,13 +25,20 @@ const {
 class ErrorHandler {
   /**
    * コンストラクタ
-   * @param {Object} options - オプション
-   * @param {Object} options.logger - ロガーインスタンス
-   * @param {Object} options.eventEmitter - イベントエミッターインスタンス
+   * @param {Object} logger - ロガーインスタンス（必須）
+   * @param {Object} eventEmitter - イベントエミッターインスタンス（必須）
+   * @param {Object} options - 追加オプション
    */
-  constructor(options = {}) {
-    this.logger = options.logger || console;
-    this.eventEmitter = options.eventEmitter;
+  constructor(logger, eventEmitter, options = {}) {
+    if (!logger) {
+      throw new Error('ErrorHandler requires a logger instance');
+    }
+    if (!eventEmitter) {
+      throw new Error('ErrorHandler requires an eventEmitter instance');
+    }
+    
+    this.logger = logger;
+    this.eventEmitter = eventEmitter;
     this.recoveryStrategies = new Map();
     this.errorPatterns = new Map();
     this.alertThresholds = new Map();

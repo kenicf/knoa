@@ -1,9 +1,9 @@
 {
   "session_handover": {
     "project_id": "knoa",
-    "session_id": "session-20250322-4",
-    "previous_session_id": "session-20250322-3",
-    "session_timestamp": "2025-03-22T17:20:00Z",
+    "session_id": "session-20250322-5",
+    "previous_session_id": "session-20250322-4",
+    "session_timestamp": "2025-03-22T20:15:00Z",
     "session_start_timestamp": "2025-03-22T14:50:00Z",
     "project_state_summary": {
       "completed_tasks": ["T001", "T002", "T003", "T004", "T005", "T006", "T007", "T008", "T009"],
@@ -585,7 +585,9 @@
         "priority": 4,
         "severity": 2,
         "due_date": "2025-03-27",
-        "assignee": "AI Developer"
+        "assignee": "AI Developer",
+        "status": "in_progress",
+        "completion_date": "2025-03-22T20:15:00Z"
       },
       {
         "description": "既存コンポーネントをイベント駆動アーキテクチャに移行する計画の実施",

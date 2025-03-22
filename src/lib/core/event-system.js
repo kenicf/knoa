@@ -35,16 +35,27 @@ class EventError extends ApplicationError {
 class EnhancedEventEmitter {
   /**
    * コンストラクタ
-   * @param {Object} options - オプション
+   * @param {Object} logger - ロガーインスタンス
+   * @param {Object} options - 追加オプション
    * @param {boolean} options.debugMode - デバッグモードを有効にするかどうか
-   * @param {Object} options.logger - ロガーインスタンス
+   * @param {boolean} options.keepHistory - イベント履歴を保持するかどうか
+   * @param {number} options.historyLimit - イベント履歴の最大数
    */
-  constructor(options = {}) {
+  constructor(logger, options = {}) {
     this.listeners = new Map();
     this.wildcardListeners = [];
     this.debugMode = options.debugMode || false;
-    this.logger = options.logger || console;
-    this.eventHistory = options.keepHistory ? [] : null;
+    
+    // ロガーの設定（デフォルトのロガーを提供）
+    this.logger = logger || {
+      debug: console.debug.bind(console),
+      info: console.info.bind(console),
+      warn: console.warn.bind(console),
+      error: console.error.bind(console)
+    };
+    
+    // イベント履歴の設定（デフォルトで有効）
+    this.eventHistory = options.keepHistory !== false ? [] : null;
     this.historyLimit = options.historyLimit || 100;
   }
 
@@ -177,7 +188,12 @@ class EnhancedEventEmitter {
         try {
           listener(data);
         } catch (error) {
-          this.logger.error(`イベントリスナー(${event})でエラーが発生しました:`, error);
+          // ロガーが存在する場合のみログ出力
+          if (this.logger && typeof this.logger.error === 'function') {
+            this.logger.error(`イベントリスナー(${event})でエラーが発生しました:`, error);
+          } else {
+            console.error(`イベントリスナー(${event})でエラーが発生しました:`, error);
+          }
           
           // エラーイベントを発行
           if (event !== 'error') {
@@ -245,7 +261,12 @@ class EnhancedEventEmitter {
           try {
             await Promise.resolve(listener(data));
           } catch (error) {
-            this.logger.error(`非同期イベントリスナー(${event})でエラーが発生しました:`, error);
+            // ロガーが存在する場合のみログ出力
+            if (this.logger && typeof this.logger.error === 'function') {
+              this.logger.error(`非同期イベントリスナー(${event})でエラーが発生しました:`, error);
+            } else {
+              console.error(`非同期イベントリスナー(${event})でエラーが発生しました:`, error);
+            }
             
             // エラーイベントを発行
             if (event !== 'error') {
@@ -266,7 +287,12 @@ class EnhancedEventEmitter {
           try {
             await Promise.resolve(callback(data, event));
           } catch (error) {
-            this.logger.error(`非同期ワイルドカードリスナー(${pattern})でエラーが発生しました:`, error);
+            // ロガーが存在する場合のみログ出力
+            if (this.logger && typeof this.logger.error === 'function') {
+              this.logger.error(`非同期ワイルドカードリスナー(${pattern})でエラーが発生しました:`, error);
+            } else {
+              console.error(`非同期ワイルドカードリスナー(${pattern})でエラーが発生しました:`, error);
+            }
             
             // エラーイベントを発行
             if (event !== 'error') {
@@ -429,7 +455,8 @@ class EnhancedEventEmitter {
    */
   getEventHistory(limit = this.historyLimit) {
     if (this.eventHistory === null) {
-      throw new EventError('イベント履歴が有効になっていません');
+      this.logger.warn('イベント履歴が有効になっていません');
+      return [];
     }
     
     return this.eventHistory.slice(-limit);

@@ -18,8 +18,25 @@ describe('イベントシステム', () => {
         error: jest.fn()
       };
       
-      emitter = new EnhancedEventEmitter({
-        logger: mockLogger
+      emitter = new EnhancedEventEmitter(mockLogger);
+    });
+    
+    describe('コンストラクタ', () => {
+      test('必須の依存関係が欠けている場合はエラーをスローする', () => {
+        expect(() => new EnhancedEventEmitter(null)).toThrow('EnhancedEventEmitter requires a logger instance');
+      });
+      
+      test('オプションを正しく処理する', () => {
+        const options = {
+          debugMode: true,
+          keepHistory: true,
+          historyLimit: 10
+        };
+        
+        const testEmitter = new EnhancedEventEmitter(mockLogger, options);
+        expect(testEmitter.debugMode).toBe(true);
+        expect(testEmitter.eventHistory).toEqual([]);
+        expect(testEmitter.historyLimit).toBe(10);
       });
     });
     
@@ -238,7 +255,14 @@ describe('イベントシステム', () => {
     });
     
     test('イベント履歴を有効にして取得できる', () => {
-      const emitterWithHistory = new EnhancedEventEmitter({
+      const historyLogger = {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn()
+      };
+      
+      const emitterWithHistory = new EnhancedEventEmitter(historyLogger, {
         keepHistory: true,
         historyLimit: 5
       });
@@ -258,7 +282,14 @@ describe('イベントシステム', () => {
     });
     
     test('イベント履歴の上限を超えると古いものから削除される', () => {
-      const emitterWithHistory = new EnhancedEventEmitter({
+      const historyLogger = {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn()
+      };
+      
+      const emitterWithHistory = new EnhancedEventEmitter(historyLogger, {
         keepHistory: true,
         historyLimit: 2
       });

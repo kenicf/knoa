@@ -5,9 +5,20 @@
  * フィードバック管理ユーティリティを使用するためのコマンドラインインターフェース
  */
 
-const { FeedbackManager } = require('../utils/feedback-manager');
 const path = require('path');
 const fs = require('fs');
+
+// 依存性注入
+const ServiceContainer = require('../lib/core/service-container');
+const { registerServices } = require('../lib/core/service-definitions');
+const config = require('../config');
+
+// サービスコンテナの作成と初期化
+const container = new ServiceContainer();
+registerServices(container, config);
+
+// フィードバックマネージャーのインスタンスを取得
+const feedbackManager = container.get('feedbackManager');
 
 // コマンドライン引数の解析
 const args = process.argv.slice(2);
@@ -38,9 +49,6 @@ const helpMessage = `
   node feedback.js report T001 ./feedback-report.md
   node feedback.js resolve T001
 `;
-
-// フィードバックマネージャーのインスタンスを作成
-const feedbackManager = new FeedbackManager();
 
 /**
  * メイン関数

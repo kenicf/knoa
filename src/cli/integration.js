@@ -5,13 +5,24 @@
  * 統合マネージャーを使用するためのコマンドラインインターフェース
  */
 
-const IntegrationManager = require('../utils/integration-manager');
 const colors = require('colors/safe');
 const readline = require('readline');
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
 const fs = require('fs');
 const path = require('path');
+
+// 依存性注入
+const ServiceContainer = require('../lib/core/service-container');
+const { registerServices } = require('../lib/core/service-definitions');
+const config = require('../config');
+
+// サービスコンテナの作成と初期化
+const container = new ServiceContainer();
+registerServices(container, config);
+
+// 統合マネージャーのインスタンスを取得
+const integrationManager = container.get('integrationManager');
 
 // コマンドライン引数の解析
 const argv = yargs(hideBin(process.argv))
@@ -135,9 +146,6 @@ const argv = yargs(hideBin(process.argv))
   .alias('v', 'version')
   .argv;
 
-// 統合マネージャーのインスタンスを作成
-const integrationManager = new IntegrationManager();
-
 // コマンド分岐処理を実装
 async function executeCommand(command, args) {
   try {
@@ -236,7 +244,8 @@ async function endSession(sessionId) {
   
   // セッションIDが指定されていない場合は最新のセッションを取得
   if (!sessionId) {
-    const session = await integrationManager.sessionManager.getLatestSession();
+    const sessionManager = container.get('sessionManager');
+    const session = await sessionManager.getLatestSession();
     if (session) {
       sessionId = session.session_id;
     } else {
@@ -449,12 +458,14 @@ async function getWorkflowStatus() {
   console.log(colors.cyan('ワークフロー状態を取得します...'));
   
   // 現在の状態を取得
-  const currentState = integrationManager.stateManager.getCurrentState();
+  const stateManager = container.get('stateManager');
+  const currentState = stateManager.getCurrentState();
   console.log(colors.yellow('現在の状態:'), currentState);
   
   // タスク状態の取得
   try {
-    const tasks = await integrationManager.taskManager.getAllTasks();
+    const taskManager = container.get('taskManagerAdapter');
+    const tasks = await taskManager.getAllTasks();
     
     console.log(colors.yellow('\nタスク状態:'));
     console.log(colors.yellow('プロジェクト:'), tasks.project);
@@ -487,7 +498,8 @@ async function getWorkflowStatus() {
   
   // セッション状態の取得
   try {
-    const session = await integrationManager.sessionManager.getLatestSession();
+    const sessionManager = container.get('sessionManager');
+    const session = await sessionManager.getLatestSession();
     
     if (session) {
       console.log(colors.yellow('\nセッション状態:'));
@@ -509,25 +521,13 @@ async function getWorkflowStatus() {
  * インタラクティブモードを開始
  */
 async function startInteractiveMode() {
-  console.log(colors.green('=== 統合マネージャー インタラクティブモード ==='));
-  console.log(colors.cyan('コマンド一覧:'));
-  console.log('  init <project-id> <request>');
-  console.log('  start-session [previous-session-id]');
-  console.log('  end-session [session-id]');
-  console.log('  create-task <title> <description> [--status] [--priority] [--estimated-hours] [--dependencies]');
-  console.log('  update-task <task-id> <status> [progress]');
-  console.log('  collect-feedback <task-id> <test-command>');
-  console.log('  resolve-feedback <feedback-id>');
-  console.log('  sync');
-  console.log('  report <type> [--format] [--output]');
-  console.log('  status');
-  console.log('  help');
-  console.log('  exit');
+  console.log(colors.cyan('インタラクティブモードを開始します...'));
+  console.log(colors.cyan('終了するには "exit" または "quit" と入力してください'));
   
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: colors.green('integration> ')
+    prompt: colors.green('knoa> ')
   });
   
   rl.prompt();
@@ -535,37 +535,35 @@ async function startInteractiveMode() {
   rl.on('line', async (line) => {
     const input = line.trim();
     
-    if (input === 'exit') {
-      console.log(colors.green('インタラクティブモードを終了します...'));
+    if (input === 'exit' || input === 'quit') {
       rl.close();
       return;
     }
     
-    if (input === 'help') {
-      console.log(colors.cyan('コマンド一覧:'));
-      console.log('  init <project-id> <request>');
-      console.log('  start-session [previous-session-id]');
-      console.log('  end-session [session-id]');
-      console.log('  create-task <title> <description> [--status] [--priority] [--estimated-hours] [--dependencies]');
-      console.log('  update-task <task-id> <status> [progress]');
-      console.log('  collect-feedback <task-id> <test-command>');
-      console.log('  resolve-feedback <feedback-id>');
-      console.log('  sync');
-      console.log('  report <type> [--format] [--output]');
-      console.log('  status');
-      console.log('  help');
-      console.log('  exit');
-      rl.prompt();
-      return;
-    }
+    const args = input.split(' ');
+    const command = args.shift();
     
     try {
-      // 入力をコマンドと引数に分割
-      const args = input.split(' ');
-      const command = args.shift();
-      
-      // コマンドに応じた処理を実行
       switch (command) {
+        case 'help':
+          console.log(colors.cyan('\n利用可能なコマンド:'));
+          console.log('  status - ワークフロー状態の取得');
+          console.log('  init <project-id> <request> - ワークフローの初期化');
+          console.log('  start-session [previous-session-id] - セッションの開始');
+          console.log('  end-session [session-id] - セッションの終了');
+          console.log('  create-task <title> <description> - タスクの作成');
+          console.log('  update-task <task-id> <status> [progress] - タスクの更新');
+          console.log('  collect-feedback <task-id> <test-command> - フィードバックの収集');
+          console.log('  resolve-feedback <feedback-id> - フィードバックの解決');
+          console.log('  sync - コンポーネントの同期');
+          console.log('  report <type> - レポートの生成');
+          console.log('  exit, quit - インタラクティブモードの終了');
+          break;
+        
+        case 'status':
+          await getWorkflowStatus();
+          break;
+        
         case 'init':
           if (args.length < 2) {
             console.error(colors.red('使用方法: init <project-id> <request>'));
@@ -584,53 +582,14 @@ async function startInteractiveMode() {
         
         case 'create-task':
           if (args.length < 2) {
-            console.error(colors.red('使用方法: create-task <title> <description> [--status] [--priority] [--estimated-hours] [--dependencies]'));
+            console.error(colors.red('使用方法: create-task <title> <description>'));
             break;
           }
-          
-          // オプションの解析
-          const taskOptions = {
+          await createTask(args[0], args.slice(1).join(' '), {
             status: 'pending',
             priority: 3,
-            estimatedHours: 1,
-            dependencies: ''
-          };
-          
-          // タイトルと説明を取得
-          const title = args[0];
-          let descriptionParts = [];
-          let i = 1;
-          
-          // オプションの前までの引数を説明として扱う
-          while (i < args.length && !args[i].startsWith('--')) {
-            descriptionParts.push(args[i]);
-            i++;
-          }
-          
-          const description = descriptionParts.join(' ');
-          
-          // オプションの処理
-          while (i < args.length) {
-            const arg = args[i];
-            
-            if (arg === '--status' && i + 1 < args.length) {
-              taskOptions.status = args[i + 1];
-              i += 2;
-            } else if (arg === '--priority' && i + 1 < args.length) {
-              taskOptions.priority = parseInt(args[i + 1], 10);
-              i += 2;
-            } else if (arg === '--estimated-hours' && i + 1 < args.length) {
-              taskOptions.estimatedHours = parseFloat(args[i + 1]);
-              i += 2;
-            } else if (arg === '--dependencies' && i + 1 < args.length) {
-              taskOptions.dependencies = args[i + 1];
-              i += 2;
-            } else {
-              i++;
-            }
-          }
-          
-          await createTask(title, description, taskOptions);
+            estimatedHours: 1
+          });
           break;
         
         case 'update-task':
@@ -638,12 +597,7 @@ async function startInteractiveMode() {
             console.error(colors.red('使用方法: update-task <task-id> <status> [progress]'));
             break;
           }
-          
-          const taskId = args[0];
-          const status = args[1];
-          const progress = args[2] ? parseInt(args[2], 10) : undefined;
-          
-          await updateTask(taskId, status, progress);
+          await updateTask(args[0], args[1], args[2] ? parseInt(args[2], 10) : undefined);
           break;
         
         case 'collect-feedback':
@@ -651,7 +605,6 @@ async function startInteractiveMode() {
             console.error(colors.red('使用方法: collect-feedback <task-id> <test-command>'));
             break;
           }
-          
           await collectFeedback(args[0], args.slice(1).join(' '));
           break;
         
@@ -660,7 +613,6 @@ async function startInteractiveMode() {
             console.error(colors.red('使用方法: resolve-feedback <feedback-id>'));
             break;
           }
-          
           await resolveFeedback(args[0]);
           break;
         
@@ -670,56 +622,36 @@ async function startInteractiveMode() {
         
         case 'report':
           if (args.length < 1) {
-            console.error(colors.red('使用方法: report <type> [--format] [--output]'));
+            console.error(colors.red('使用方法: report <type>'));
             break;
           }
-          
-          const reportType = args[0];
-          const reportOptions = {
+          await generateReport(args[0], {
             format: 'text'
-          };
-          
-          // オプションの処理
-          for (let i = 1; i < args.length; i++) {
-            if (args[i] === '--format' && i + 1 < args.length) {
-              reportOptions.format = args[i + 1];
-              i++;
-            } else if (args[i] === '--output' && i + 1 < args.length) {
-              reportOptions.output = args[i + 1];
-              i++;
-            }
-          }
-          
-          await generateReport(reportType, reportOptions);
-          break;
-        
-        case 'status':
-          await getWorkflowStatus();
+          });
           break;
         
         default:
           console.error(colors.red('不明なコマンド:'), command);
-          console.log('使用可能なコマンドを表示するには "help" を入力してください');
-          break;
+          console.log('ヘルプを表示するには "help" と入力してください');
       }
     } catch (error) {
       console.error(colors.red('エラーが発生しました:'), error.message);
     }
     
     rl.prompt();
+  }).on('close', () => {
+    console.log(colors.cyan('インタラクティブモードを終了します'));
+    process.exit(0);
   });
   
-  rl.on('close', () => {
-    console.log(colors.green('終了しました'));
-    process.exit(0);
+  return new Promise((resolve) => {
+    rl.on('close', resolve);
   });
 }
 
 // メイン処理
 async function main() {
-  const command = argv._[0];
-  await executeCommand(command, argv);
+  await executeCommand(argv._[0], argv);
 }
 
-// メイン関数を実行
 main().catch(console.error);
