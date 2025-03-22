@@ -216,7 +216,7 @@
       ],
       "priority": 5,
       "estimated_hours": 12,
-      "progress_percentage": 75,
+      "progress_percentage": 90,
       "progress_state": "in_development",
       "git_commits": ["commit-20250322-2", "commit-20250322-3", "commit-20250322-4", "commit-20250322-5", "commit-20250322-6"]
     }

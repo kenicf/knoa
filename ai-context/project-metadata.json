@@ -3,7 +3,7 @@
   "project_type": "meta-framework",
   "version": "1.0.0",
   "created_at": "2025-03-20T13:35:00Z",
-  "last_updated": "2025-03-22T20:15:00Z",
+  "last_updated": "2025-03-22T21:30:00Z",
   "description": "AI駆動開発を統制された情報フローの下で効率的に実施するためのプロジェクト",
   "technologies": [
     "JSON",
@@ -38,7 +38,10 @@
       "key_components": [
         {"name": "project-templates", "purpose": "新規プロジェクト用テンプレート"},
         {"name": "phases", "purpose": "フェーズ別ドキュメント"},
-        {"name": "integration-management.md", "purpose": "統合フロー管理ドキュメント（予定）"}
+        {"name": "integration-management.md", "purpose": "統合フロー管理ドキュメント（予定）"},
+        {"name": "dependency-injection.md", "purpose": "依存性注入パターンの概要"},
+        {"name": "dependency-injection-implementation-guide.md", "purpose": "依存性注入パターンの実装ガイド"},
+        {"name": "dependency-injection-performance.md", "purpose": "依存性注入パターンのパフォーマンス検証結果"}
       ]
     },
     "ai-context": {
@@ -56,14 +59,16 @@
         {"name": "session-manager.test.js", "purpose": "セッション管理のテスト"},
         {"name": "feedback-manager.test.js", "purpose": "フィードバック管理のテスト"},
         {"name": "lib", "purpose": "共通ライブラリのテスト"},
-        {"name": "examples", "purpose": "使用例のテスト"}
+        {"name": "examples", "purpose": "使用例のテスト"},
+        {"name": "integration", "purpose": "統合テスト"},
+        {"name": "performance", "purpose": "パフォーマンステスト"}
       ]
     }
   },
   "development_flow": {
     "current_phase": "フェーズ0",
     "next_steps": ["フェーズ1", "フェーズ2", "フェーズ3", "フェーズ4", "フェーズ5"],
-    "phase0_progress": 98,
+    "phase0_progress": 99,
     "remaining_tasks": ["T010の完了", "T011の完了"]
   }
 }

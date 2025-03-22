@@ -44,15 +44,16 @@ class StorageService {
   }
 
   /**
-   * ファイルパスを取得
+   * ファイルパスを取得（常に/区切りのパスを返す）
    * @param {string} directory - ディレクトリパス
    * @param {string} filename - ファイル名
    * @returns {string} 完全なファイルパス
    */
   getFilePath(directory, filename) {
-    const dirPath = path.join(this.basePath, directory);
+    // path.posix.joinを使用して常に/区切りのパスを返す
+    const dirPath = path.posix.join(this.basePath, directory);
     this.ensureDirectoryExists(dirPath);
-    return path.join(dirPath, filename);
+    return path.posix.join(dirPath, filename);
   }
 
   /**
@@ -61,8 +62,11 @@ class StorageService {
    */
   ensureDirectoryExists(dirPath) {
     try {
-      if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
+      // Windowsの場合はパスを変換
+      const nativeDirPath = process.platform === 'win32' ? dirPath.replace(/\//g, '\\') : dirPath;
+      
+      if (!fs.existsSync(nativeDirPath)) {
+        fs.mkdirSync(nativeDirPath, { recursive: true });
         this._emitEvent('directory:created', { path: dirPath });
       }
     } catch (error) {
@@ -83,11 +87,14 @@ class StorageService {
       this._emitEvent('file:read:before', { directory, filename, type: 'json' });
       
       const filePath = this.getFilePath(directory, filename);
-      if (!fs.existsSync(filePath)) {
+      // Windowsの場合はパスを変換
+      const nativeFilePath = process.platform === 'win32' ? filePath.replace(/\//g, '\\') : filePath;
+      
+      if (!fs.existsSync(nativeFilePath)) {
         return null;
       }
       
-      const content = fs.readFileSync(filePath, 'utf8');
+      const content = fs.readFileSync(nativeFilePath, 'utf8');
       const data = JSON.parse(content);
       
       this._emitEvent('file:read:after', { directory, filename, type: 'json', success: true });
@@ -116,7 +123,10 @@ class StorageService {
       this._emitEvent('file:write:before', { directory, filename, type: 'json' });
       
       const filePath = this.getFilePath(directory, filename);
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+      // Windowsの場合はパスを変換
+      const nativeFilePath = process.platform === 'win32' ? filePath.replace(/\//g, '\\') : filePath;
+      
+      fs.writeFileSync(nativeFilePath, JSON.stringify(data, null, 2), 'utf8');
       
       this._emitEvent('file:write:after', { directory, filename, type: 'json', success: true });
       
@@ -143,11 +153,14 @@ class StorageService {
       this._emitEvent('file:read:before', { directory, filename, type: 'text' });
       
       const filePath = this.getFilePath(directory, filename);
-      if (!fs.existsSync(filePath)) {
+      // Windowsの場合はパスを変換
+      const nativeFilePath = process.platform === 'win32' ? filePath.replace(/\//g, '\\') : filePath;
+      
+      if (!fs.existsSync(nativeFilePath)) {
         return null;
       }
       
-      const content = fs.readFileSync(filePath, 'utf8');
+      const content = fs.readFileSync(nativeFilePath, 'utf8');
       
       this._emitEvent('file:read:after', { directory, filename, type: 'text', success: true });
       
@@ -175,7 +188,10 @@ class StorageService {
       this._emitEvent('file:write:before', { directory, filename, type: 'text' });
       
       const filePath = this.getFilePath(directory, filename);
-      fs.writeFileSync(filePath, content, 'utf8');
+      // Windowsの場合はパスを変換
+      const nativeFilePath = process.platform === 'win32' ? filePath.replace(/\//g, '\\') : filePath;
+      
+      fs.writeFileSync(nativeFilePath, content, 'utf8');
       
       this._emitEvent('file:write:after', { directory, filename, type: 'text', success: true });
       
@@ -203,9 +219,9 @@ class StorageService {
     
     // 標準化されたイベントを発行
     if (this.eventEmitter) {
-      const path = this.getFilePath(directory, filename);
+      const filePath = this.getFilePath(directory, filename);
       this.eventEmitter.emit('storage:file_written', {
-        path,
+        path: filePath,
         directory,
         filename,
         timestamp: new Date().toISOString()
@@ -214,7 +230,7 @@ class StorageService {
       // 標準化されたイベント発行
       if (typeof this.eventEmitter.emitStandardized === 'function') {
         this.eventEmitter.emitStandardized('storage', 'file_written', {
-          path,
+          path: filePath,
           directory,
           filename
         });
@@ -263,45 +279,62 @@ class StorageService {
    * @param {string} directory - ディレクトリパス
    * @param {string} filename - ファイル名
    * @param {number} timeout - タイムアウト（ミリ秒）
-   * @returns {Function} ロック解除関数
+   * @returns {Promise<Function>} ロック解除関数
+   * @throws {StorageError} ファイルが既にロックされている場合
    */
   async lockFile(directory, filename, timeout = 5000) {
-    const filePath = this.getFilePath(directory, filename);
-    const lockPath = `${filePath}.lock`;
-    
-    this._emitEvent('file:lock:before', { directory, filename });
-    // ロックファイルが存在するか確認
-    if (fs.existsSync(lockPath)) {
-      const error = new StorageError(`ファイル ${filePath} は既にロックされています`);
+    try {
+      this._emitEvent('file:lock:before', { directory, filename });
+      
+      const filePath = this.getFilePath(directory, filename);
+      const lockPath = `${filePath}.lock`;
+      // Windowsの場合はパスを変換
+      const nativeLockPath = process.platform === 'win32' ? lockPath.replace(/\//g, '\\') : lockPath;
+      
+      // ロックファイルが存在するか確認
+      if (fs.existsSync(nativeLockPath)) {
+        const error = new StorageError(`ファイル ${filePath} は既にロックされています`);
+        this._emitEvent('file:lock:after', { directory, filename, success: false, error });
+        
+        // エラーイベントを発行
+        if (this.eventEmitter) {
+          this.eventEmitter.emit('storage:lock_failed', {
+            path: filePath,
+            directory,
+            filename,
+            error,
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        throw error;
+      }
+      
+      // ロックファイルを作成
+      this.writeText(directory, `${filename}.lock`, new Date().toISOString());
+      
+      this._emitEvent('file:lock:after', { directory, filename, success: true });
+      
+      // ロック解除関数を返す
+      return () => {
+        if (fs.existsSync(nativeLockPath)) {
+          fs.unlinkSync(nativeLockPath);
+          this._emitEvent('file:unlock', { directory, filename });
+        }
+      };
+    } catch (error) {
+      if (error instanceof StorageError) {
+        throw error;
+      }
+      
       this._emitEvent('file:lock:after', { directory, filename, success: false, error });
       
-      // エラーイベントを発行
-      if (this.eventEmitter) {
-        this.eventEmitter.emit('storage:lock_failed', {
-          path: filePath,
-          directory,
-          filename,
-          error,
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-      throw error;
+      return this._handleError(`ファイルのロックに失敗しました: ${directory}/${filename}`, error, {
+        directory,
+        filename,
+        operation: 'lockFile'
+      });
     }
-    }
-    
-    // ロックファイルを作成
-    this.writeText(directory, filename + '.lock', new Date().toISOString());
-    
-    this._emitEvent('file:lock:after', { directory, filename, success: true });
-    
-    // ロック解除関数を返す
-    return () => {
-      if (fs.existsSync(lockPath)) {
-        fs.unlinkSync(lockPath);
-        this._emitEvent('file:unlock', { directory, filename });
-      }
-    };
   }
 
   /**
@@ -313,7 +346,10 @@ class StorageService {
   fileExists(directory, filename) {
     try {
       const filePath = this.getFilePath(directory, filename);
-      return fs.existsSync(filePath);
+      // Windowsの場合はパスを変換
+      const nativeFilePath = process.platform === 'win32' ? filePath.replace(/\//g, '\\') : filePath;
+      
+      return fs.existsSync(nativeFilePath);
     } catch (error) {
       return this._handleError(`ファイルの存在確認に失敗しました: ${directory}/${filename}`, error, {
         directory,
@@ -333,12 +369,15 @@ class StorageService {
     try {
       this._emitEvent('directory:list:before', { directory, pattern });
       
-      const dirPath = path.join(this.basePath, directory);
-      if (!fs.existsSync(dirPath)) {
+      const dirPath = path.posix.join(this.basePath, directory);
+      // Windowsの場合はパスを変換
+      const nativeDirPath = process.platform === 'win32' ? dirPath.replace(/\//g, '\\') : dirPath;
+      
+      if (!fs.existsSync(nativeDirPath)) {
         return [];
       }
       
-      let files = fs.readdirSync(dirPath);
+      let files = fs.readdirSync(nativeDirPath);
       
       // パターンが指定されている場合はフィルタリング
       if (pattern) {
@@ -371,11 +410,14 @@ class StorageService {
       this._emitEvent('file:delete:before', { directory, filename });
       
       const filePath = this.getFilePath(directory, filename);
-      if (!fs.existsSync(filePath)) {
+      // Windowsの場合はパスを変換
+      const nativeFilePath = process.platform === 'win32' ? filePath.replace(/\//g, '\\') : filePath;
+      
+      if (!fs.existsSync(nativeFilePath)) {
         return false;
       }
       
-      fs.unlinkSync(filePath);
+      fs.unlinkSync(nativeFilePath);
       
       this._emitEvent('file:delete:after', { directory, filename, success: true });
       
@@ -401,12 +443,15 @@ class StorageService {
     try {
       this._emitEvent('directory:delete:before', { directory, recursive });
       
-      const dirPath = path.join(this.basePath, directory);
-      if (!fs.existsSync(dirPath)) {
+      const dirPath = path.posix.join(this.basePath, directory);
+      // Windowsの場合はパスを変換
+      const nativeDirPath = process.platform === 'win32' ? dirPath.replace(/\//g, '\\') : dirPath;
+      
+      if (!fs.existsSync(nativeDirPath)) {
         return false;
       }
       
-      fs.rmdirSync(dirPath, { recursive });
+      fs.rmdirSync(nativeDirPath, { recursive });
       
       this._emitEvent('directory:delete:after', { directory, recursive, success: true });
       
@@ -437,11 +482,15 @@ class StorageService {
       const sourcePath = this.getFilePath(sourceDir, sourceFile);
       const destPath = this.getFilePath(destDir, destFile);
       
-      if (!fs.existsSync(sourcePath)) {
+      // Windowsの場合はパスを変換
+      const nativeSourcePath = process.platform === 'win32' ? sourcePath.replace(/\//g, '\\') : sourcePath;
+      const nativeDestPath = process.platform === 'win32' ? destPath.replace(/\//g, '\\') : destPath;
+      
+      if (!fs.existsSync(nativeSourcePath)) {
         return false;
       }
       
-      fs.copyFileSync(sourcePath, destPath);
+      fs.copyFileSync(nativeSourcePath, nativeDestPath);
       
       this._emitEvent('file:copy:after', { sourceDir, sourceFile, destDir, destFile, success: true });
       
@@ -499,37 +548,29 @@ class StorageService {
     
     // エラーハンドラーがあれば使用
     if (this.errorHandler && typeof this.errorHandler.handle === 'function') {
-      return this.errorHandler.handle(storageError, 'StorageService', context.operation, {
-        additionalContext: context
-      });
+      return this.errorHandler.handle(storageError, 'StorageService', context.operation, context);
     }
     
     // エラーハンドラーがなければログに出力
-    this.logger.error(`[StorageService] ${message}:`, {
-      error_name: error.name,
-      error_message: error.message,
+    this.logger.error(message, {
+      error: error.message,
       stack: error.stack,
       context
     });
     
-    // 操作に応じてデフォルト値を返す
-    if (context.operation === 'readJSON' || context.operation === 'readText') {
-      return null;
-    } else if (
-      context.operation === 'writeJSON' || 
-      context.operation === 'writeText' || 
-      context.operation === 'fileExists' || 
-      context.operation === 'deleteFile' || 
-      context.operation === 'deleteDirectory' || 
-      context.operation === 'copyFile'
-    ) {
-      return false;
-    } else if (context.operation === 'listFiles') {
-      return [];
+    // エラーイベントを発行
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('error', storageError);
     }
     
-    // デフォルトはnull
-    return null;
+    // 操作に応じてデフォルト値を返す
+    if (context.operation === 'fileExists') {
+      return false;
+    } else if (context.operation === 'readJSON' || context.operation === 'readText') {
+      return null;
+    } else {
+      return false;
+    }
   }
 }
 

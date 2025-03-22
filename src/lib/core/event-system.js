@@ -35,16 +35,31 @@ class EventError extends ApplicationError {
 class EnhancedEventEmitter {
   /**
    * コンストラクタ
-   * @param {Object} logger - ロガーインスタンス
+   * @param {Object|Object} loggerOrOptions - ロガーインスタンスまたはオプション
    * @param {Object} options - 追加オプション
    * @param {boolean} options.debugMode - デバッグモードを有効にするかどうか
    * @param {boolean} options.keepHistory - イベント履歴を保持するかどうか
    * @param {number} options.historyLimit - イベント履歴の最大数
    */
-  constructor(logger, options = {}) {
+  constructor(loggerOrOptions, options = {}) {
     this.listeners = new Map();
     this.wildcardListeners = [];
-    this.debugMode = options.debugMode || false;
+    
+    // 引数の処理
+    let logger;
+    let opts;
+    
+    if (loggerOrOptions && typeof loggerOrOptions === 'object' && loggerOrOptions.logger) {
+      // 最初の引数がオプションオブジェクトの場合
+      logger = loggerOrOptions.logger;
+      opts = loggerOrOptions;
+    } else {
+      // 最初の引数がロガーの場合
+      logger = loggerOrOptions;
+      opts = options;
+    }
+    
+    this.debugMode = opts.debugMode || false;
     
     // ロガーの設定（デフォルトのロガーを提供）
     this.logger = logger || {
@@ -55,8 +70,8 @@ class EnhancedEventEmitter {
     };
     
     // イベント履歴の設定（デフォルトで有効）
-    this.eventHistory = options.keepHistory !== false ? [] : null;
-    this.historyLimit = options.historyLimit || 100;
+    this.eventHistory = opts.keepHistory !== false ? [] : null;
+    this.historyLimit = opts.historyLimit || 100;
   }
 
   /**
@@ -331,9 +346,7 @@ class EnhancedEventEmitter {
    * @returns {string} 標準化されたイベント名
    */
   createStandardEventName(component, action) {
-    const normalizedComponent = component.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const normalizedAction = action.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return `${normalizedComponent}:${normalizedAction}`;
+    return `${component}:${action}`;
   }
 
   /**
@@ -345,12 +358,13 @@ class EnhancedEventEmitter {
    * @param {boolean} options.validateName - イベント名を検証するかどうか
    */
   emitStandardized(component, action, data = {}, options = {}) {
-    const standardEvent = this.createStandardEventName(component, action);
+    // 標準化されたイベント名を生成
+    const standardEvent = `${component}:${action}`;
     
     // イベント名の検証（オプション）
     if (options.validateName !== false) {
       const isValid = this.validateEventName(standardEvent);
-      if (!isValid) {
+      if (!isValid && this.logger && typeof this.logger.warn === 'function') {
         this.logger.warn(`非標準のイベント名: ${standardEvent}`);
       }
     }
@@ -363,6 +377,7 @@ class EnhancedEventEmitter {
       action
     };
     
+    // コンポーネント固有のイベントを発行
     this.emit(standardEvent, standardizedData);
     
     // グローバルイベントも発行
@@ -386,10 +401,12 @@ class EnhancedEventEmitter {
    * @returns {Promise<void>}
    */
   async emitStandardizedAsync(component, action, data = {}, options = {}) {
-    const standardEvent = this.createStandardEventName(component, action);
+    // 標準化されたイベント名を生成
+    const standardEvent = `${component}:${action}`;
     
     // イベント名の検証（オプション）
-    if (options.validateName !== false && !this.validateEventName(standardEvent)) {
+    if (options.validateName !== false && !this.validateEventName(standardEvent) && 
+        this.logger && typeof this.logger.warn === 'function') {
       this.logger.warn(`非標準のイベント名: ${standardEvent}`);
     }
     
@@ -401,6 +418,7 @@ class EnhancedEventEmitter {
       action
     };
     
+    // コンポーネント固有のイベントを発行
     await this.emitAsync(standardEvent, standardizedData);
     
     // グローバルイベントも発行
@@ -455,7 +473,9 @@ class EnhancedEventEmitter {
    */
   getEventHistory(limit = this.historyLimit) {
     if (this.eventHistory === null) {
-      this.logger.warn('イベント履歴が有効になっていません');
+      if (this.logger && typeof this.logger.warn === 'function') {
+        this.logger.warn('イベント履歴が有効になっていません');
+      }
       return [];
     }
     
@@ -468,7 +488,9 @@ class EnhancedEventEmitter {
    */
   setDebugMode(enabled) {
     this.debugMode = enabled;
-    this.logger.debug(`デバッグモードを${enabled ? '有効' : '無効'}にしました`);
+    if (this.logger && typeof this.logger.debug === 'function') {
+      this.logger.debug(`デバッグモードを${enabled ? '有効' : '無効'}にしました`);
+    }
   }
 
   /**
@@ -478,7 +500,7 @@ class EnhancedEventEmitter {
     this.listeners.clear();
     this.wildcardListeners = [];
     
-    if (this.debugMode) {
+    if (this.debugMode && this.logger && typeof this.logger.debug === 'function') {
       this.logger.debug('すべてのリスナーを削除しました');
     }
   }
@@ -501,32 +523,37 @@ class EnhancedEventEmitter {
   }
   
   /**
-   * カタログに登録されているイベントを発行
-   * @param {string} eventName - カタログに登録されているイベント名
+   * カタログに登録されたイベントを発行
+   * @param {string} eventName - イベント名
    * @param {Object} data - イベントデータ
-   * @throws {EventError} イベントがカタログに登録されていない場合
+   * @returns {boolean} 成功したかどうか
    */
   emitCataloged(eventName, data = {}) {
     if (!this.catalog) {
-      throw new EventError('イベントカタログが設定されていません');
+      if (this.logger && typeof this.logger.warn === 'function') {
+        this.logger.warn('イベントカタログが設定されていません');
+      }
+      return false;
     }
     
-    const definition = this.catalog.getEventDefinition(eventName);
-    if (!definition) {
-      throw new EventError(`イベント "${eventName}" はカタログに登録されていません`);
+    const eventDef = this.catalog.getEventDefinition(eventName);
+    if (!eventDef) {
+      if (this.logger && typeof this.logger.warn === 'function') {
+        this.logger.warn(`未登録のイベント: ${eventName}`);
+      }
+      return false;
     }
     
-    // イベント名からコンポーネントとアクションを抽出
     const [component, action] = eventName.split(':');
-    
-    // 標準化されたイベントを発行
     this.emitStandardized(component, action, data);
+    
+    return true;
   }
 }
 
 /**
  * イベントカタログクラス
- * システム全体で使用されるイベントの定義と説明を管理
+ * イベント名と定義を管理するためのカタログ
  */
 class EventCatalog {
   /**
@@ -534,28 +561,29 @@ class EventCatalog {
    */
   constructor() {
     this.events = new Map();
-    this.categories = new Set();
+    this.categories = new Map();
   }
   
   /**
-   * イベント定義を登録
-   * @param {string} eventName - イベント名
+   * イベントを登録
+   * @param {string} eventName - イベント名（component:action形式）
    * @param {Object} definition - イベント定義
-   * @param {string} definition.description - イベントの説明
-   * @param {Object} definition.schema - イベントデータのスキーマ
-   * @param {string} definition.category - イベントのカテゴリ
-   * @param {string[]} definition.examples - 使用例
+   * @returns {boolean} 成功したかどうか
    */
   registerEvent(eventName, definition) {
-    this.events.set(eventName, {
-      name: eventName,
-      description: definition.description || '',
-      schema: definition.schema || {},
-      category: definition.category || 'uncategorized',
-      examples: definition.examples || []
-    });
+    if (!eventName.includes(':')) {
+      return false;
+    }
     
-    this.categories.add(definition.category || 'uncategorized');
+    const [category] = eventName.split(':');
+    this.events.set(eventName, definition);
+    
+    if (!this.categories.has(category)) {
+      this.categories.set(category, []);
+    }
+    
+    this.categories.get(category).push(eventName);
+    return true;
   }
   
   /**
@@ -568,39 +596,40 @@ class EventCatalog {
   }
   
   /**
-   * カテゴリ別のイベント一覧を取得
+   * カテゴリに属するイベント一覧を取得
    * @param {string} category - カテゴリ名
-   * @returns {Array<Object>} イベント定義の配列
+   * @returns {Array<string>} イベント名の配列
    */
   getEventsByCategory(category) {
-    const result = [];
-    for (const [name, definition] of this.events.entries()) {
-      if (definition.category === category) {
-        result.push(definition);
-      }
+    if (!this.categories.has(category)) {
+      return [];
     }
-    return result;
+    
+    return this.categories.get(category).map(eventName => ({
+      name: eventName,
+      definition: this.events.get(eventName)
+    }));
   }
   
   /**
-   * すべてのイベント定義を取得
-   * @returns {Array<Object>} イベント定義の配列
+   * すべてのイベントを取得
+   * @returns {Array<Object>} イベント一覧
    */
   getAllEvents() {
-    return Array.from(this.events.values());
+    return Array.from(this.events.entries()).map(([name, definition]) => ({ name, definition }));
   }
   
   /**
    * すべてのカテゴリを取得
-   * @returns {Array<string>} カテゴリの配列
+   * @returns {Array<string>} カテゴリ名の配列
    */
   getAllCategories() {
-    return Array.from(this.categories);
+    return Array.from(this.categories.keys());
   }
 }
 
 module.exports = {
-  EnhancedEventEmitter,
   EventError,
+  EnhancedEventEmitter,
   EventCatalog
 };

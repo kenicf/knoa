@@ -98,6 +98,20 @@ function createMockDependencies() {
   };
 }
 
+/**
+ * カスタマイズされた依存関係のモックを作成
+ * @param {Object} overrides - 上書きするモックオブジェクト
+ * @returns {Object} カスタマイズされたモックされた依存関係のオブジェクト
+ */
+function createCustomMockDependencies(overrides = {}) {
+  const defaultMocks = createMockDependencies();
+  return {
+    ...defaultMocks,
+    ...overrides
+  };
+}
+
 module.exports = {
-  createMockDependencies
+  createMockDependencies,
+  createCustomMockDependencies
 };
