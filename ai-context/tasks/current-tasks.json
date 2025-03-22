@@ -182,7 +182,7 @@
       "id": "T010",
       "title": "統合フローの確立",
       "description": "タスク管理、セッション管理、フィードバック管理の統合フローを確立する",
-      "status": "in_progress",
+      "status": "pending",
       "dependencies": [
         {
           "task_id": "T007",
@@ -200,14 +200,14 @@
       "priority": 5,
       "estimated_hours": 8,
       "progress_percentage": 50,
-      "progress_state": "in_progress",
+      "progress_state": "pending",
       "git_commits": ["commit-20250322-1"]
     },
     {
       "id": "T011",
       "title": "システム統合リファクタリング",
       "description": "イベント管理、エラー処理、ファイルシステム操作、Git統合、アダプター実装、状態管理の改善",
-      "status": "pending",
+      "status": "in_progress",
       "dependencies": [
         {
           "task_id": "T010",
@@ -216,9 +216,9 @@
       ],
       "priority": 5,
       "estimated_hours": 12,
-      "progress_percentage": 0,
-      "progress_state": "pending",
-      "git_commits": []
+      "progress_percentage": 30,
+      "progress_state": "in_development",
+      "git_commits": ["commit-20250322-2", "commit-20250322-3"]
     }
   ],
   "current_focus": "T011"

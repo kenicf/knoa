@@ -5,7 +5,12 @@
   "main": "index.js",
   "scripts": {
     "test": "jest",
-    "feedback": "node src/cli/feedback.js"
+    "test:core": "jest tests/lib/core",
+    "test:utils": "jest tests/lib/utils",
+    "test:integration": "jest tests/lib/integration",
+    "test:coverage": "jest --coverage",
+    "feedback": "node src/cli/feedback.js",
+    "integration": "node src/cli/integration.js"
   },
   "keywords": [
     "ai",
@@ -15,9 +20,11 @@
   "author": "AI Developer",
   "license": "MIT",
   "dependencies": {
+    "colors": "^1.4.0",
     "fs": "0.0.1-security",
     "handlebars": "^4.7.8",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "yargs": "^17.7.2"
   },
   "devDependencies": {
     "jest": "^29.5.0"

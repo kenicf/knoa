@@ -28,16 +28,19 @@ class IntegrationManager {
    */
   constructor(options = {}) {
     // 各コンポーネントのインスタンス化
+    const taskManager = require('../utils/task-manager');
     this.taskManager = new TaskManagerAdapter(
-      options.taskManager || require('../utils/task-manager')
+      options.taskManager || taskManager
     );
     
+    const sessionManager = require('../utils/session-manager');
     this.sessionManager = new SessionManagerAdapter(
-      options.sessionManager || require('../utils/session-manager')
+      options.sessionManager || sessionManager
     );
     
+    const feedbackManager = require('../utils/feedback-manager');
     this.feedbackManager = new FeedbackManagerAdapter(
-      options.feedbackManager || require('../utils/feedback-manager')
+      options.feedbackManager || feedbackManager
     );
     
     // 状態管理

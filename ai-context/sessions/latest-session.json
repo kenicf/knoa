@@ -1,14 +1,14 @@
 {
   "session_handover": {
     "project_id": "knoa",
-    "session_id": "session-20250322",
-    "previous_session_id": "session-20250321",
-    "session_timestamp": "2025-03-22T11:45:00Z",
-    "session_start_timestamp": "2025-03-22T07:05:00Z",
+    "session_id": "session-20250322-3",
+    "previous_session_id": "session-20250322-2",
+    "session_timestamp": "2025-03-22T14:50:00Z",
+    "session_start_timestamp": "2025-03-22T13:50:00Z",
     "project_state_summary": {
       "completed_tasks": ["T001", "T002", "T003", "T004", "T005", "T006", "T007", "T008", "T009"],
-      "current_tasks": ["T010"],
-      "pending_tasks": ["T011"],
+      "current_tasks": ["T010", "T011"],
+      "pending_tasks": [],
       "blocked_tasks": []
     },
     "key_artifacts": [
@@ -339,6 +339,102 @@
         "git_status": "modified",
         "related_tasks": ["T011"],
         "importance": "high"
+      },
+      {
+        "path": "src/lib/core/error-framework.js",
+        "description": "エラー処理フレームワーク",
+        "last_modified": "2025-03-22T13:00:00Z",
+        "git_status": "added",
+        "related_tasks": ["T011"],
+        "importance": "high"
+      },
+      {
+        "path": "src/lib/core/event-system.js",
+        "description": "イベントシステム",
+        "last_modified": "2025-03-22T13:05:00Z",
+        "git_status": "added",
+        "related_tasks": ["T011"],
+        "importance": "high"
+      },
+      {
+        "path": "src/lib/utils/storage.js",
+        "description": "ストレージサービス",
+        "last_modified": "2025-03-22T13:10:00Z",
+        "git_status": "added",
+        "related_tasks": ["T011"],
+        "importance": "high"
+      },
+      {
+        "path": "src/lib/utils/git.js",
+        "description": "Gitサービス",
+        "last_modified": "2025-03-22T13:15:00Z",
+        "git_status": "added",
+        "related_tasks": ["T011"],
+        "importance": "high"
+      },
+      {
+        "path": "tests/lib/core/error-framework.test.js",
+        "description": "エラー処理フレームワークのテスト",
+        "last_modified": "2025-03-22T13:20:00Z",
+        "git_status": "added",
+        "related_tasks": ["T011"],
+        "importance": "medium"
+      },
+      {
+        "path": "tests/lib/core/event-system.test.js",
+        "description": "イベントシステムのテスト",
+        "last_modified": "2025-03-22T13:25:00Z",
+        "git_status": "added",
+        "related_tasks": ["T011"],
+        "importance": "medium"
+      },
+      {
+        "path": "tests/lib/utils/storage.test.js",
+        "description": "ストレージサービスのテスト",
+        "last_modified": "2025-03-22T13:30:00Z",
+        "git_status": "added",
+        "related_tasks": ["T011"],
+        "importance": "medium"
+      },
+      {
+        "path": "tests/lib/utils/git.test.js",
+        "description": "Gitサービスのテスト",
+        "last_modified": "2025-03-22T13:35:00Z",
+        "git_status": "added",
+        "related_tasks": ["T011"],
+        "importance": "medium"
+      },
+      {
+        "path": "tests/lib/integration/core-components.test.js",
+        "description": "基盤コンポーネントの統合テスト",
+        "last_modified": "2025-03-22T13:40:00Z",
+        "git_status": "added",
+        "related_tasks": ["T011"],
+        "importance": "medium"
+      },
+      {
+        "path": "tests/feedback-manager.test.js",
+        "description": "フィードバック管理ユーティリティのテスト（修正）",
+        "last_modified": "2025-03-22T13:42:00Z",
+        "git_status": "modified",
+        "related_tasks": ["T011"],
+        "importance": "medium"
+      },
+      {
+        "path": "tests/task-manager.test.js",
+        "description": "タスク管理ユーティリティのテスト（Jestテストに書き換え）",
+        "last_modified": "2025-03-22T13:43:00Z",
+        "git_status": "modified",
+        "related_tasks": ["T011"],
+        "importance": "medium"
+      },
+      {
+        "path": "ai-context/feedback/feedback-history/feedback-T011.json",
+        "description": "T011のフィードバック",
+        "last_modified": "2025-03-22T13:44:00Z",
+        "git_status": "added",
+        "related_tasks": ["T011"],
+        "importance": "medium"
       }
     ],
     "git_changes": {
@@ -370,14 +466,28 @@
           "timestamp": "2025-03-22T10:30:00Z",
           "related_tasks": ["T010"],
           "author": "AI Developer"
+        },
+        {
+          "hash": "commit-20250322-2",
+          "message": "システム統合リファクタリング（T011）フェーズ1の基盤コンポーネント実装 #T011",
+          "timestamp": "2025-03-22T13:45:00Z",
+          "related_tasks": ["T011"],
+          "author": "AI Developer"
+        },
+        {
+          "hash": "commit-20250322-3",
+          "message": "テスト修正とJestテストへの書き換え #T011",
+          "timestamp": "2025-03-22T14:50:00Z",
+          "related_tasks": ["T011"],
+          "author": "AI Developer"
         }
       ],
       "summary": {
-        "files_added": 14,
-        "files_modified": 0,
+        "files_added": 13,
+        "files_modified": 4,
         "files_deleted": 0,
-        "lines_added": 3500,
-        "lines_deleted": 0
+        "lines_added": 2500,
+        "lines_deleted": 50
       }
     },
     "other_changes": {
@@ -390,23 +500,15 @@
         "related_tasks": ["T010"],
         "priority": 5,
         "severity": 3,
-        "status": "in_progress",
+        "status": "pending",
         "resolution_plan": "CLIインターフェース、テスト、ドキュメントの実装を完了させる"
-      },
-      {
-        "description": "実装したコードの統合が必要",
-        "related_tasks": ["T010"],
-        "priority": 5,
-        "severity": 2,
-        "status": "in_progress",
-        "resolution_plan": "分割実装したファイルをマージし、依存関係を解決する"
       },
       {
         "description": "エラー処理の検証が不十分",
         "related_tasks": ["T010"],
         "priority": 4,
         "severity": 2,
-        "status": "in_progress",
+        "status": "pending",
         "resolution_plan": "様々なエラーケースのテストを実装し、回復メカニズムを検証する"
       },
       {
@@ -414,15 +516,15 @@
         "related_tasks": ["T011"],
         "priority": 5,
         "severity": 3,
-        "status": "pending",
-        "resolution_plan": "T011リファクタリング計画に基づいて段階的に改善する"
+        "status": "in_progress",
+        "resolution_plan": "T011リファクタリング計画に基づいて段階的に改善する（フェーズ1完了、テスト修正完了）"
       },
       {
         "description": "イベント管理の非一貫性",
         "related_tasks": ["T011"],
         "priority": 4,
         "severity": 2,
-        "status": "pending",
+        "status": "in_progress",
         "resolution_plan": "強化されたイベントシステムを実装する"
       },
       {
@@ -430,50 +532,18 @@
         "related_tasks": ["T011"],
         "priority": 4,
         "severity": 2,
-        "status": "pending",
+        "status": "in_progress",
         "resolution_plan": "共通ユーティリティレイヤーを導入する"
       }
     ],
-    "next_session_focus": "統合フローの確立（T010）の完了とシステム統合リファクタリング（T011）の準備",
+    "next_session_focus": "システム統合リファクタリング（T011）フェーズ2の実装",
     "action_items": [
-      {
-        "description": "分割実装したファイルをマージして完全な統合マネージャーを作成",
-        "related_task": "T010",
-        "priority": 5,
-        "severity": 3,
-        "due_date": "2025-03-23",
-        "assignee": "AI Developer"
-      },
-      {
-        "description": "CLIインターフェースの実装",
-        "related_task": "T010",
-        "priority": 4,
-        "severity": 3,
-        "due_date": "2025-03-24",
-        "assignee": "AI Developer"
-      },
-      {
-        "description": "テストの実装",
-        "related_task": "T010",
-        "priority": 4,
-        "severity": 3,
-        "due_date": "2025-03-25",
-        "assignee": "AI Developer"
-      },
-      {
-        "description": "ドキュメントの作成",
-        "related_task": "T010",
-        "priority": 3,
-        "severity": 2,
-        "due_date": "2025-03-26",
-        "assignee": "AI Developer"
-      },
       {
         "description": "共通ユーティリティレイヤー（StorageService, GitService）の設計",
         "related_task": "T011",
         "priority": 5,
         "severity": 3,
-        "due_date": "2025-03-27",
+        "due_date": "2025-03-24",
         "assignee": "AI Developer"
       },
       {
@@ -481,7 +551,7 @@
         "related_task": "T011",
         "priority": 4,
         "severity": 2,
-        "due_date": "2025-03-28",
+        "due_date": "2025-03-25",
         "assignee": "AI Developer"
       },
       {
@@ -489,7 +559,7 @@
         "related_task": "T011",
         "priority": 4,
         "severity": 2,
-        "due_date": "2025-03-29",
+        "due_date": "2025-03-26",
         "assignee": "AI Developer"
       }
     ]
