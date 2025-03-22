@@ -13,7 +13,7 @@
       {
         "story_id": "S001",
         "title": "環境準備と基本実装",
-        "tasks": ["T001", "T002", "T003", "T004", "T005", "T006", "T007", "T008", "T009", "T010"]
+        "tasks": ["T001", "T002", "T003", "T004", "T005", "T006", "T007", "T008", "T009", "T010", "T011"]
       }
     ]
   },
@@ -202,7 +202,24 @@
       "progress_percentage": 50,
       "progress_state": "in_progress",
       "git_commits": ["commit-20250322-1"]
+    },
+    {
+      "id": "T011",
+      "title": "システム統合リファクタリング",
+      "description": "イベント管理、エラー処理、ファイルシステム操作、Git統合、アダプター実装、状態管理の改善",
+      "status": "pending",
+      "dependencies": [
+        {
+          "task_id": "T010",
+          "type": "strong"
+        }
+      ],
+      "priority": 5,
+      "estimated_hours": 12,
+      "progress_percentage": 0,
+      "progress_state": "pending",
+      "git_commits": []
     }
   ],
-  "current_focus": "T010"
+  "current_focus": "T011"
 }

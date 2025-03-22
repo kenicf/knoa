@@ -3,7 +3,7 @@
   "project_type": "meta-framework",
   "version": "1.0.0",
   "created_at": "2025-03-20T13:35:00Z",
-  "last_updated": "2025-03-22T10:35:00Z",
+  "last_updated": "2025-03-22T11:45:00Z",
   "description": "AI駆動開発を統制された情報フローの下で効率的に実施するためのプロジェクト",
   "technologies": [
     "JSON",
@@ -21,7 +21,8 @@
         {"name": "schemas", "purpose": "JSONスキーマ定義"},
         {"name": "utils", "purpose": "ユーティリティスクリプト"},
         {"name": "cli", "purpose": "コマンドラインインターフェース"},
-        {"name": "adapters", "purpose": "コンポーネントアダプター"}
+        {"name": "adapters", "purpose": "コンポーネントアダプター"},
+        {"name": "lib", "purpose": "共通ライブラリ（リファクタリング後）"}
       ]
     },
     "projects": {
@@ -61,6 +62,6 @@
     "current_phase": "フェーズ0",
     "next_steps": ["フェーズ1", "フェーズ2", "フェーズ3", "フェーズ4", "フェーズ5"],
     "phase0_progress": 90,
-    "remaining_tasks": ["T010の完了"]
+    "remaining_tasks": ["T010の完了", "T011の実装"]
   }
 }

@@ -3,12 +3,12 @@
     "project_id": "knoa",
     "session_id": "session-20250322",
     "previous_session_id": "session-20250321",
-    "session_timestamp": "2025-03-22T10:35:00Z",
+    "session_timestamp": "2025-03-22T11:45:00Z",
     "session_start_timestamp": "2025-03-22T07:05:00Z",
     "project_state_summary": {
       "completed_tasks": ["T001", "T002", "T003", "T004", "T005", "T006", "T007", "T008", "T009"],
       "current_tasks": ["T010"],
-      "pending_tasks": [],
+      "pending_tasks": ["T011"],
       "blocked_tasks": []
     },
     "key_artifacts": [
@@ -323,6 +323,22 @@
         "git_status": "added",
         "related_tasks": ["T010"],
         "importance": "high"
+      },
+      {
+        "path": "ai-context/tasks/T011-implementation-strategy.md",
+        "description": "システム統合リファクタリングの実装戦略",
+        "last_modified": "2025-03-22T11:40:00Z",
+        "git_status": "added",
+        "related_tasks": ["T011"],
+        "importance": "high"
+      },
+      {
+        "path": "ai-context/tasks/current-tasks.json",
+        "description": "現在のタスク状態（T011追加）",
+        "last_modified": "2025-03-22T11:43:00Z",
+        "git_status": "modified",
+        "related_tasks": ["T011"],
+        "importance": "high"
       }
     ],
     "git_changes": {
@@ -392,9 +408,33 @@
         "severity": 2,
         "status": "in_progress",
         "resolution_plan": "様々なエラーケースのテストを実装し、回復メカニズムを検証する"
+      },
+      {
+        "description": "コードベース全体に不整合が存在する",
+        "related_tasks": ["T011"],
+        "priority": 5,
+        "severity": 3,
+        "status": "pending",
+        "resolution_plan": "T011リファクタリング計画に基づいて段階的に改善する"
+      },
+      {
+        "description": "イベント管理の非一貫性",
+        "related_tasks": ["T011"],
+        "priority": 4,
+        "severity": 2,
+        "status": "pending",
+        "resolution_plan": "強化されたイベントシステムを実装する"
+      },
+      {
+        "description": "ファイルシステム操作の重複",
+        "related_tasks": ["T011"],
+        "priority": 4,
+        "severity": 2,
+        "status": "pending",
+        "resolution_plan": "共通ユーティリティレイヤーを導入する"
       }
     ],
-    "next_session_focus": "統合フローの確立（T010）の完了",
+    "next_session_focus": "統合フローの確立（T010）の完了とシステム統合リファクタリング（T011）の準備",
     "action_items": [
       {
         "description": "分割実装したファイルをマージして完全な統合マネージャーを作成",
@@ -426,6 +466,30 @@
         "priority": 3,
         "severity": 2,
         "due_date": "2025-03-26",
+        "assignee": "AI Developer"
+      },
+      {
+        "description": "共通ユーティリティレイヤー（StorageService, GitService）の設計",
+        "related_task": "T011",
+        "priority": 5,
+        "severity": 3,
+        "due_date": "2025-03-27",
+        "assignee": "AI Developer"
+      },
+      {
+        "description": "強化されたイベントシステムの基本設計",
+        "related_task": "T011",
+        "priority": 4,
+        "severity": 2,
+        "due_date": "2025-03-28",
+        "assignee": "AI Developer"
+      },
+      {
+        "description": "エラー処理フレームワークの基本設計",
+        "related_task": "T011",
+        "priority": 4,
+        "severity": 2,
+        "due_date": "2025-03-29",
         "assignee": "AI Developer"
       }
     ]
