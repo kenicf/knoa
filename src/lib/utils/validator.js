@@ -11,11 +11,19 @@ const { ValidationError } = require('./errors');
  */
 class Validator {
   /**
+   * コンストラクタ
+   * @param {Object} options - オプション
+   */
+  constructor(options = {}) {
+    this.logger = options.logger || console;
+  }
+
+  /**
    * タスク入力を検証
    * @param {Object} taskData - タスクデータ
    * @returns {ValidationResult} 検証結果
    */
-  static validateTaskInput(taskData) {
+  validateTaskInput(taskData) {
     const errors = [];
     
     // 必須フィールドのチェック
@@ -92,7 +100,7 @@ class Validator {
    * @param {Object} sessionData - セッションデータ
    * @returns {ValidationResult} 検証結果
    */
-  static validateSessionInput(sessionData) {
+  validateSessionInput(sessionData) {
     const errors = [];
     
     // 基本的な構造チェック
@@ -147,7 +155,7 @@ class Validator {
    * @param {Object} feedbackData - フィードバックデータ
    * @returns {ValidationResult} 検証結果
    */
-  static validateFeedbackInput(feedbackData) {
+  validateFeedbackInput(feedbackData) {
     const errors = [];
     
     // 基本的な構造チェック
@@ -197,7 +205,7 @@ class Validator {
    * @param {string} str - サニタイズする文字列
    * @returns {string} サニタイズされた文字列
    */
-  static sanitizeString(str) {
+  sanitizeString(str) {
     if (typeof str !== 'string') {
       return '';
     }
@@ -208,6 +216,46 @@ class Validator {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  /**
+   * 後方互換性のための静的メソッド
+   * @param {Object} taskData - タスクデータ
+   * @returns {ValidationResult} 検証結果
+   */
+  static validateTaskInput(taskData) {
+    const validator = new Validator();
+    return validator.validateTaskInput(taskData);
+  }
+
+  /**
+   * 後方互換性のための静的メソッド
+   * @param {Object} sessionData - セッションデータ
+   * @returns {ValidationResult} 検証結果
+   */
+  static validateSessionInput(sessionData) {
+    const validator = new Validator();
+    return validator.validateSessionInput(sessionData);
+  }
+
+  /**
+   * 後方互換性のための静的メソッド
+   * @param {Object} feedbackData - フィードバックデータ
+   * @returns {ValidationResult} 検証結果
+   */
+  static validateFeedbackInput(feedbackData) {
+    const validator = new Validator();
+    return validator.validateFeedbackInput(feedbackData);
+  }
+
+  /**
+   * 後方互換性のための静的メソッド
+   * @param {string} str - サニタイズする文字列
+   * @returns {string} サニタイズされた文字列
+   */
+  static sanitizeString(str) {
+    const validator = new Validator();
+    return validator.sanitizeString(str);
   }
 }
 

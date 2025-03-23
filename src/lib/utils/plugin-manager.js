@@ -15,6 +15,7 @@ class PluginManager {
   constructor(options = {}) {
     this.plugins = new Map();
     this.logger = options.logger || console;
+    this.eventEmitter = options.eventEmitter;
   }
   
   /**
@@ -26,6 +27,14 @@ class PluginManager {
   registerPlugin(pluginType, pluginImplementation) {
     if (!this._validatePlugin(pluginType, pluginImplementation)) {
       this.logger.error(`プラグイン ${pluginType} の検証に失敗しました`);
+      
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('plugin:validation_failed', {
+          pluginType,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
       return false;
     }
     
@@ -38,7 +47,24 @@ class PluginManager {
         pluginImplementation.initialize();
       } catch (error) {
         this.logger.error(`プラグイン ${pluginType} の初期化中にエラーが発生しました:`, error);
+        
+        if (this.eventEmitter) {
+          this.eventEmitter.emit('plugin:initialization_error', {
+            pluginType,
+            error: error.message,
+            timestamp: new Date().toISOString()
+          });
+        }
       }
+    }
+    
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('plugin:registered', {
+        pluginType,
+        hasInitialize: typeof pluginImplementation.initialize === 'function',
+        hasCleanup: typeof pluginImplementation.cleanup === 'function',
+        timestamp: new Date().toISOString()
+      });
     }
     
     return true;
@@ -55,13 +81,49 @@ class PluginManager {
     const plugin = this.plugins.get(pluginType);
     
     if (!plugin || typeof plugin[methodName] !== 'function') {
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('plugin:method_not_found', {
+          pluginType,
+          methodName,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
       return null;
     }
     
     try {
-      return await plugin[methodName](...args);
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('plugin:method_invoked', {
+          pluginType,
+          methodName,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      const result = await plugin[methodName](...args);
+      
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('plugin:method_completed', {
+          pluginType,
+          methodName,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      return result;
     } catch (error) {
       this.logger.error(`プラグイン ${pluginType}.${methodName} の呼び出し中にエラーが発生しました:`, error);
+      
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('plugin:method_error', {
+          pluginType,
+          methodName,
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
       throw error;
     }
   }
@@ -93,11 +155,26 @@ class PluginManager {
         plugin.cleanup();
       } catch (error) {
         this.logger.error(`プラグイン ${pluginType} のクリーンアップ中にエラーが発生しました:`, error);
+        
+        if (this.eventEmitter) {
+          this.eventEmitter.emit('plugin:cleanup_error', {
+            pluginType,
+            error: error.message,
+            timestamp: new Date().toISOString()
+          });
+        }
       }
     }
     
     this.plugins.delete(pluginType);
     this.logger.info(`プラグイン ${pluginType} を削除しました`);
+    
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('plugin:unregistered', {
+        pluginType,
+        timestamp: new Date().toISOString()
+      });
+    }
     
     return true;
   }

@@ -13,11 +13,24 @@ class CacheManager {
    * @param {Object} options - オプション
    */
   constructor(options = {}) {
+    // 依存関係の設定
+    this.logger = options.logger || console;
+    this.eventEmitter = options.eventEmitter;
+    
+    // キャッシュ設定
     this.cache = new Map();
     this.ttlMs = options.ttlMs || 300000; // デフォルト5分
     this.maxSize = options.maxSize || 1000; // 最大キャッシュサイズ
     this.hitCount = 0;
     this.missCount = 0;
+    
+    // キャッシュ初期化イベント
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('cache:initialized', {
+        ttlMs: this.ttlMs,
+        maxSize: this.maxSize
+      });
+    }
   }
   
   /**
@@ -29,6 +42,11 @@ class CacheManager {
     const cached = this.cache.get(key);
     if (!cached) {
       this.missCount++;
+      
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('cache:miss', { key });
+      }
+      
       return null;
     }
     
@@ -36,10 +54,20 @@ class CacheManager {
     if (Date.now() - cached.timestamp > this.ttlMs) {
       this.cache.delete(key);
       this.missCount++;
+      
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('cache:expired', { key, ttl: this.ttlMs });
+      }
+      
       return null;
     }
     
     this.hitCount++;
+    
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('cache:hit', { key });
+    }
+    
     return cached.value;
   }
   
@@ -60,6 +88,10 @@ class CacheManager {
       timestamp: Date.now(),
       ttl
     });
+    
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('cache:set', { key, ttl });
+    }
   }
   
   /**
@@ -78,6 +110,13 @@ class CacheManager {
       }
     }
     
+    if (count > 0 && this.eventEmitter) {
+      this.eventEmitter.emit('cache:invalidated', {
+        pattern: keyPattern.toString(),
+        count
+      });
+    }
+    
     return count;
   }
   
@@ -85,7 +124,12 @@ class CacheManager {
    * すべてのキャッシュをクリア
    */
   clear() {
+    const size = this.cache.size;
     this.cache.clear();
+    
+    if (size > 0 && this.eventEmitter) {
+      this.eventEmitter.emit('cache:cleared', { size });
+    }
   }
   
   /**
@@ -123,6 +167,10 @@ class CacheManager {
     
     if (oldestKey) {
       this.cache.delete(oldestKey);
+      
+      if (this.eventEmitter) {
+        this.eventEmitter.emit('cache:evicted', { key: oldestKey });
+      }
     }
   }
 }

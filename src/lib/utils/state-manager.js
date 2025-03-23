@@ -4,6 +4,8 @@
  * ワークフローの状態を管理するための状態マシンを実装します。
  */
 
+const { StateError } = require('./errors');
+
 /**
  * 状態マネージャークラス
  */
@@ -13,6 +15,10 @@ class StateManager {
    * @param {Object} options - オプション
    */
   constructor(options = {}) {
+    // 依存関係の設定
+    this.logger = options.logger || console;
+    this.eventEmitter = options.eventEmitter;
+    
     // 状態定義
     this.states = {
       UNINITIALIZED: 'uninitialized',
@@ -71,7 +77,13 @@ class StateManager {
    */
   transitionTo(nextState, metadata = {}) {
     if (!this.canTransitionTo(nextState)) {
-      throw new Error(`状態 ${this.currentState} から ${nextState} への遷移は許可されていません`);
+      throw new StateError(`状態 ${this.currentState} から ${nextState} への遷移は許可されていません`, {
+        context: {
+          currentState: this.currentState,
+          nextState,
+          metadata
+        }
+      });
     }
     
     const prevState = this.currentState;
@@ -89,6 +101,16 @@ class StateManager {
     
     // リスナーに通知
     this._notifyStateChangeListeners(prevState, nextState, metadata);
+    
+    // イベント発行
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('state:changed', {
+        prevState,
+        newState: nextState,
+        metadata,
+        timestamp: historyEntry.timestamp
+      });
+    }
     
     return true;
   }
@@ -117,7 +139,7 @@ class StateManager {
       try {
         listener(prevState, newState, metadata);
       } catch (err) {
-        console.error('状態変更リスナーでエラーが発生しました:', err);
+        this.logger.error('状態変更リスナーでエラーが発生しました:', err);
       }
     }
   }

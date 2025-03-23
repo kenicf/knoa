@@ -31,6 +31,13 @@ class Logger {
     
     // コンテキスト情報取得関数
     this.contextProviders = options.contextProviders || {};
+    
+    // イベントエミッター
+    this.eventEmitter = options.eventEmitter;
+    
+    // トレースID生成
+    this.traceIdGenerator = options.traceIdGenerator || (() => `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+    this.requestIdGenerator = options.requestIdGenerator || (() => `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   }
   
   /**
@@ -46,11 +53,18 @@ class Logger {
     
     // 基本情報
     const timestamp = new Date().toISOString();
+    const traceId = context.trace_id || this.traceIdGenerator();
+    const requestId = context.request_id || this.requestIdGenerator();
+    
     const entry = {
       timestamp,
       level,
       message,
-      context: { ...context }
+      context: { 
+        ...context,
+        trace_id: traceId,
+        request_id: requestId
+      }
     };
     
     // 追加コンテキスト情報
@@ -69,6 +83,11 @@ class Logger {
       } catch (error) {
         console.error(`ログ出力中にエラーが発生しました(${transport.type}):`, error);
       }
+    }
+    
+    // イベント発行
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('log:entry', entry);
     }
     
     // 重大度に応じて通知
@@ -130,6 +149,9 @@ class Logger {
   _sendAlert(entry) {
     // アラート送信ロジック（通知システムとの連携）
     // 実際の実装はプラグインや設定によって異なる
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('log:alert', entry);
+    }
   }
   
   /**
@@ -138,6 +160,13 @@ class Logger {
    */
   addTransport(transport) {
     this.transports.push(transport);
+    
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('log:transport_added', {
+        type: transport.type,
+        timestamp: new Date().toISOString()
+      });
+    }
   }
   
   /**
@@ -147,6 +176,13 @@ class Logger {
    */
   addContextProvider(key, provider) {
     this.contextProviders[key] = provider;
+    
+    if (this.eventEmitter) {
+      this.eventEmitter.emit('log:context_provider_added', {
+        key,
+        timestamp: new Date().toISOString()
+      });
+    }
   }
 }
 
