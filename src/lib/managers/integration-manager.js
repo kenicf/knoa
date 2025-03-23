@@ -5,7 +5,7 @@
  * 一貫したワークフローを提供します。
  */
 
-const { ValidationError, StateError, DataConsistencyError, LockTimeoutError } = require('../../utils/errors');
+const { ValidationError, StateError, DataConsistencyError, LockTimeoutError } = require('../../lib/utils/errors');
 
 /**
  * 統合マネージャークラス
@@ -75,10 +75,35 @@ class IntegrationManager {
     
     // イベントエミッターが存在する場合はイベントを発行
     if (this.eventEmitter) {
-      this.eventEmitter.emit('integration:manager:initialized', {
-        syncInterval: this.syncInterval,
-        enablePeriodicSync: this.enablePeriodicSync
-      });
+      // トレースIDとリクエストIDの生成
+      const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // 標準化されたイベント発行
+      if (typeof this.eventEmitter.emitStandardized === 'function') {
+        this.eventEmitter.emitStandardized('integration', 'system_initialized', {
+          syncInterval: this.syncInterval,
+          enablePeriodicSync: this.enablePeriodicSync,
+          timestamp: new Date().toISOString(),
+          traceId,
+          requestId,
+          component: 'integration'
+        });
+      } else {
+        // 後方互換性のため
+        this.eventEmitter.emit('integration:manager:initialized', {
+          syncInterval: this.syncInterval,
+          enablePeriodicSync: this.enablePeriodicSync,
+          timestamp: new Date().toISOString(),
+          traceId,
+          requestId
+        });
+        
+        // 開発環境では警告を表示
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('非推奨のイベント名 integration:manager:initialized が使用されています。代わりに integration:system_initialized を使用してください。');
+        }
+      }
     }
   }
   
@@ -127,11 +152,37 @@ class IntegrationManager {
         
         // イベントの発行
         if (this.eventEmitter) {
-          this.eventEmitter.emit('workflow:initialized', {
-            projectId,
-            sessionId: session.session_handover.session_id,
-            taskCount: tasks.tasks.length
-          });
+          // トレースIDとリクエストIDの生成
+          const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          
+          // 標準化されたイベント発行
+          if (typeof this.eventEmitter.emitStandardized === 'function') {
+            this.eventEmitter.emitStandardized('integration', 'workflow_initialized', {
+              projectId,
+              sessionId: session.session_handover.session_id,
+              taskCount: tasks.tasks.length,
+              timestamp: new Date().toISOString(),
+              traceId,
+              requestId,
+              component: 'integration'
+            });
+          } else {
+            // 後方互換性のため
+            this.eventEmitter.emit('workflow:initialized', {
+              projectId,
+              sessionId: session.session_handover.session_id,
+              taskCount: tasks.tasks.length,
+              timestamp: new Date().toISOString(),
+              traceId,
+              requestId
+            });
+            
+            // 開発環境では警告を表示
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('非推奨のイベント名 workflow:initialized が使用されています。代わりに integration:workflow_initialized を使用してください。');
+            }
+          }
         }
         
         return {
@@ -174,10 +225,35 @@ class IntegrationManager {
       
       // イベントの発行
       if (this.eventEmitter) {
-        this.eventEmitter.emit('session:started', {
-          sessionId: newSession.session_handover.session_id,
-          previousSessionId
-        });
+        // トレースIDとリクエストIDの生成
+        const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // 標準化されたイベント発行
+        if (typeof this.eventEmitter.emitStandardized === 'function') {
+          this.eventEmitter.emitStandardized('session', 'session_started', {
+            sessionId: newSession.session_handover.session_id,
+            previousSessionId,
+            timestamp: new Date().toISOString(),
+            traceId,
+            requestId,
+            component: 'integration'
+          });
+        } else {
+          // 後方互換性のため
+          this.eventEmitter.emit('session:started', {
+            sessionId: newSession.session_handover.session_id,
+            previousSessionId,
+            timestamp: new Date().toISOString(),
+            traceId,
+            requestId
+          });
+          
+          // 開発環境では警告を表示
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('非推奨のイベント名 session:started が使用されています。代わりに session:session_started を使用してください。');
+          }
+        }
       }
       
       return newSession;

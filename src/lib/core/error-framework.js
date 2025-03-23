@@ -217,10 +217,29 @@ class DependencyError extends ApplicationError {
    * @param {Object} options - オプション
    */
   constructor(message, options = {}) {
-    super(message, { 
-      ...options, 
+    super(message, {
+      ...options,
       code: options.code || 'ERR_DEPENDENCY',
       recoverable: options.recoverable !== undefined ? options.recoverable : false
+    });
+  }
+}
+
+/**
+ * ネットワークエラー
+ * ネットワーク操作に失敗した場合に使用
+ */
+class NetworkError extends ApplicationError {
+  /**
+   * コンストラクタ
+   * @param {string} message - エラーメッセージ
+   * @param {Object} options - オプション
+   */
+  constructor(message, options = {}) {
+    super(message, {
+      ...options,
+      code: options.code || 'ERR_NETWORK',
+      recoverable: options.recoverable !== undefined ? options.recoverable : true
     });
   }
 }
@@ -372,5 +391,6 @@ module.exports = {
   TimeoutError,
   ConfigurationError,
   DependencyError,
+  NetworkError,
   ErrorHandler
 };

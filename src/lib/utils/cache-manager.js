@@ -26,10 +26,32 @@ class CacheManager {
     
     // キャッシュ初期化イベント
     if (this.eventEmitter) {
-      this.eventEmitter.emit('cache:initialized', {
-        ttlMs: this.ttlMs,
-        maxSize: this.maxSize
-      });
+      const timestamp = new Date().toISOString();
+      const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // 新しい標準化されたイベント名を使用
+      if (typeof this.eventEmitter.emitStandardized === 'function') {
+        this.eventEmitter.emitStandardized('cache', 'system_initialized', {
+          ttlMs: this.ttlMs,
+          maxSize: this.maxSize,
+          timestamp,
+          traceId,
+          requestId
+        });
+      } else {
+        // 後方互換性のため
+        this.eventEmitter.emit('cache:initialized', {
+          ttlMs: this.ttlMs,
+          maxSize: this.maxSize,
+          timestamp
+        });
+        
+        // 開発環境では警告を表示
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('非推奨のイベント名 cache:initialized が使用されています。代わりに cache:system_initialized を使用してください。');
+        }
+      }
     }
   }
   
@@ -90,7 +112,32 @@ class CacheManager {
     });
     
     if (this.eventEmitter) {
-      this.eventEmitter.emit('cache:set', { key, ttl });
+      const timestamp = new Date().toISOString();
+      const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // 新しい標準化されたイベント名を使用
+      if (typeof this.eventEmitter.emitStandardized === 'function') {
+        this.eventEmitter.emitStandardized('cache', 'item_set', {
+          key,
+          ttl,
+          timestamp,
+          traceId,
+          requestId
+        });
+      } else {
+        // 後方互換性のため
+        this.eventEmitter.emit('cache:set', {
+          key,
+          ttl,
+          timestamp
+        });
+        
+        // 開発環境では警告を表示
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('非推奨のイベント名 cache:set が使用されています。代わりに cache:item_set を使用してください。');
+        }
+      }
     }
   }
   

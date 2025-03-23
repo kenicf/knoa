@@ -18,7 +18,7 @@ const container = new ServiceContainer();
 registerServices(container, config);
 
 // フィードバックマネージャーのインスタンスを取得
-const feedbackManager = container.get('feedbackManager');
+const feedbackManager = container.get('feedbackManagerAdapter');
 
 // コマンドライン引数の解析
 const args = process.argv.slice(2);

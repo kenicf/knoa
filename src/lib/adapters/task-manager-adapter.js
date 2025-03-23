@@ -4,7 +4,7 @@
  * タスク管理コンポーネントをラップし、統合マネージャーとのインターフェースを提供します。
  */
 
-const { ValidationError } = require('../../utils/errors');
+const { ValidationError } = require('../../lib/utils/errors');
 const BaseAdapter = require('./base-adapter');
 
 /**
@@ -71,38 +71,65 @@ class TaskManagerAdapter extends BaseAdapter {
   /**
    * タスクを作成
    * @param {Object} taskData - タスク入力データ
+   * @param {OperationContext} context - 操作コンテキスト（オプション）
    * @returns {Promise<Object>} 作成されたタスク
    */
-  async createTask(taskData) {
+  async createTask(taskData, context = null) {
     try {
+      // コンテキストがない場合は作成
+      const operationContext = context || this._createContext('createTask', { taskData });
+      
       this._validateParams({ taskData }, ['taskData']);
       
       if (!taskData.title) {
         throw new ValidationError('タスクにはタイトルが必要です');
       }
       
-      return await this.manager.createTask(taskData);
+      const task = await this.manager.createTask(taskData);
+      
+      // イベント発行
+      this._emitEvent('task', 'task_created', {
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        description: task.description
+      }, operationContext);
+      
+      return task;
     } catch (error) {
-      return this._handleError(error, 'createTask', { taskData });
+      return this._handleError(error, 'createTask', context, { taskData });
     }
   }
   
   /**
    * タスクを更新
    * @param {Object} task - 更新するタスク
+   * @param {OperationContext} context - 操作コンテキスト（オプション）
    * @returns {Promise<Object>} 更新されたタスク
    */
-  async updateTask(task) {
+  async updateTask(task, context = null) {
     try {
+      // コンテキストがない場合は作成
+      const operationContext = context || this._createContext('updateTask', { taskId: task.id });
+      
       this._validateParams({ task }, ['task']);
       
       if (!task.id) {
         throw new ValidationError('タスクにはIDが必要です');
       }
       
-      return await this.manager.updateTask(task);
+      const updatedTask = await this.manager.updateTask(task);
+      
+      // イベント発行
+      this._emitEvent('task', 'task_updated', {
+        id: updatedTask.id,
+        updates: task, // 更新内容
+        current: updatedTask // 更新後の値
+      }, operationContext);
+      
+      return updatedTask;
     } catch (error) {
-      return this._handleError(error, 'updateTask', { task });
+      return this._handleError(error, 'updateTask', context, { task });
     }
   }
   
@@ -112,10 +139,18 @@ class TaskManagerAdapter extends BaseAdapter {
    * @param {number} progress - 進捗率
    * @param {string} state - 進捗状態
    * @param {Object} [tasks] - 既存のタスクコレクション（最適化用）
+   * @param {OperationContext} context - 操作コンテキスト（オプション）
    * @returns {Promise<Object>} 更新結果
    */
-  async updateTaskProgress(taskId, progress, state, tasks) {
+  async updateTaskProgress(taskId, progress, state, tasks, context = null) {
     try {
+      // コンテキストがない場合は作成
+      const operationContext = context || this._createContext('updateTaskProgress', {
+        taskId,
+        progress,
+        state
+      });
+      
       this._validateParams({ taskId, progress, state }, ['taskId', 'progress', 'state']);
       
       if (!taskId.match(/^T[0-9]{3}$/)) {
@@ -126,9 +161,20 @@ class TaskManagerAdapter extends BaseAdapter {
         throw new ValidationError('進捗率は0から100の間の数値である必要があります');
       }
       
-      return await this.manager.updateTaskProgress(taskId, progress, state, tasks);
+      const result = await this.manager.updateTaskProgress(taskId, progress, state, tasks);
+      
+      // イベント発行
+      this._emitEvent('task', 'task_progress_updated', {
+        id: taskId,
+        progress,
+        state,
+        previousProgress: result.previousProgress,
+        previousState: result.previousState
+      }, operationContext);
+      
+      return result;
     } catch (error) {
-      return this._handleError(error, 'updateTaskProgress', { taskId, progress, state });
+      return this._handleError(error, 'updateTaskProgress', context, { taskId, progress, state });
     }
   }
   
@@ -136,34 +182,65 @@ class TaskManagerAdapter extends BaseAdapter {
    * タスクにGitコミットを関連付け
    * @param {string} taskId - タスクID
    * @param {string} commitHash - コミットハッシュ
+   * @param {OperationContext} context - 操作コンテキスト（オプション）
    * @returns {Promise<Object>} 更新されたタスク
    */
-  async addGitCommitToTask(taskId, commitHash) {
+  async addGitCommitToTask(taskId, commitHash, context = null) {
     try {
+      // コンテキストがない場合は作成
+      const operationContext = context || this._createContext('addGitCommitToTask', {
+        taskId,
+        commitHash
+      });
+      
       this._validateParams({ taskId, commitHash }, ['taskId', 'commitHash']);
       
       if (!taskId.match(/^T[0-9]{3}$/)) {
         throw new ValidationError('タスクIDはT000形式である必要があります');
       }
       
-      return await this.manager.addGitCommitToTask(taskId, commitHash);
+      const task = await this.manager.addGitCommitToTask(taskId, commitHash);
+      
+      // イベント発行
+      this._emitEvent('task', 'git_commit_added', {
+        taskId,
+        commitHash,
+        timestamp: new Date().toISOString()
+      }, operationContext);
+      
+      return task;
     } catch (error) {
-      return this._handleError(error, 'addGitCommitToTask', { taskId, commitHash });
+      return this._handleError(error, 'addGitCommitToTask', context, { taskId, commitHash });
     }
   }
   
   /**
    * タスクを初期化
    * @param {Object} projectInfo - プロジェクト情報
+   * @param {OperationContext} context - 操作コンテキスト（オプション）
    * @returns {Promise<Object>} 初期化されたタスクコレクション
    */
-  async initializeTasks(projectInfo) {
+  async initializeTasks(projectInfo, context = null) {
     try {
+      // コンテキストがない場合は作成
+      const operationContext = context || this._createContext('initializeTasks', {
+        projectId: projectInfo.id
+      });
+      
       this._validateParams({ projectInfo }, ['projectInfo']);
       
-      return await this.manager.initializeTasks(projectInfo);
+      const tasks = await this.manager.initializeTasks(projectInfo);
+      
+      // イベント発行
+      this._emitEvent('task', 'tasks_initialized', {
+        projectId: projectInfo.id,
+        taskCount: tasks.tasks ? tasks.tasks.length : 0,
+        timestamp: new Date().toISOString()
+      }, operationContext);
+      
+      return tasks;
     } catch (error) {
-      return this._handleError(error, 'initializeTasks', { projectInfo });
+      return this._handleError(error, 'initializeTasks', context, { projectInfo });
     }
   }
 }

@@ -22,7 +22,7 @@ const container = new ServiceContainer();
 registerServices(container, config);
 
 // 統合マネージャーのインスタンスを取得
-const integrationManager = container.get('integrationManager');
+const integrationManager = container.get('integrationManagerAdapter');
 
 // コマンドライン引数の解析
 const argv = yargs(hideBin(process.argv))
@@ -244,7 +244,7 @@ async function endSession(sessionId) {
   
   // セッションIDが指定されていない場合は最新のセッションを取得
   if (!sessionId) {
-    const sessionManager = container.get('sessionManager');
+    const sessionManager = container.get('sessionManagerAdapter');
     const session = await sessionManager.getLatestSession();
     if (session) {
       sessionId = session.session_id;
@@ -458,7 +458,7 @@ async function getWorkflowStatus() {
   console.log(colors.cyan('ワークフロー状態を取得します...'));
   
   // 現在の状態を取得
-  const stateManager = container.get('stateManager');
+  const stateManager = container.get('stateManagerAdapter');
   const currentState = stateManager.getCurrentState();
   console.log(colors.yellow('現在の状態:'), currentState);
   

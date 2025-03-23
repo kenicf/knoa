@@ -38,6 +38,8 @@ const Validator = require('../utils/validator');
 const TaskManagerAdapter = require('../adapters/task-manager-adapter');
 const SessionManagerAdapter = require('../adapters/session-manager-adapter');
 const FeedbackManagerAdapter = require('../adapters/feedback-manager-adapter');
+const StateManagerAdapter = require('../adapters/state-manager-adapter');
+const IntegrationManagerAdapter = require('../adapters/integration-manager-adapter');
 
 /**
  * サービス定義を登録
@@ -260,6 +262,30 @@ function registerServices(container, config = {}) {
         enablePeriodicSync: isTestMode ? false : (integrationConfig.enablePeriodicSync !== false)
       }
     });
+  });
+  
+  // 状態管理アダプター
+  container.registerFactory('stateManagerAdapter', (c) => {
+    return new StateManagerAdapter(
+      c.get('stateManager'),
+      {
+        logger: c.get('logger'),
+        errorHandler: c.get('errorHandler'),
+        eventEmitter: c.get('eventEmitter')
+      }
+    );
+  });
+  
+  // 統合マネージャーアダプター
+  container.registerFactory('integrationManagerAdapter', (c) => {
+    return new IntegrationManagerAdapter(
+      c.get('integrationManager'),
+      {
+        logger: c.get('logger'),
+        errorHandler: c.get('errorHandler'),
+        eventEmitter: c.get('eventEmitter')
+      }
+    );
   });
 }
 

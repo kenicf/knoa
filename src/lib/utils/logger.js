@@ -53,17 +53,19 @@ class Logger {
     
     // 基本情報
     const timestamp = new Date().toISOString();
-    const traceId = context.trace_id || this.traceIdGenerator();
-    const requestId = context.request_id || this.requestIdGenerator();
+    const traceId = context.trace_id || context.traceId || this.traceIdGenerator();
+    const requestId = context.request_id || context.requestId || this.requestIdGenerator();
     
     const entry = {
       timestamp,
       level,
       message,
-      context: { 
+      context: {
         ...context,
         trace_id: traceId,
-        request_id: requestId
+        request_id: requestId,
+        traceId,
+        requestId
       }
     };
     
@@ -87,7 +89,22 @@ class Logger {
     
     // イベント発行
     if (this.eventEmitter) {
-      this.eventEmitter.emit('log:entry', entry);
+      // 新しい標準化されたイベント名を使用
+      if (typeof this.eventEmitter.emitStandardized === 'function') {
+        this.eventEmitter.emitStandardized('log', 'message_created', {
+          ...entry,
+          traceId,
+          requestId
+        });
+      } else {
+        // 後方互換性のため
+        this.eventEmitter.emit('log:entry', entry);
+        
+        // 開発環境では警告を表示
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('非推奨のイベント名 log:entry が使用されています。代わりに log:message_created を使用してください。');
+        }
+      }
     }
     
     // 重大度に応じて通知
@@ -150,7 +167,22 @@ class Logger {
     // アラート送信ロジック（通知システムとの連携）
     // 実際の実装はプラグインや設定によって異なる
     if (this.eventEmitter) {
-      this.eventEmitter.emit('log:alert', entry);
+      // 新しい標準化されたイベント名を使用
+      if (typeof this.eventEmitter.emitStandardized === 'function') {
+        this.eventEmitter.emitStandardized('log', 'alert_created', {
+          ...entry,
+          traceId: entry.context.traceId || entry.context.trace_id,
+          requestId: entry.context.requestId || entry.context.request_id
+        });
+      } else {
+        // 後方互換性のため
+        this.eventEmitter.emit('log:alert', entry);
+        
+        // 開発環境では警告を表示
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('非推奨のイベント名 log:alert が使用されています。代わりに log:alert_created を使用してください。');
+        }
+      }
     }
   }
   
@@ -162,10 +194,30 @@ class Logger {
     this.transports.push(transport);
     
     if (this.eventEmitter) {
-      this.eventEmitter.emit('log:transport_added', {
-        type: transport.type,
-        timestamp: new Date().toISOString()
-      });
+      const timestamp = new Date().toISOString();
+      const traceId = this.traceIdGenerator();
+      const requestId = this.requestIdGenerator();
+      
+      // 新しい標準化されたイベント名を使用
+      if (typeof this.eventEmitter.emitStandardized === 'function') {
+        this.eventEmitter.emitStandardized('log', 'transport_added', {
+          type: transport.type,
+          timestamp,
+          traceId,
+          requestId
+        });
+      } else {
+        // 後方互換性のため
+        this.eventEmitter.emit('log:transport_added', {
+          type: transport.type,
+          timestamp
+        });
+        
+        // 開発環境では警告を表示
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('非推奨のイベント名 log:transport_added が使用されています。代わりに log:transport_added を使用してください。');
+        }
+      }
     }
   }
   
@@ -178,10 +230,30 @@ class Logger {
     this.contextProviders[key] = provider;
     
     if (this.eventEmitter) {
-      this.eventEmitter.emit('log:context_provider_added', {
-        key,
-        timestamp: new Date().toISOString()
-      });
+      const timestamp = new Date().toISOString();
+      const traceId = this.traceIdGenerator();
+      const requestId = this.requestIdGenerator();
+      
+      // 新しい標準化されたイベント名を使用
+      if (typeof this.eventEmitter.emitStandardized === 'function') {
+        this.eventEmitter.emitStandardized('log', 'context_provider_added', {
+          key,
+          timestamp,
+          traceId,
+          requestId
+        });
+      } else {
+        // 後方互換性のため
+        this.eventEmitter.emit('log:context_provider_added', {
+          key,
+          timestamp
+        });
+        
+        // 開発環境では警告を表示
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('非推奨のイベント名 log:context_provider_added が使用されています。代わりに log:context_provider_added を使用してください。');
+        }
+      }
     }
   }
 }

@@ -75,11 +75,28 @@ class StorageService {
       let directory = filePath;
       let actualFilePath = filePath;
       
+      // トレースIDとリクエストIDの生成
+      const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
       if (filename) {
         actualFilePath = this.getFilePath(directory, filename);
-        this._emitEvent('file:read:before', { directory, filename, type: 'json' });
+        this._emitEvent('file_read_before', {
+          directory,
+          filename,
+          type: 'json',
+          traceId,
+          requestId,
+          timestamp: new Date().toISOString()
+        });
       } else {
-        this._emitEvent('file:read:before', { filePath, type: 'json' });
+        this._emitEvent('file_read_before', {
+          filePath,
+          type: 'json',
+          traceId,
+          requestId,
+          timestamp: new Date().toISOString()
+        });
       }
       
       // Windowsの場合はパスを変換
@@ -93,25 +110,65 @@ class StorageService {
       const data = JSON.parse(content);
       
       if (filename) {
-        this._emitEvent('file:read:after', { directory, filename, type: 'json', success: true });
+        this._emitEvent('file_read_after', {
+          directory,
+          filename,
+          type: 'json',
+          success: true,
+          traceId,
+          requestId,
+          timestamp: new Date().toISOString()
+        });
       } else {
-        this._emitEvent('file:read:after', { filePath, type: 'json', success: true });
+        this._emitEvent('file_read_after', {
+          filePath,
+          type: 'json',
+          success: true,
+          traceId,
+          requestId,
+          timestamp: new Date().toISOString()
+        });
       }
       
       return data;
     } catch (error) {
+      // トレースIDとリクエストIDの生成（エラー時）
+      const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
       if (filename) {
-        this._emitEvent('file:read:after', { directory: filePath, filename, type: 'json', success: false, error });
+        this._emitEvent('file_read_after', {
+          directory: filePath,
+          filename,
+          type: 'json',
+          success: false,
+          error: error.message,
+          traceId,
+          requestId,
+          timestamp: new Date().toISOString()
+        });
         return this._handleError(`JSONファイルの読み込みに失敗しました: ${filePath}/${filename}`, error, {
           directory: filePath,
           filename,
-          operation: 'readJSON'
+          operation: 'readJSON',
+          traceId,
+          requestId
         });
       } else {
-        this._emitEvent('file:read:after', { filePath, type: 'json', success: false, error });
+        this._emitEvent('file_read_after', {
+          filePath,
+          type: 'json',
+          success: false,
+          error: error.message,
+          traceId,
+          requestId,
+          timestamp: new Date().toISOString()
+        });
         return this._handleError(`JSONファイルの読み込みに失敗しました: ${filePath}`, error, {
           filePath,
-          operation: 'readJSON'
+          operation: 'readJSON',
+          traceId,
+          requestId
         });
       }
     }
@@ -521,14 +578,53 @@ class StorageService {
    * @private
    */
   _emitEvent(eventName, data) {
-    if (this.eventEmitter) {
-      try {
-        // 標準イベント名のプレフィックスを追加
-        const prefixedEventName = eventName.startsWith('storage:') ? eventName : `storage:${eventName}`;
-        this.eventEmitter.emit(prefixedEventName, data);
-      } catch (error) {
-        this.logger.warn(`非標準のイベント名: ${eventName}`, data);
+    if (!this.eventEmitter) {
+      return;
+    }
+    
+    try {
+      // イベント名のパース
+      let component = 'storage';
+      let action;
+      
+      if (eventName.includes(':')) {
+        // 'file:read:before' → 'file_read_before'
+        const parts = eventName.split(':');
+        action = parts.join('_');
+      } else {
+        action = eventName;
       }
+      
+      // トレースIDとリクエストIDの生成
+      const traceId = data.traceId || `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const requestId = data.requestId || `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // 標準化されたイベントデータ
+      const standardizedData = {
+        ...data,
+        traceId,
+        requestId,
+        component: 'storage',
+        timestamp: new Date().toISOString()
+      };
+      
+      // 標準化されたイベント発行
+      if (typeof this.eventEmitter.emitStandardized === 'function') {
+        this.eventEmitter.emitStandardized(component, action, standardizedData);
+      } else {
+        // 後方互換性のため
+        const prefixedEventName = eventName.startsWith('storage:') ? eventName : `storage:${eventName}`;
+        this.eventEmitter.emit(prefixedEventName, standardizedData);
+        
+        // 開発環境では警告を表示
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`非推奨のイベント名 ${prefixedEventName} が使用されています。代わりに ${component}:${action} を使用してください。`);
+        } else {
+          this.logger.warn(`非標準のイベント発行が使用されました: ${prefixedEventName}`, { action });
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`イベント発行中にエラーが発生しました: ${eventName}`, error);
     }
   }
 

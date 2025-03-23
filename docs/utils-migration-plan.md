@@ -15,7 +15,6 @@
 5. ✅ `cache-manager.js` → `src/lib/utils/cache-manager.js`
 6. ✅ `logger.js` → `src/lib/utils/logger.js`
 7. ✅ `plugin-manager.js` → `src/lib/utils/plugin-manager.js`
-7. ⬜ `plugin-manager.js` → `src/lib/utils/plugin-manager.js`
 
 ## 移行手順
 

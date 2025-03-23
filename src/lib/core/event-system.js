@@ -10,6 +10,7 @@
  */
 
 const { ApplicationError } = require('./error-framework');
+const OperationContext = require('./operation-context');
 
 /**
  * イベントエラークラス
@@ -72,6 +73,9 @@ class EnhancedEventEmitter {
     // イベント履歴の設定（デフォルトで有効）
     this.eventHistory = opts.keepHistory !== false ? [] : null;
     this.historyLimit = opts.historyLimit || 100;
+    
+    // エラー状態の初期化
+    this.errorOccurred = false;
   }
 
   /**
@@ -335,7 +339,11 @@ class EnhancedEventEmitter {
       return true;
     }
     
-    const pattern = /^[a-z][a-z0-9]*:[a-z][a-z0-9]*$/;
+    // 標準形式のパターン：
+    // - component:action
+    // - component:entity_action
+    // - component:entity_action_state
+    const pattern = /^[a-z][a-z0-9]*:[a-z][a-z0-9_]*$/;
     return pattern.test(eventName);
   }
   
@@ -491,6 +499,140 @@ class EnhancedEventEmitter {
     if (this.logger && typeof this.logger.debug === 'function') {
       this.logger.debug(`デバッグモードを${enabled ? '有効' : '無効'}にしました`);
     }
+  }
+
+  /**
+   * エラー状態をリセット
+   */
+  resetErrorState() {
+    this.errorOccurred = false;
+    if (this.debugMode && this.logger) {
+      this.logger.debug('エラー状態をリセットしました');
+    }
+  }
+
+  /**
+   * 新しい操作コンテキストを作成
+   * @param {Object} metadata - コンテキストメタデータ
+   * @param {OperationContext} parentContext - 親コンテキスト（オプション）
+   * @returns {OperationContext} 新しい操作コンテキスト
+   */
+  createContext(metadata = {}, parentContext = null) {
+    return new OperationContext({
+      logger: this.logger,
+      metadata,
+      parentContext
+    });
+  }
+
+  /**
+   * コンテキスト付きイベント発行
+   * @param {string} event - イベント名
+   * @param {*} data - イベントデータ
+   * @param {OperationContext} context - 操作コンテキスト
+   */
+  emitWithContext(event, data, context) {
+    // コンテキストにエラーがある場合はイベント発行をスキップ
+    if (context && context.hasError()) {
+      if (this.debugMode) {
+        this.logger.debug(`イベント ${event} はコンテキスト ${context.id} でエラーが発生しているためスキップされました`);
+      }
+      return;
+    }
+    
+    // コンテキスト情報をデータに追加
+    const enhancedData = {
+      ...data,
+      _context: context ? context.id : null
+    };
+    
+    // 通常のイベント発行
+    this.emit(event, enhancedData);
+  }
+
+  /**
+   * 標準化されたイベントをコンテキスト付きで発行
+   * @param {string} component - コンポーネント名
+   * @param {string} action - アクション名
+   * @param {Object} data - イベントデータ
+   * @param {OperationContext} context - 操作コンテキスト
+   * @param {Object} options - オプション
+   */
+  emitStandardizedWithContext(component, action, data = {}, context, options = {}) {
+    // コンテキストにエラーがある場合はイベント発行をスキップ
+    if (context && context.hasError()) {
+      if (this.debugMode) {
+        this.logger.debug(`イベント ${component}:${action} はコンテキスト ${context.id} でエラーが発生しているためスキップされました`);
+      }
+      return;
+    }
+    
+    // コンテキスト情報をデータに追加
+    const enhancedData = {
+      ...data,
+      _context: context ? context.id : null
+    };
+    
+    // 標準化されたイベント発行
+    this.emitStandardized(component, action, enhancedData, options);
+  }
+
+  /**
+   * エラーイベントを発行
+   * @param {Error} error - エラーオブジェクト
+   * @param {string} component - コンポーネント名
+   * @param {string} operation - 操作名
+   * @param {OperationContext} context - 操作コンテキスト
+   * @param {Object} details - 追加詳細情報
+   */
+  emitError(error, component, operation, context, details = {}) {
+    // エラー状態を設定
+    this.errorOccurred = true;
+    
+    // コンテキストにエラー状態を設定
+    if (context && typeof context.setError === 'function') {
+      try {
+        context.setError(error, component, operation, details);
+      } catch (err) {
+        // コンテキストのエラー設定に失敗した場合はログに出力
+        if (this.logger && typeof this.logger.warn === 'function') {
+          this.logger.warn(`コンテキストのエラー設定に失敗しました: ${err.message}`);
+        }
+      }
+    }
+    
+    // エラーログを出力
+    if (this.logger && typeof this.logger.error === 'function') {
+      this.logger.error(`Error in ${component}.${operation}:`, error, details);
+    }
+    
+    // エラーイベントを発行
+    const errorData = {
+      component,
+      operation,
+      message: error.message,
+      code: error.code || 'ERR_UNKNOWN',
+      name: error.name || 'Error',
+      timestamp: new Date().toISOString(),
+      recoverable: error.recoverable !== undefined ? error.recoverable : true,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      details,
+      _context: context && context.id ? context.id : null
+    };
+    
+    // 標準化されたイベント名でエラーイベントを発行
+    this.emit('app:error', errorData);
+    
+    // 後方互換性のために古いイベント名でも発行
+    if (component) {
+      this.emit(`${component}:error`, errorData);
+    }
+    
+    // グローバルエラーイベントも発行
+    this.emit('error', {
+      type: 'app:error',
+      ...errorData
+    });
   }
 
   /**
