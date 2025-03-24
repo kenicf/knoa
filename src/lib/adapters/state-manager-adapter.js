@@ -4,7 +4,7 @@
  * 状態管理コンポーネントをラップし、統一されたインターフェースを提供します。
  */
 
-const { ValidationError } = require('../../lib/utils/errors');
+const { ValidationError } = require('../utils/errors');
 const BaseAdapter = require('./base-adapter');
 const { EVENT_NAMES } = require('../../lib/core/event-constants');
 

@@ -1,0 +1,430 @@
+/**
+ * FeedbackManagerAdapterのテスト
+ */
+
+const FeedbackManagerAdapter = require('../../../src/lib/adapters/feedback-manager-adapter');
+const { 
+  setupAdapterTest,
+  createMockFeedbackManager
+} = require('../helpers/adapter-test-helper');
+const { 
+  runErrorHandlingTests,
+  runRecoverabilityTests,
+  runValidationTests
+} = require('../helpers/common-adapter-tests');
+const { 
+  runErrorHierarchyTest,
+  runErrorCodeTest,
+  runErrorContextTest
+} = require('../helpers/error-hierarchy-tests');
+const { 
+  runErrorEventTest
+} = require('../helpers/error-event-tests');
+const { 
+  runContextAwareTest,
+  runContextErrorHandlingTest
+} = require('../helpers/context-aware-tests');
+const { 
+  runBoundaryValueTests
+} = require('../helpers/boundary-value-tests');
+const { 
+  runAsyncTests
+} = require('../helpers/async-error-tests');
+
+describe('FeedbackManagerAdapter', () => {
+  let testEnv;
+  
+  beforeEach(() => {
+    // テスト環境のセットアップ
+    testEnv = setupAdapterTest({
+      AdapterClass: FeedbackManagerAdapter,
+      managerType: 'feedback'
+    });
+    
+    // モックの挙動をカスタマイズ
+    testEnv.mockManager.createNewFeedback = jest.fn().mockImplementation((taskId, attempt) => ({
+      id: 'F001',
+      task_id: taskId,
+      attempt: attempt || 1
+    }));
+    
+    testEnv.mockManager.collectTestResults = jest.fn().mockImplementation((taskId, testCommand, testTypes) => ({
+      task_id: taskId,
+      results: [{ type: 'unit', passed: true }]
+    }));
+    
+    testEnv.mockManager.prioritizeFeedback = jest.fn().mockImplementation(feedback => ({
+      ...feedback,
+      priorities: { high: ['issue1'], medium: ['issue2'] }
+    }));
+    
+    testEnv.mockManager.updateFeedbackStatus = jest.fn().mockImplementation((feedback, newStatus) => ({
+      ...feedback,
+      status: newStatus
+    }));
+    
+    testEnv.mockManager.integrateFeedbackWithSession = jest.fn().mockImplementation((feedbackId, sessionId) => true);
+    
+    testEnv.mockManager.integrateFeedbackWithTask = jest.fn().mockImplementation((feedbackId, taskId) => true);
+  });
+  
+  afterEach(() => {
+    // モックのリセット
+    testEnv.resetMocks();
+  });
+  
+  // 基本機能のテスト
+  describe('基本機能', () => {
+    test('インスタンスが正しく作成される', () => {
+      expect(testEnv.adapter).toBeInstanceOf(FeedbackManagerAdapter);
+      expect(testEnv.adapter.manager).toBe(testEnv.mockManager);
+      expect(testEnv.adapter.eventEmitter).toBe(testEnv.eventEmitter);
+      expect(testEnv.adapter.logger).toBe(testEnv.mockLogger);
+    });
+
+    test('マネージャーが指定されていない場合はエラーが発生する', () => {
+      expect(() => {
+        new FeedbackManagerAdapter(null, {
+          eventEmitter: testEnv.eventEmitter,
+          logger: testEnv.mockLogger
+        });
+      }).toThrow('Manager is required');
+    });
+  });
+
+  // createNewFeedbackのテスト
+  describe('createNewFeedback', () => {
+    test('新しいフィードバックを作成し、イベントを発行する', async () => {
+      const taskId = 'T001';
+      const attempt = 2;
+      
+      const result = await testEnv.adapter.createNewFeedback(taskId, attempt);
+      
+      // 基本的な機能のテスト
+      expect(testEnv.mockManager.createNewFeedback).toHaveBeenCalledWith(taskId, attempt);
+      expect(result).toEqual({
+        id: 'F001',
+        task_id: taskId,
+        attempt: attempt
+      });
+      
+      // イベント発行のテスト
+      const feedbackCreatedEvent = testEnv.emittedEvents.find(e => e.name === 'feedback:feedback_created');
+      expect(feedbackCreatedEvent).toBeDefined();
+      expect(feedbackCreatedEvent.data.id).toBe('F001');
+      expect(feedbackCreatedEvent.data.taskId).toBe(taskId);
+      expect(feedbackCreatedEvent.data.attempt).toBe(attempt);
+      expect(feedbackCreatedEvent.data.timestamp).toBeDefined();
+    });
+    
+    test('タスクIDが不正な形式の場合はエラーを返す', async () => {
+      const result = await testEnv.adapter.createNewFeedback('invalid-task-id', 1);
+      
+      expect(result).toMatchObject({
+        error: true,
+        message: expect.stringContaining('タスクIDはT000形式である必要があります'),
+        operation: 'createNewFeedback'
+      });
+      
+      expect(result.timestamp).toBeDefined();
+      expect(result.code).toBeDefined();
+      expect(testEnv.mockLogger.error).toHaveBeenCalled();
+    });
+  });
+
+  // collectTestResultsのテスト
+  describe('collectTestResults', () => {
+    test('テスト結果を収集し、イベントを発行する', async () => {
+      const taskId = 'T001';
+      const testCommand = 'npm test';
+      const testTypes = ['unit', 'integration'];
+      
+      const result = await testEnv.adapter.collectTestResults(taskId, testCommand, testTypes);
+      
+      // 基本的な機能のテスト
+      expect(testEnv.mockManager.collectTestResults).toHaveBeenCalledWith(taskId, testCommand, testTypes);
+      expect(result).toEqual({
+        task_id: taskId,
+        results: [{ type: 'unit', passed: true }]
+      });
+      
+      // イベント発行のテスト
+      const testResultsEvent = testEnv.emittedEvents.find(e => e.name === 'feedback:test_results_collected');
+      expect(testResultsEvent).toBeDefined();
+      expect(testResultsEvent.data.taskId).toBe(taskId);
+      expect(testResultsEvent.data.testCommand).toBe(testCommand);
+      expect(testResultsEvent.data.testTypes).toEqual(testTypes);
+      expect(testResultsEvent.data.resultCount).toBe(1);
+      expect(testResultsEvent.data.timestamp).toBeDefined();
+    });
+  });
+
+  // prioritizeFeedbackのテスト
+  describe('prioritizeFeedback', () => {
+    test('フィードバックの優先順位付けを行い、イベントを発行する', async () => {
+      const feedback = { id: 'F001', task_id: 'T001', status: 'open' };
+      
+      const result = await testEnv.adapter.prioritizeFeedback(feedback);
+      
+      // 基本的な機能のテスト
+      expect(testEnv.mockManager.prioritizeFeedback).toHaveBeenCalledWith(feedback);
+      expect(result).toEqual({
+        id: 'F001',
+        task_id: 'T001',
+        status: 'open',
+        priorities: { high: ['issue1'], medium: ['issue2'] }
+      });
+      
+      // イベント発行のテスト
+      const prioritizedEvent = testEnv.emittedEvents.find(e => e.name === 'feedback:feedback_prioritized');
+      expect(prioritizedEvent).toBeDefined();
+      expect(prioritizedEvent.data.id).toBe('F001');
+      expect(prioritizedEvent.data.taskId).toBe('T001');
+      expect(prioritizedEvent.data.priorities).toEqual({ high: ['issue1'], medium: ['issue2'] });
+      expect(prioritizedEvent.data.timestamp).toBeDefined();
+    });
+  });
+
+  // updateFeedbackStatusのテスト
+  describe('updateFeedbackStatus', () => {
+    test('フィードバックの状態を更新し、イベントを発行する', async () => {
+      const feedback = { id: 'F001', task_id: 'T001', status: 'open' };
+      const newStatus = 'in_progress';
+      
+      const result = await testEnv.adapter.updateFeedbackStatus(feedback, newStatus);
+      
+      // 基本的な機能のテスト
+      expect(testEnv.mockManager.updateFeedbackStatus).toHaveBeenCalledWith(feedback, newStatus);
+      expect(result).toEqual({
+        id: 'F001',
+        task_id: 'T001',
+        status: 'in_progress'
+      });
+      
+      // イベント発行のテスト
+      const statusUpdatedEvent = testEnv.emittedEvents.find(e => e.name === 'feedback:status_updated');
+      expect(statusUpdatedEvent).toBeDefined();
+      expect(statusUpdatedEvent.data.id).toBe('F001');
+      expect(statusUpdatedEvent.data.taskId).toBe('T001');
+      expect(statusUpdatedEvent.data.previousStatus).toBe('open');
+      expect(statusUpdatedEvent.data.newStatus).toBe('in_progress');
+      expect(statusUpdatedEvent.data.timestamp).toBeDefined();
+    });
+    
+    test('不正な状態の場合はエラーを返す', async () => {
+      const feedback = { id: 'F001', task_id: 'T001', status: 'open' };
+      const newStatus = 'invalid_status';
+      
+      const result = await testEnv.adapter.updateFeedbackStatus(feedback, newStatus);
+      
+      expect(result).toMatchObject({
+        error: true,
+        message: expect.stringContaining('不正な状態です'),
+        operation: 'updateFeedbackStatus'
+      });
+      
+      expect(result.timestamp).toBeDefined();
+      expect(result.code).toBeDefined();
+      expect(testEnv.mockLogger.error).toHaveBeenCalled();
+    });
+  });
+
+  // integrateFeedbackWithSessionのテスト
+  describe('integrateFeedbackWithSession', () => {
+    test('フィードバックをセッションと統合し、イベントを発行する', async () => {
+      const feedbackId = 'F001';
+      const sessionId = 'session-test-1';
+      
+      const result = await testEnv.adapter.integrateFeedbackWithSession(feedbackId, sessionId);
+      
+      // 基本的な機能のテスト
+      expect(testEnv.mockManager.integrateFeedbackWithSession).toHaveBeenCalledWith(feedbackId, sessionId);
+      expect(result).toBe(true);
+      
+      // イベント発行のテスト
+      const integratedEvent = testEnv.emittedEvents.find(e => e.name === 'feedback:integrated_with_session');
+      expect(integratedEvent).toBeDefined();
+      expect(integratedEvent.data.feedbackId).toBe(feedbackId);
+      expect(integratedEvent.data.sessionId).toBe(sessionId);
+      expect(integratedEvent.data.success).toBe(true);
+      expect(integratedEvent.data.timestamp).toBeDefined();
+    });
+  });
+
+  // integrateFeedbackWithTaskのテスト
+  describe('integrateFeedbackWithTask', () => {
+    test('フィードバックをタスクと統合し、イベントを発行する', async () => {
+      const feedbackId = 'F001';
+      const taskId = 'T001';
+      
+      const result = await testEnv.adapter.integrateFeedbackWithTask(feedbackId, taskId);
+      
+      // 基本的な機能のテスト
+      expect(testEnv.mockManager.integrateFeedbackWithTask).toHaveBeenCalledWith(feedbackId, taskId);
+      expect(result).toBe(true);
+      
+      // イベント発行のテスト
+      const integratedEvent = testEnv.emittedEvents.find(e => e.name === 'feedback:integrated_with_task');
+      expect(integratedEvent).toBeDefined();
+      expect(integratedEvent.data.feedbackId).toBe(feedbackId);
+      expect(integratedEvent.data.taskId).toBe(taskId);
+      expect(integratedEvent.data.success).toBe(true);
+      expect(integratedEvent.data.timestamp).toBeDefined();
+    });
+  });
+
+  // 後方互換性のテスト
+  describe('後方互換性', () => {
+    test('古いイベント名と新しいイベント名の両方が発行される', async () => {
+      // 古いイベント名と新しいイベント名のリスナーを登録
+      const oldEventListener = jest.fn();
+      const newEventListener = jest.fn();
+      
+      testEnv.eventEmitter.on('feedback:created', oldEventListener);
+      testEnv.eventEmitter.on('feedback:feedback_created', newEventListener);
+      
+      // フィードバックを作成
+      await testEnv.adapter.createNewFeedback('T001', 1);
+      
+      // 両方のリスナーが呼び出されることを確認
+      expect(oldEventListener).toHaveBeenCalled();
+      expect(newEventListener).toHaveBeenCalled();
+      
+      // 警告ログが出力されることを確認（開発環境の場合）
+      if (process.env.NODE_ENV === 'development') {
+        expect(testEnv.mockLogger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('非推奨のイベント名'),
+          expect.any(Object)
+        );
+      }
+    });
+  });
+  
+  // 共通テスト関数を使用したテスト
+  
+  // エラー処理テスト
+  runErrorHandlingTests(
+    testEnv.adapter,
+    testEnv.mockManager,
+    [
+      { methodName: 'createNewFeedback', args: ['T001', 1], errorMessage: 'フィードバック作成エラー' },
+      { methodName: 'collectTestResults', args: ['T001', 'npm test', ['unit']], errorMessage: 'テスト結果収集エラー' },
+      { methodName: 'prioritizeFeedback', args: [{ id: 'F001', task_id: 'T001' }], errorMessage: '優先順位付けエラー' },
+      { methodName: 'updateFeedbackStatus', args: [{ id: 'F001', task_id: 'T001', status: 'open' }, 'in_progress'], errorMessage: '状態更新エラー' },
+      { methodName: 'integrateFeedbackWithSession', args: ['F001', 'session-test-1'], errorMessage: 'セッション統合エラー' },
+      { methodName: 'integrateFeedbackWithTask', args: ['F001', 'T001'], errorMessage: 'タスク統合エラー' }
+    ],
+    testEnv.mockLogger
+  );
+  
+  // 回復可能性テスト
+  runRecoverabilityTests(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'createNewFeedback',
+    ['T001', 1],
+    testEnv.mockLogger
+  );
+  
+  // バリデーションテスト
+  runValidationTests(
+    testEnv.adapter,
+    'updateFeedbackStatus',
+    ['feedback', 'newStatus'],
+    testEnv.mockLogger
+  );
+  
+  // エラー階層テスト
+  runErrorHierarchyTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'createNewFeedback',
+    ['T001', 1],
+    testEnv.mockLogger
+  );
+  
+  // エラーコードテスト
+  runErrorCodeTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'createNewFeedback',
+    ['T001', 1],
+    testEnv.mockLogger
+  );
+  
+  // エラーコンテキストテスト
+  runErrorContextTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'createNewFeedback',
+    ['T001', 1],
+    testEnv.mockLogger
+  );
+  
+  // エラーイベントテスト
+  runErrorEventTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'createNewFeedback',
+    ['T001', 1],
+    'feedback',
+    testEnv.mockLogger
+  );
+  
+  // コンテキスト対応テスト
+  runContextAwareTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'createNewFeedback',
+    ['T001', 1],
+    testEnv.mockLogger
+  );
+  
+  // コンテキストエラー処理テスト
+  runContextErrorHandlingTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'createNewFeedback',
+    ['T001', 1],
+    testEnv.mockLogger
+  );
+  
+  // 境界値テスト
+  runBoundaryValueTests(
+    testEnv.adapter,
+    'collectTestResults',
+    ['T001', 'npm test', ['unit', 'integration']],
+    1,
+    {
+      longString: true,
+      specialChars: true,
+      circularRef: false,
+      largeData: true,
+      emptyData: false
+    },
+    testEnv.mockLogger
+  );
+  
+  // 非同期テスト
+  runAsyncTests(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'collectTestResults',
+    ['T001', 'npm test', ['unit']],
+    {
+      asyncError: true,
+      cancellation: true,
+      listenerError: true,
+      eventName: 'feedback:test_results_collected',
+      timeout: true,
+      timeoutValue: 500,
+      concurrency: true,
+      concurrencyValue: 3
+    },
+    testEnv.mockLogger
+  );
+});

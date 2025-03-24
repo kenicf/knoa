@@ -1,0 +1,315 @@
+/**
+ * StateManagerAdapterのテスト
+ */
+
+const StateManagerAdapter = require('../../../src/lib/adapters/state-manager-adapter');
+const { 
+  setupAdapterTest,
+  createMockStateManager
+} = require('../helpers/adapter-test-helper');
+const { 
+  runErrorHandlingTests,
+  runRecoverabilityTests,
+  runValidationTests
+} = require('../helpers/common-adapter-tests');
+const { 
+  runErrorHierarchyTest,
+  runErrorCodeTest,
+  runErrorContextTest
+} = require('../helpers/error-hierarchy-tests');
+const { 
+  runErrorEventTest
+} = require('../helpers/error-event-tests');
+const { 
+  runContextAwareTest,
+  runContextErrorHandlingTest
+} = require('../helpers/context-aware-tests');
+const { 
+  runBoundaryValueTests
+} = require('../helpers/boundary-value-tests');
+const { 
+  runAsyncTests
+} = require('../helpers/async-error-tests');
+
+describe('StateManagerAdapter', () => {
+  let testEnv;
+  
+  beforeEach(() => {
+    // テスト環境のセットアップ
+    testEnv = setupAdapterTest({
+      AdapterClass: StateManagerAdapter,
+      managerType: 'state'
+    });
+  });
+  
+  afterEach(() => {
+    // モックのリセット
+    testEnv.resetMocks();
+  });
+  
+  // 基本機能のテスト
+  describe('基本機能', () => {
+    test('インスタンスが正しく作成される', () => {
+      expect(testEnv.adapter).toBeInstanceOf(StateManagerAdapter);
+      expect(testEnv.adapter.manager).toBe(testEnv.mockManager);
+      expect(testEnv.adapter.eventEmitter).toBe(testEnv.eventEmitter);
+      expect(testEnv.adapter.logger).toBe(testEnv.mockLogger);
+    });
+
+    test('マネージャーが指定されていない場合はエラーが発生する', () => {
+      expect(() => {
+        new StateManagerAdapter(null, {
+          eventEmitter: testEnv.eventEmitter,
+          logger: testEnv.mockLogger
+        });
+      }).toThrow('Manager is required');
+    });
+  });
+
+  // getCurrentStateのテスト
+  describe('getCurrentState', () => {
+    test('現在の状態を取得する', () => {
+      const state = testEnv.adapter.getCurrentState();
+      
+      expect(testEnv.mockManager.getCurrentState).toHaveBeenCalled();
+      expect(state).toBe('initialized');
+    });
+  });
+
+  // setStateのテスト
+  describe('setState', () => {
+    test('状態を設定し、イベントを発行する', () => {
+      const state = 'session_started';
+      const data = { sessionId: 'S001' };
+      
+      const result = testEnv.adapter.setState(state, data);
+      
+      expect(testEnv.mockManager.setState).toHaveBeenCalledWith(state, data);
+      expect(result).toMatchObject({
+        state: 'session_started',
+        previousState: 'initialized'
+      });
+      
+      // イベント発行のテスト
+      const stateChangedEvent = testEnv.emittedEvents.find(e => e.name === 'state:state_changed');
+      expect(stateChangedEvent).toBeDefined();
+      expect(stateChangedEvent.data.state).toBe(state);
+      expect(stateChangedEvent.data.previousState).toBe('initialized');
+      expect(stateChangedEvent.data.timestamp).toBeDefined();
+      expect(stateChangedEvent.data.sessionId).toBe('S001');
+    });
+  });
+
+  // transitionToのテスト
+  describe('transitionTo', () => {
+    test('状態を遷移し、イベントを発行する', () => {
+      const state = 'task_in_progress';
+      const data = { taskId: 'T001' };
+      
+      const result = testEnv.adapter.transitionTo(state, data);
+      
+      expect(testEnv.mockManager.transitionTo).toHaveBeenCalledWith(state, data);
+      expect(result).toMatchObject({
+        state: 'task_in_progress',
+        previousState: 'initialized',
+        data: { taskId: 'T001' }
+      });
+      
+      // イベント発行のテスト
+      const stateTransitionEvent = testEnv.emittedEvents.find(e => e.name === 'state:state_transition');
+      expect(stateTransitionEvent).toBeDefined();
+      expect(stateTransitionEvent.data.state).toBe(state);
+      expect(stateTransitionEvent.data.previousState).toBe('initialized');
+      expect(stateTransitionEvent.data.timestamp).toBeDefined();
+      expect(stateTransitionEvent.data.taskId).toBe('T001');
+    });
+  });
+
+  // canTransitionToのテスト
+  describe('canTransitionTo', () => {
+    test('遷移可能かどうかを判定する', () => {
+      const state = 'task_in_progress';
+      
+      const result = testEnv.adapter.canTransitionTo(state);
+      
+      expect(testEnv.mockManager.canTransitionTo).toHaveBeenCalledWith(state);
+      expect(result).toBe(true);
+    });
+  });
+
+  // getStateHistoryのテスト
+  describe('getStateHistory', () => {
+    test('状態履歴を取得する', () => {
+      const history = testEnv.adapter.getStateHistory();
+      
+      expect(testEnv.mockManager.getStateHistory).toHaveBeenCalled();
+      expect(history).toEqual([
+        { state: 'uninitialized', timestamp: '2025-03-01T00:00:00.000Z' },
+        { state: 'initialized', timestamp: '2025-03-01T00:01:00.000Z' }
+      ]);
+    });
+  });
+
+  // getPreviousStateのテスト
+  describe('getPreviousState', () => {
+    test('前の状態を取得する', () => {
+      const state = testEnv.adapter.getPreviousState();
+      
+      expect(testEnv.mockManager.getPreviousState).toHaveBeenCalled();
+      expect(state).toBe('uninitialized');
+    });
+  });
+
+  // 後方互換性のテスト
+  describe('後方互換性', () => {
+    test('古いイベント名と新しいイベント名の両方が発行される', () => {
+      // 古いイベント名と新しいイベント名のリスナーを登録
+      const oldEventListener = jest.fn();
+      const newEventListener = jest.fn();
+      
+      testEnv.eventEmitter.on('state:changed', oldEventListener);
+      testEnv.eventEmitter.on('state:state_changed', newEventListener);
+      
+      // 状態を設定
+      testEnv.adapter.setState('session_started', { sessionId: 'S001' });
+      
+      // 両方のリスナーが呼び出されることを確認
+      expect(oldEventListener).toHaveBeenCalled();
+      expect(newEventListener).toHaveBeenCalled();
+      
+      // 警告ログが出力されることを確認（開発環境の場合）
+      if (process.env.NODE_ENV === 'development') {
+        expect(testEnv.mockLogger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('非推奨のイベント名'),
+          expect.any(Object)
+        );
+      }
+    });
+  });
+  
+  // 共通テスト関数を使用したテスト
+  
+  // エラー処理テスト
+  runErrorHandlingTests(
+    testEnv.adapter,
+    testEnv.mockManager,
+    [
+      { methodName: 'getCurrentState', args: [] },
+      { methodName: 'setState', args: ['initialized'], errorMessage: '状態設定エラー' },
+      { methodName: 'transitionTo', args: ['task_in_progress'], errorMessage: '状態遷移エラー' },
+      { methodName: 'canTransitionTo', args: ['task_in_progress'], errorMessage: '遷移可能性チェックエラー' },
+      { methodName: 'getStateHistory', args: [], errorMessage: '状態履歴取得エラー' },
+      { methodName: 'getPreviousState', args: [], errorMessage: '前の状態取得エラー' }
+    ],
+    testEnv.mockLogger
+  );
+  
+  // 回復可能性テスト
+  runRecoverabilityTests(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'setState',
+    ['initialized'],
+    testEnv.mockLogger
+  );
+  
+  // バリデーションテスト
+  runValidationTests(
+    testEnv.adapter,
+    'setState',
+    ['state'],
+    testEnv.mockLogger
+  );
+  
+  // エラー階層テスト
+  runErrorHierarchyTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'setState',
+    ['error_state'],
+    testEnv.mockLogger
+  );
+  
+  // エラーコードテスト
+  runErrorCodeTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'setState',
+    ['error_state'],
+    testEnv.mockLogger
+  );
+  
+  // エラーコンテキストテスト
+  runErrorContextTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'setState',
+    ['error_state'],
+    testEnv.mockLogger
+  );
+  
+  // エラーイベントテスト
+  runErrorEventTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'setState',
+    ['error_state'],
+    'state',
+    testEnv.mockLogger
+  );
+  
+  // コンテキスト対応テスト
+  runContextAwareTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'setState',
+    ['context_test_state'],
+    testEnv.mockLogger
+  );
+  
+  // コンテキストエラー処理テスト
+  runContextErrorHandlingTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'setState',
+    ['error_state'],
+    testEnv.mockLogger
+  );
+  
+  // 境界値テスト
+  runBoundaryValueTests(
+    testEnv.adapter,
+    'setState',
+    ['boundary_test_state'],
+    0,
+    {
+      longString: true,
+      specialChars: true,
+      circularRef: true,
+      emptyData: false
+    },
+    testEnv.mockLogger
+  );
+  
+  // 非同期テスト
+  runAsyncTests(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'setState',
+    ['async_test_state'],
+    {
+      asyncError: true,
+      cancellation: true,
+      listenerError: true,
+      eventName: 'state:state_changed',
+      timeout: false,
+      concurrency: true,
+      concurrencyValue: 3
+    },
+    testEnv.mockLogger
+  );
+});

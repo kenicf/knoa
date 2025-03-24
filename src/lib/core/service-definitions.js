@@ -26,7 +26,7 @@ const { FeedbackManager } = require('../managers/feedback-manager');
 const { TaskManager } = require('../managers/task-manager');
 const IntegrationManager = require('../managers/integration-manager');
 const EventEmitter = require('../utils/event-emitter');
-const StateManager = require('../utils/state-manager');
+const StateManager = require('../managers/state-manager');
 const CacheManager = require('../utils/cache-manager');
 const LockManager = require('../utils/lock-manager');
 const Logger = require('../utils/logger');
@@ -119,11 +119,11 @@ function registerServices(container, config = {}) {
   });
   
   container.registerFactory('stateManager', (c) => {
-    const stateConfig = c.get('config').state || {};
     return new StateManager({
-      ...stateConfig,
       logger: c.get('logger'),
-      eventEmitter: c.get('eventEmitter')
+      eventEmitter: c.get('eventEmitter'),
+      errorHandler: c.get('errorHandler'),
+      config: c.get('config').state || {}
     });
   });
   

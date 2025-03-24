@@ -1,12 +1,13 @@
 module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/*.test.js'],
+  collectCoverage: true,
+  testPathIgnorePatterns: ['node_modules'],
   collectCoverageFrom: [
-    'src/lib/adapters/**/*.js',
-    'src/lib/core/error-framework.js',
-    'src/lib/core/event-system.js',
-    'src/lib/utils/errors.js',
-    '!**/node_modules/**'
+    'src/**/*.js',           // すべてのソースコードファイル
+    '!**/node_modules/**',   // node_modulesは除外
+    '!**/examples/**',       // 例示コードは除外
+    '!**/templates/**'       // テンプレートファイルは除外
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],

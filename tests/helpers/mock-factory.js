@@ -1,117 +1,102 @@
 /**
- * テスト用のモックファクトリー
- * 
- * 依存関係のモックを簡単に作成するためのヘルパー関数を提供します。
+ * テスト用モックファクトリ
  */
 
 /**
- * 依存関係のモックを作成
- * @returns {Object} モックされた依存関係のオブジェクト
+ * モックロガーを作成
+ * @returns {Object} モックロガー
  */
-function createMockDependencies() {
+function createMockLogger() {
   return {
-    storageService: {
-      ensureDirectoryExists: jest.fn(),
-      readJSON: jest.fn(),
-      writeJSON: jest.fn(),
-      readText: jest.fn(),
-      writeText: jest.fn(),
-      fileExists: jest.fn(),
-      listFiles: jest.fn(),
-      getFilePath: jest.fn((directory, filename) => `${directory}/${filename}`)
-    },
-    gitService: {
-      getCurrentCommitHash: jest.fn(),
-      extractTaskIdsFromCommitMessage: jest.fn(),
-      getCommitsBetween: jest.fn(),
-      getChangedFilesInCommit: jest.fn(),
-      getCommitDiffStats: jest.fn()
-    },
-    logger: {
-      debug: jest.fn(),
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn()
-    },
-    eventEmitter: {
-      on: jest.fn(),
-      off: jest.fn(),
-      emit: jest.fn(),
-      emitAsync: jest.fn(),
-      emitStandardized: jest.fn(),
-      emitStandardizedAsync: jest.fn()
-    },
-    errorHandler: {
-      handle: jest.fn()
-    },
-    handlebars: {
-      compile: jest.fn().mockReturnValue(jest.fn())
-    },
-    // IntegrationManagerのテストに必要なモック
-    taskManagerAdapter: {
-      createTask: jest.fn(),
-      getAllTasks: jest.fn(),
-      getTaskById: jest.fn(),
-      updateTask: jest.fn()
-    },
-    sessionManagerAdapter: {
-      createNewSession: jest.fn(),
-      getSessionById: jest.fn(),
-      saveSession: jest.fn()
-    },
-    feedbackManagerAdapter: {
-      getPendingFeedback: jest.fn(),
-      saveFeedback: jest.fn(),
-      moveFeedbackToHistory: jest.fn()
-    },
-    stateManager: {
-      states: {
-        UNINITIALIZED: 'uninitialized',
-        INITIALIZED: 'initialized',
-        SESSION_STARTED: 'session_started',
-        TASK_IN_PROGRESS: 'task_in_progress',
-        FEEDBACK_COLLECTED: 'feedback_collected',
-        SESSION_ENDED: 'session_ended'
-      },
-      getCurrentState: jest.fn(),
-      transitionTo: jest.fn()
-    },
-    cacheManager: {
-      get: jest.fn(),
-      set: jest.fn(),
-      delete: jest.fn(),
-      clear: jest.fn()
-    },
-    lockManager: {
-      acquireLock: jest.fn(),
-      releaseLock: jest.fn(),
-      isLocked: jest.fn()
-    },
-    pluginManager: {
-      loadPlugins: jest.fn(),
-      getPlugin: jest.fn(),
-      executePlugin: jest.fn()
-    },
-    validator: {
-      validate: jest.fn()
-    }
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn()
   };
 }
 
 /**
- * カスタマイズされた依存関係のモックを作成
- * @param {Object} overrides - 上書きするモックオブジェクト
- * @returns {Object} カスタマイズされたモックされた依存関係のオブジェクト
+ * モックイベントエミッターを作成
+ * @returns {Object} モックイベントエミッター
  */
-function createCustomMockDependencies(overrides = {}) {
-  const defaultMocks = createMockDependencies();
+function createMockEventEmitter() {
   return {
-    ...defaultMocks,
-    ...overrides
+    emit: jest.fn(),
+    emitStandardized: jest.fn(),
+    on: jest.fn(),
+    once: jest.fn(),
+    removeListener: jest.fn(),
+    removeAllListeners: jest.fn()
   };
+}
+
+/**
+ * モックエラーハンドラーを作成
+ * @param {Object} options - オプション
+ * @param {Object} options.defaultReturnValues - 操作に応じたデフォルト戻り値
+ * @returns {Object} モックエラーハンドラー
+ */
+function createMockErrorHandler(options = {}) {
+  const { defaultReturnValues = {} } = options;
+  
+  // デフォルト値の設定
+  const defaults = {
+    getCurrentCommitHash: '',
+    getCurrentBranch: '',
+    extractTaskIdsFromCommitMessage: [],
+    getCommitsBetween: [],
+    getChangedFilesInCommit: [],
+    getCommitDiffStats: { files: [], lines_added: 0, lines_deleted: 0 },
+    readJSON: null,
+    writeJSON: false,
+    readText: null,
+    writeText: false,
+    fileExists: false,
+    listFiles: [],
+    ...defaultReturnValues
+  };
+  
+  // モックハンドラー関数
+  const mockHandle = jest.fn().mockImplementation((error, component, operation, context) => {
+    // 操作に応じたデフォルト値を返す
+    return defaults[operation] !== undefined ? defaults[operation] : null;
+  });
+  
+  return {
+    handle: mockHandle,
+    register: jest.fn(),
+    unregister: jest.fn()
+  };
+}
+
+/**
+ * 時間をモック
+ * @param {string} isoString - ISO形式の時間文字列
+ */
+function mockTimestamp(isoString) {
+  // Dateのモック
+  const mockDate = new Date(isoString);
+  global.Date = class extends Date {
+    constructor() {
+      return mockDate;
+    }
+    
+    static now() {
+      return mockDate.getTime();
+    }
+  };
+  
+  // 現在時刻を返す関数のモック
+  global.Date.now = jest.fn(() => mockDate.getTime());
+  
+  // requestIdとtraceIdの生成をモック
+  global.generateRequestId = jest.fn(() => `req-${mockDate.getTime()}-${Math.random().toString(36).substring(2, 10)}`);
+  global.generateTraceId = jest.fn(() => `trace-${mockDate.getTime()}-${Math.random().toString(36).substring(2, 10)}`);
 }
 
 module.exports = {
-  createMockDependencies,
-  createCustomMockDependencies
+  createMockLogger,
+  createMockEventEmitter,
+  createMockErrorHandler,
+  mockTimestamp
 };

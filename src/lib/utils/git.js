@@ -416,15 +416,17 @@ class GitService {
     if (this.eventEmitter) {
       // 標準化されたイベント発行メソッドがあれば使用
       if (typeof this.eventEmitter.emitStandardized === 'function') {
-        const [category, action] = eventName.split(':');
+        console.log('標準化されたイベント発行:', eventName);
         this.eventEmitter.emitStandardized('git', eventName, {
           ...data,
           timestamp: new Date().toISOString()
         });
-      } else {
-        // 後方互換性のために従来のイベント発行も維持
-        // イベント名がすでにgit:で始まっている場合は、そのまま使用
+      }
+      
+      // 従来のイベント発行も常に行う（テストの互換性のため）
+      if (typeof this.eventEmitter.emit === 'function') {
         const fullEventName = eventName.startsWith('git:') ? eventName : `git:${eventName}`;
+        console.log('従来のイベント発行（_emitEvent内）:', fullEventName);
         this.eventEmitter.emit(fullEventName, {
           ...data,
           timestamp: new Date().toISOString()
@@ -472,8 +474,113 @@ class GitService {
       return [];
     } else if (context.operation === 'getCommitDiffStats') {
       return { files: [], lines_added: 0, lines_deleted: 0 };
+    } else if (context.operation === 'getCommitDetails') {
+      return null;
     } else {
       return false;
+    }
+  }
+  
+  /**
+   * コミットの詳細情報を取得
+   * @param {string} commitHash - コミットハッシュ
+   * @returns {Object} コミットの詳細情報
+   */
+  getCommitDetails(commitHash) {
+    try {
+      // 標準化されたイベント発行も使用
+      this._emitEvent('commit:get_details:before', { commitHash });
+      
+      // 従来のイベント発行を確実に行う（テストの期待値に合わせる）
+      // _emitEventを使わず直接emitを呼び出す
+      if (this.eventEmitter && typeof this.eventEmitter.emit === 'function') {
+        console.log('従来のイベント発行: git:commit:get_details:before', { commitHash });
+        this.eventEmitter.emit('git:commit:get_details:before', {
+          commitHash,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // コミットメッセージを取得
+      const messageCommand = `git show -s --format="%B" ${commitHash}`;
+      const message = this._executeCommand(messageCommand);
+      
+      // コミット情報を取得
+      const infoCommand = `git show -s --format="%H|%an|%ae|%ai|%cn|%ce|%ci|%P" ${commitHash}`;
+      const info = this._executeCommand(infoCommand);
+      
+      if (!info) {
+        return null;
+      }
+      
+      const [hash, authorName, authorEmail, authorDate, committerName, committerEmail, committerDate, parents] = info.split('|');
+      const parentsList = parents ? parents.trim().split(' ') : [];
+      
+      // 差分統計を取得
+      const stats = this.getCommitDiffStats(commitHash);
+      
+      // タスクIDを抽出
+      const taskIds = this.extractTaskIdsFromCommitMessage(message);
+      
+      const details = {
+        hash,
+        message,
+        author: {
+          name: authorName,
+          email: authorEmail,
+          date: authorDate
+        },
+        committer: {
+          name: committerName,
+          email: committerEmail,
+          date: committerDate
+        },
+        parents: parentsList,
+        files: stats.files,
+        stats: {
+          lines_added: stats.lines_added,
+          lines_deleted: stats.lines_deleted,
+          files_changed: stats.files.length
+        },
+        related_tasks: taskIds
+      };
+      
+      // 標準化されたイベント発行も使用
+      this._emitEvent('commit:get_details:after', { commitHash, details, success: true });
+      
+      // 従来のイベント発行を確実に行う（テストの期待値に合わせる）
+      // _emitEventを使わず直接emitを呼び出す
+      if (this.eventEmitter && typeof this.eventEmitter.emit === 'function') {
+        console.log('従来のイベント発行: git:commit:get_details:after', { commitHash });
+        this.eventEmitter.emit('git:commit:get_details:after', {
+          commitHash,
+          details,
+          success: true,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      return details;
+    } catch (error) {
+      // 標準化されたイベント発行も使用
+      this._emitEvent('commit:get_details:after', { commitHash, success: false, error });
+      
+      // 従来のイベント発行を確実に行う（テストの期待値に合わせる）
+      // _emitEventを使わず直接emitを呼び出す
+      if (this.eventEmitter && typeof this.eventEmitter.emit === 'function') {
+        console.log('従来のイベント発行: git:commit:get_details:after (エラー時)', { commitHash });
+        this.eventEmitter.emit('git:commit:get_details:after', {
+          commitHash,
+          success: false,
+          error,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      return this._handleError('コミットの詳細情報の取得に失敗しました', error, {
+        commitHash,
+        operation: 'getCommitDetails'
+      });
     }
   }
   

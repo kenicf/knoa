@@ -1,0 +1,349 @@
+/**
+ * TaskManagerAdapterのテスト
+ */
+
+const TaskManagerAdapter = require('../../../src/lib/adapters/task-manager-adapter');
+const { 
+  setupAdapterTest,
+  createMockTaskManager
+} = require('../helpers/adapter-test-helper');
+const { 
+  runErrorHandlingTests,
+  runRecoverabilityTests,
+  runValidationTests
+} = require('../helpers/common-adapter-tests');
+const { 
+  runErrorHierarchyTest,
+  runErrorCodeTest,
+  runErrorContextTest
+} = require('../helpers/error-hierarchy-tests');
+const { 
+  runErrorEventTest
+} = require('../helpers/error-event-tests');
+const { 
+  runContextAwareTest,
+  runContextErrorHandlingTest
+} = require('../helpers/context-aware-tests');
+const { 
+  runBoundaryValueTests
+} = require('../helpers/boundary-value-tests');
+const { 
+  runAsyncTests
+} = require('../helpers/async-error-tests');
+
+describe('TaskManagerAdapter', () => {
+  let testEnv;
+  
+  beforeEach(() => {
+    // テスト環境のセットアップ
+    testEnv = setupAdapterTest({
+      AdapterClass: TaskManagerAdapter,
+      managerType: 'task'
+    });
+    
+    // モックの挙動をカスタマイズ
+    testEnv.mockManager.createTask = jest.fn().mockImplementation(data => ({ id: 'T001', ...data }));
+    
+    testEnv.mockManager.updateTask = jest.fn().mockImplementation(task => ({ ...task, updated: true }));
+    
+    testEnv.mockManager.updateTaskProgress = jest.fn().mockImplementation((taskId, progress, state) => ({ 
+      id: taskId, 
+      progress, 
+      state, 
+      previousProgress: 0, 
+      previousState: 'pending' 
+    }));
+    
+    testEnv.mockManager.addGitCommitToTask = jest.fn().mockImplementation((taskId, commitHash) => ({ 
+      id: taskId, 
+      commits: [commitHash] 
+    }));
+    
+    testEnv.mockManager.initializeTasks = jest.fn().mockImplementation(() => ({ 
+      tasks: [{ id: 'T001' }, { id: 'T002' }] 
+    }));
+  });
+  
+  afterEach(() => {
+    // モックのリセット
+    testEnv.resetMocks();
+  });
+  
+  // 基本機能のテスト
+  describe('基本機能', () => {
+    test('インスタンスが正しく作成される', () => {
+      expect(testEnv.adapter).toBeInstanceOf(TaskManagerAdapter);
+      expect(testEnv.adapter.manager).toBe(testEnv.mockManager);
+      expect(testEnv.adapter.eventEmitter).toBe(testEnv.eventEmitter);
+      expect(testEnv.adapter.logger).toBe(testEnv.mockLogger);
+    });
+
+    test('マネージャーが指定されていない場合はエラーが発生する', () => {
+      expect(() => {
+        new TaskManagerAdapter(null, {
+          eventEmitter: testEnv.eventEmitter,
+          logger: testEnv.mockLogger
+        });
+      }).toThrow('Manager is required');
+    });
+  });
+
+  // createTaskのテスト
+  describe('createTask', () => {
+    test('タスクを作成し、イベントを発行する', async () => {
+      const taskData = { title: 'テストタスク' };
+      const result = await testEnv.adapter.createTask(taskData);
+      
+      // 基本的な機能のテスト
+      expect(testEnv.mockManager.createTask).toHaveBeenCalledWith(taskData);
+      expect(result).toEqual({ id: 'T001', title: 'テストタスク' });
+      
+      // イベント発行のテスト
+      const taskCreatedEvent = testEnv.emittedEvents.find(e => e.name === 'task:task_created');
+      expect(taskCreatedEvent).toBeDefined();
+      expect(taskCreatedEvent.data.title).toBe('テストタスク');
+      expect(taskCreatedEvent.data.timestamp).toBeDefined();
+    });
+  });
+
+  // updateTaskのテスト
+  describe('updateTask', () => {
+    test('タスクを更新し、イベントを発行する', async () => {
+      const task = { id: 'T001', title: '更新前のタスク' };
+      const result = await testEnv.adapter.updateTask(task);
+      
+      // 基本的な機能のテスト
+      expect(testEnv.mockManager.updateTask).toHaveBeenCalledWith(task);
+      expect(result).toEqual({ id: 'T001', title: '更新前のタスク', updated: true });
+      
+      // イベント発行のテスト
+      const taskUpdatedEvent = testEnv.emittedEvents.find(e => e.name === 'task:task_updated');
+      expect(taskUpdatedEvent).toBeDefined();
+      expect(taskUpdatedEvent.data.id).toBe('T001');
+      expect(taskUpdatedEvent.data.timestamp).toBeDefined();
+    });
+  });
+
+  // updateTaskProgressのテスト
+  describe('updateTaskProgress', () => {
+    test('タスクの進捗を更新し、イベントを発行する', async () => {
+      const taskId = 'T001';
+      const progress = 50;
+      const state = 'in_progress';
+      
+      const result = await testEnv.adapter.updateTaskProgress(taskId, progress, state);
+      // 基本的な機能のテスト
+      expect(testEnv.mockManager.updateTaskProgress).toHaveBeenCalledWith(taskId, progress, state, undefined);
+      expect(result).toEqual({ 
+        id: taskId, 
+        progress, 
+        state, 
+        previousProgress: 0, 
+        previousState: 'pending' 
+      });
+      
+      // イベント発行のテスト
+      const progressUpdatedEvent = testEnv.emittedEvents.find(e => e.name === 'task:task_progress_updated');
+      expect(progressUpdatedEvent).toBeDefined();
+      expect(progressUpdatedEvent.data.id).toBe(taskId);
+      expect(progressUpdatedEvent.data.progress).toBe(progress);
+      expect(progressUpdatedEvent.data.state).toBe(state);
+      expect(progressUpdatedEvent.data.timestamp).toBeDefined();
+    });
+  });
+
+  // addGitCommitToTaskのテスト
+  describe('addGitCommitToTask', () => {
+    test('タスクにGitコミットを関連付け、イベントを発行する', async () => {
+      const taskId = 'T001';
+      const commitHash = 'abc123';
+      
+      const result = await testEnv.adapter.addGitCommitToTask(taskId, commitHash);
+      
+      // 基本的な機能のテスト
+      expect(testEnv.mockManager.addGitCommitToTask).toHaveBeenCalledWith(taskId, commitHash);
+      expect(result).toEqual({ id: taskId, commits: [commitHash] });
+      
+      // イベント発行のテスト
+      const commitAddedEvent = testEnv.emittedEvents.find(e => e.name === 'task:git_commit_added');
+      expect(commitAddedEvent).toBeDefined();
+      expect(commitAddedEvent.data.taskId).toBe(taskId);
+      expect(commitAddedEvent.data.commitHash).toBe(commitHash);
+      expect(commitAddedEvent.data.timestamp).toBeDefined();
+    });
+  });
+
+  // initializeTasksのテスト
+  describe('initializeTasks', () => {
+    test('タスクを初期化し、イベントを発行する', async () => {
+      const projectData = { id: 'test-project' };
+      
+      const result = await testEnv.adapter.initializeTasks(projectData);
+      
+      // 基本的な機能のテスト
+      expect(testEnv.mockManager.initializeTasks).toHaveBeenCalledWith(projectData);
+      expect(result).toEqual({ tasks: [{ id: 'T001' }, { id: 'T002' }] });
+      
+      // イベント発行のテスト
+      const tasksInitializedEvent = testEnv.emittedEvents.find(e => e.name === 'task:tasks_initialized');
+      expect(tasksInitializedEvent).toBeDefined();
+      expect(tasksInitializedEvent.data.projectId).toBe('test-project');
+      expect(tasksInitializedEvent.data.taskCount).toBe(2);
+      expect(tasksInitializedEvent.data.timestamp).toBeDefined();
+    });
+  });
+
+  // 後方互換性のテスト
+  describe('後方互換性', () => {
+    test('古いイベント名と新しいイベント名の両方が発行される', async () => {
+      // 古いイベント名と新しいイベント名のリスナーを登録
+      const oldEventListener = jest.fn();
+      const newEventListener = jest.fn();
+      
+      testEnv.eventEmitter.on('task:created', oldEventListener);
+      testEnv.eventEmitter.on('task:task_created', newEventListener);
+      
+      // タスクを作成
+      await testEnv.adapter.createTask({ title: 'テストタスク' });
+      
+      // 両方のリスナーが呼び出されることを確認
+      expect(oldEventListener).toHaveBeenCalled();
+      expect(newEventListener).toHaveBeenCalled();
+      
+      // 警告ログが出力されることを確認（開発環境の場合）
+      if (process.env.NODE_ENV === 'development') {
+        expect(testEnv.mockLogger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('非推奨のイベント名'),
+          expect.any(Object)
+        );
+      }
+    });
+  });
+  
+  // 共通テスト関数を使用したテスト
+  
+  // エラー処理テスト
+  runErrorHandlingTests(
+    testEnv.adapter,
+    testEnv.mockManager,
+    [
+      { methodName: 'createTask', args: [{ title: 'テストタスク' }], errorMessage: 'テストエラー' },
+      { methodName: 'updateTask', args: [{ id: 'T001', title: 'エラーテスト' }], errorMessage: '更新エラー' },
+      { methodName: 'updateTaskProgress', args: ['T001', 50, 'in_progress'], errorMessage: '進捗更新エラー' },
+      { methodName: 'addGitCommitToTask', args: ['T001', 'abc123'], errorMessage: 'コミット関連付けエラー' },
+      { methodName: 'initializeTasks', args: [{ id: 'test-project' }], errorMessage: '初期化エラー' }
+    ],
+    testEnv.mockLogger
+  );
+  
+  // 回復可能性テスト
+  runRecoverabilityTests(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'createTask',
+    [{ title: 'テストタスク' }],
+    testEnv.mockLogger
+  );
+  
+  // バリデーションテスト
+  runValidationTests(
+    testEnv.adapter,
+    'createTask',
+    ['taskData'],
+    testEnv.mockLogger
+  );
+  
+  // エラー階層テスト
+  runErrorHierarchyTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'createTask',
+    [{ title: 'エラーテストタスク' }],
+    testEnv.mockLogger
+  );
+  
+  // エラーコードテスト
+  runErrorCodeTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'createTask',
+    [{ title: 'エラーコードテストタスク' }],
+    testEnv.mockLogger
+  );
+  
+  // エラーコンテキストテスト
+  runErrorContextTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    'createTask',
+    [{ title: 'コンテキストテストタスク' }],
+    testEnv.mockLogger
+  );
+  
+  // エラーイベントテスト
+  runErrorEventTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'createTask',
+    [{ title: 'イベントテストタスク' }],
+    'task',
+    testEnv.mockLogger
+  );
+  
+  // コンテキスト対応テスト
+  runContextAwareTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'createTask',
+    [{ title: 'コンテキストテストタスク' }],
+    testEnv.mockLogger
+  );
+  
+  // コンテキストエラー処理テスト
+  runContextErrorHandlingTest(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'createTask',
+    [{ title: 'コンテキストエラーテストタスク' }],
+    testEnv.mockLogger
+  );
+  
+  // 境界値テスト
+  runBoundaryValueTests(
+    testEnv.adapter,
+    'createTask',
+    [{ title: '境界値テストタスク' }],
+    0,
+    {
+      longString: true,
+      specialChars: true,
+      circularRef: true,
+      largeData: true,
+      emptyData: false
+    },
+    testEnv.mockLogger
+  );
+  
+  // 非同期テスト
+  runAsyncTests(
+    testEnv.adapter,
+    testEnv.mockManager,
+    testEnv.eventEmitter,
+    'createTask',
+    [{ title: '非同期テストタスク' }],
+    {
+      asyncError: true,
+      cancellation: true,
+      listenerError: true,
+      eventName: 'task:task_created',
+      timeout: true,
+      timeoutValue: 500,
+      concurrency: true,
+      concurrencyValue: 3
+    },
+    testEnv.mockLogger
+  );
+});

@@ -34,11 +34,21 @@ function createEventBridge(eventEmitter, oldEventName, component, action) {
   // 新しい形式のイベントを発行したときに、古い形式のイベントも発行
   eventEmitter.on(`${component}:${action}`, (data) => {
     eventEmitter.emit(oldEventName, data);
-    // 警告ログを出力（開発環境のみ）
-    if (process.env.NODE_ENV === 'development') {
-      console.warn(`非推奨のイベント名 ${oldEventName} が使用されています。代わりに ${component}:${action} を使用してください。`);
+  });
+  
+  // 古い形式のイベントを発行したときに、新しい形式のイベントも発行
+  eventEmitter.on(oldEventName, (data) => {
+    if (typeof eventEmitter.emitStandardized === 'function') {
+      eventEmitter.emitStandardized(component, action, data);
+    } else {
+      eventEmitter.emit(`${component}:${action}`, data);
     }
   });
+  
+  // 警告ログを出力（開発環境のみ）
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(`非推奨のイベント名 ${oldEventName} が使用されています。代わりに ${component}:${action} を使用してください。`);
+  }
 }
 
 /**
@@ -77,15 +87,20 @@ function emitStandardizedEvent(eventEmitter, component, action, data = {}, bridg
     if (typeof eventEmitter.emitStandardized === 'function') {
       eventEmitter.emitStandardized(component, action, standardizedData);
       
-      if (eventEmitter.debugMode) {
+      if (eventEmitter.debugMode && eventEmitter.logger) {
         eventEmitter.logger.debug(`標準化されたイベントを発行: ${standardEvent}`, debugInfo);
       }
     } else {
       // 後方互換性のため
       eventEmitter.emit(standardEvent, standardizedData);
       
-      if (eventEmitter.debugMode) {
+      if (eventEmitter.debugMode && eventEmitter.logger) {
         eventEmitter.logger.debug(`イベントを発行: ${standardEvent}`, debugInfo);
+      }
+      
+      // 警告ログを出力（開発環境のみ）
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`非推奨のイベント名 ${standardEvent} が使用されています。emitStandardized メソッドを使用してください。`);
       }
     }
     
