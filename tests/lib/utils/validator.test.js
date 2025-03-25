@@ -297,6 +297,69 @@ describe('Validator', () => {
         expect(result.errors).toContain('project_state_summary の必須フィールドがありません');
       });
       
+    // project_state_summary の追加テスト
+    describe('project_state_summary 追加テスト', () => {
+      test('project_state_summary がない場合、エラーを返さない', () => {
+        // Arrange
+        const sessionWithoutSummary = {
+          session_handover: {
+            project_id: 'P001',
+            session_id: 'S001',
+            session_timestamp: '2023-01-01T00:00:00Z'
+            // project_state_summary がない
+          }
+        };
+
+        // Act
+        const result = validator.validateSessionInput(sessionWithoutSummary);
+
+        // Assert
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('必須フィールド project_state_summary がありません');
+      });
+
+      test('project_state_summary が null の場合、エラーを返さない', () => {
+        // Arrange
+        const sessionWithNullSummary = {
+          session_handover: {
+            project_id: 'P001',
+            session_id: 'S001',
+            session_timestamp: '2023-01-01T00:00:00Z',
+            project_state_summary: null
+          }
+        };
+
+        // Act
+        const result = validator.validateSessionInput(sessionWithNullSummary);
+
+        // Assert
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('必須フィールド project_state_summary がありません');
+      });
+
+      test('project_state_summary の構造が不正な場合、エラーを返す', () => {
+        // Arrange
+        const invalidSession = {
+          session_handover: {
+            project_id: 'P001',
+            session_id: 'S001',
+            session_timestamp: '2023-01-01T00:00:00Z',
+            project_state_summary: {
+              completed_tasks: 'not an array', // 不正な形式
+              current_tasks: [],
+              pending_tasks: []
+            }
+          }
+        };
+
+        // Act
+        const result = validator.validateSessionInput(invalidSession);
+
+        // Assert
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('project_state_summary の必須フィールドがありません');
+      });
+    });
       // タスクIDのテスト
       test('タスクIDが無効な形式の場合、エラーを返す', () => {
         // Arrange
