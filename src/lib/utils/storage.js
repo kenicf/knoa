@@ -534,7 +534,8 @@ class StorageService {
       const nativeFilePath = process.platform === 'win32' ? filePath.replace(/\//g, '\\') : filePath;
       
       if (!fs.existsSync(nativeFilePath)) {
-        return null; // 既に存在しない場合はnullを返す（テストの期待値に合わせる）
+        this._emitEvent('file:not_found', { directory, filename });
+        return false; // 既に存在しない場合はfalseを返す
       }
       
       fs.unlinkSync(nativeFilePath);
@@ -549,7 +550,7 @@ class StorageService {
         directory,
         filename,
         operation: 'deleteFile'
-      });
+      }) || false; // エラー時は必ずfalseを返す
     }
   }
 
@@ -568,7 +569,8 @@ class StorageService {
       const nativeDirPath = process.platform === 'win32' ? dirPath.replace(/\//g, '\\') : dirPath;
       
       if (!fs.existsSync(nativeDirPath)) {
-        return true; // 既に存在しない場合は成功とみなす
+        this._emitEvent('directory:not_found', { directory });
+        return false; // 既に存在しない場合はfalseを返す
       }
       
       if (recursive) {
@@ -611,6 +613,13 @@ class StorageService {
       this._emitEvent('file:copy:before', { sourceDir, sourceFile, destDir, destFile });
       
       const sourcePath = this.getFilePath(sourceDir, sourceFile);
+      
+      // ソースファイルの存在確認を追加
+      if (!fs.existsSync(sourcePath)) {
+        this._emitEvent('file:not_found', { directory: sourceDir, filename: sourceFile });
+        return false; // 存在しない場合はfalseを返す
+      }
+      
       const destPath = this.getFilePath(destDir, destFile);
       
       // ディレクトリが存在しない場合は作成
@@ -621,8 +630,8 @@ class StorageService {
       
       this._emitEvent('file:copy:after', { sourceDir, sourceFile, destDir, destFile, success: true });
       
-      // 成功時はnullを返す（テストの期待値に合わせる）
-      return null;
+      // 成功時はtrueを返す
+      return true;
     } catch (error) {
       this._emitEvent('file:copy:after', { sourceDir, sourceFile, destDir, destFile, success: false, error });
       
@@ -632,7 +641,7 @@ class StorageService {
         destDir,
         destFile,
         operation: 'copyFile'
-      });
+      }) || false; // エラー時は必ずfalseを返す
     }
   }
 
@@ -702,7 +711,8 @@ class StorageService {
       } else if (context.operation === 'listFiles') {
         return [];
       } else if (context.operation === 'writeJSON' || context.operation === 'writeText' ||
-                 context.operation === 'fileExists') {
+                 context.operation === 'fileExists' || context.operation === 'deleteFile' ||
+                 context.operation === 'copyFile' || context.operation === 'deleteDirectory') {
         return false;
       } else {
         return null;
@@ -745,18 +755,28 @@ class StorageService {
    * @private
    */
   _removeDirectoryRecursive(dirPath) {
-    if (fs.existsSync(dirPath)) {
-      fs.readdirSync(dirPath).forEach((file) => {
-        const curPath = path.join(dirPath, file);
-        if (fs.lstatSync(curPath).isDirectory()) {
-          // 再帰的に削除
-          this._removeDirectoryRecursive(curPath);
-        } else {
-          // ファイルを削除
-          fs.unlinkSync(curPath);
-        }
+    try {
+      if (fs.existsSync(dirPath)) {
+        fs.readdirSync(dirPath).forEach((file) => {
+          const curPath = path.join(dirPath, file);
+          if (fs.lstatSync(curPath).isDirectory()) {
+            // 再帰的に削除
+            this._removeDirectoryRecursive(curPath);
+          } else {
+            // ファイルを削除
+            fs.unlinkSync(curPath);
+          }
+        });
+        fs.rmdirSync(dirPath);
+      }
+    } catch (error) {
+      // エラーが発生した場合はログに出力
+      this.logger.error('ディレクトリの再帰的削除中にエラーが発生しました:', {
+        directory: dirPath,
+        error_name: error.name,
+        error_message: error.message,
+        stack: error.stack
       });
-      fs.rmdirSync(dirPath);
     }
   }
 }

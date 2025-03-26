@@ -74,22 +74,12 @@ describe('Logger', () => {
   });
   
   describe('constructor', () => {
-    test.each([
-      ['デフォルト値', undefined, 'info', 1, 'console', undefined],
-      ['カスタム値', {
-        level: 'warn',
-        transports: [mockTransport],
-        contextProviders: { user: () => 'testUser' },
-        eventEmitter: mockEventEmitter,
-        traceIdGenerator: () => 'custom-trace-id',
-        requestIdGenerator: () => 'custom-request-id'
-      }, 'warn', 1, 'mock', mockEventEmitter]
-    ])('%s で初期化される', (_, options, expectedLevel, expectedTransportsLength, expectedTransportType, expectedEventEmitter) => {
+    test('デフォルト値で初期化される', () => {
       // Arrange & Act
-      const instance = new Logger(options);
-      
+      const instance = new Logger();
+
       // Assert
-      expect(instance.level).toBe(expectedLevel);
+      expect(instance.level).toBe('info');
       expect(instance.levels).toEqual({
         debug: 0,
         info: 1,
@@ -97,26 +87,66 @@ describe('Logger', () => {
         error: 3,
         fatal: 4
       });
-      expect(instance.transports).toHaveLength(expectedTransportsLength);
-      expect(instance.transports[0].type).toBe(expectedTransportType);
-      
-      if (options && options.contextProviders) {
-        expect(instance.contextProviders).toEqual(options.contextProviders);
-      } else {
-        expect(instance.contextProviders).toEqual({});
-      }
-      
-      expect(instance.eventEmitter).toBe(expectedEventEmitter);
+      expect(instance.transports).toHaveLength(1);
+      expect(instance.transports[0].type).toBe('console');
+      expect(instance.contextProviders).toEqual({});
+      expect(instance.eventEmitter).toBeUndefined();
       expect(instance.traceIdGenerator).toBeInstanceOf(Function);
       expect(instance.requestIdGenerator).toBeInstanceOf(Function);
+    });
+
+    test('カスタム値で初期化される', () => {
+      // Arrange
+      const customTransport = {
+        type: 'mock',
+        write: jest.fn()
+      };
+      const options = {
+        level: 'warn',
+        transports: [customTransport],
+        contextProviders: { user: () => 'testUser' },
+        eventEmitter: mockEventEmitter,
+        traceIdGenerator: () => 'custom-trace-id',
+        requestIdGenerator: () => 'custom-request-id'
+      };
+
+      // Act
+      const instance = new Logger(options);
+
+      // Assert
+      expect(instance.level).toBe('warn');
+      expect(instance.levels).toEqual({
+        debug: 0,
+        info: 1,
+        warn: 2,
+        error: 3,
+        fatal: 4
+      });
+      expect(instance.transports).toHaveLength(1);
+      expect(instance.transports[0].type).toBe('mock');
+      expect(instance.contextProviders).toEqual({ user: expect.any(Function) });
+      expect(instance.eventEmitter).toBe(mockEventEmitter);
+      expect(instance.traceIdGenerator()).toBe('custom-trace-id');
+      expect(instance.requestIdGenerator()).toBe('custom-request-id');
+    });
+
+    test('levels プロパティが不変であることを確認', () => {
+      const instance = new Logger();
+      expect(instance.levels).toEqual({
+        debug: 0,
+        info: 1,
+        warn: 2,
+        error: 3,
+        fatal: 4
+      });
+
+      // levels が変更できないことを確認
+      expect(() => {
+        instance.levels.debug = 10;
+      }).toThrow(TypeError);
       
-      if (options && options.traceIdGenerator) {
-        expect(instance.traceIdGenerator()).toBe('custom-trace-id');
-      }
-      
-      if (options && options.requestIdGenerator) {
-        expect(instance.requestIdGenerator()).toBe('custom-request-id');
-      }
+      // 元の値が保持されていることを確認
+      expect(instance.levels.debug).toBe(0);
     });
     
     test('デフォルトのトレースIDとリクエストID生成関数が正しく動作する', () => {

@@ -216,7 +216,8 @@ class PluginManager {
                typeof pluginImplementation.load === 'function';
       default:
         // 汎用プラグインの場合は最低限のチェックのみ
-        return true;
+        // 空のオブジェクトは無効とする
+        return Object.keys(pluginImplementation).length > 0;
     }
   }
 }

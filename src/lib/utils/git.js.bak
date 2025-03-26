@@ -593,20 +593,15 @@ class GitService {
     try {
       this._emitEvent('command:execute:before', { command });
       
-      // コマンド文字列の形式を修正（git を付けない）
-      const execOptions = {
-        cwd: this.repoPath,
-        encoding: 'utf8'
-      };
-      
-      const output = execSync(command, execOptions).toString().trim();
+      const fullCommand = `git ${command}`;
+      const output = this._executeCommand(fullCommand);
       
       this._emitEvent('command:execute:after', { command, success: true });
       
       // イベントを発行
       if (this.eventEmitter) {
         this.eventEmitter.emit('git:command_executed', {
-          command,
+          command: fullCommand,
           timestamp: new Date().toISOString()
         });
       }
@@ -615,7 +610,7 @@ class GitService {
     } catch (error) {
       this._emitEvent('command:execute:after', { command, success: false, error });
       
-      return this._handleError('Gitコマンド実行に失敗しました', error, {
+      return this._handleError(`Gitコマンド実行に失敗しました: ${command}`, error, {
         command,
         operation: '_execGit'
       });
@@ -629,19 +624,19 @@ class GitService {
    */
   stageFiles(files) {
     try {
-      this._emitEvent('stage:before', { files });
+      this._emitEvent('files:stage:before', { files });
       
-      const fileList = Array.isArray(files) ? files.map(f => `"${f}"`).join(' ') : `"${files}"`;
+      const fileList = Array.isArray(files) ? files.join(' ') : files;
       const command = `git add ${fileList}`;
-      this._execGit(command);
+      this._executeCommand(command);
       
-      this._emitEvent('stage:after', { files, success: true });
+      this._emitEvent('files:stage:after', { files, success: true });
       
       return true;
     } catch (error) {
-      this._emitEvent('stage:after', { files, success: false, error });
+      this._emitEvent('files:stage:after', { files, success: false, error });
       
-      return this._handleError('ファイルのステージに失敗しました', error, {
+      return this._handleError('ファイルのステージングに失敗しました', error, {
         files,
         operation: 'stageFiles'
       });
@@ -651,31 +646,21 @@ class GitService {
   /**
    * コミットを作成
    * @param {string} message - コミットメッセージ
-   * @returns {boolean} 成功したかどうか
+   * @returns {string} コミットハッシュ
    */
   createCommit(message) {
     try {
-      // 空のコミットメッセージをチェック
-      if (!message || message.trim() === '') {
-        const error = new Error('コミットメッセージが空です');
-        this._emitEvent('commit:create:after', { message, success: false, error });
-        return this._handleError('コミットの作成に失敗しました', error, {
-          message,
-          operation: 'createCommit'
-        });
-      }
-      
       this._emitEvent('commit:create:before', { message });
       
       const command = `git commit -m "${message}"`;
-      this._execGit(command);
+      this._executeCommand(command);
       
       // コミットハッシュを取得
       const hash = this.getCurrentCommitHash();
       
       this._emitEvent('commit:create:after', { message, hash, success: true });
       
-      return true; // テストの期待に合わせて戻り値を変更
+      return hash;
     } catch (error) {
       this._emitEvent('commit:create:after', { message, success: false, error });
       

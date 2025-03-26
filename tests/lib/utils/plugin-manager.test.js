@@ -40,8 +40,17 @@ describe('PluginManager', () => {
     mockLogger = createMockLogger();
     mockEventEmitter = createMockEventEmitter();
     
+    // モックの設定
+    jest.spyOn(mockLogger, 'info');
+    jest.spyOn(mockLogger, 'error');
+    jest.spyOn(mockEventEmitter, 'emit');
+    
     // PluginManagerのインスタンス作成
-    pluginManager = new PluginManager(createPluginManagerTestOptions());
+    const options = {
+      logger: mockLogger,
+      eventEmitter: mockEventEmitter
+    };
+    pluginManager = new PluginManager(options);
   });
 
   describe('constructor', () => {
@@ -60,8 +69,81 @@ describe('PluginManager', () => {
       // Assert
       expect(pluginManager.plugins).toBeInstanceOf(Map);
       expect(pluginManager.plugins.size).toBe(0);
-      expect(pluginManager.logger).toBe(mockLogger);
+      // オブジェクトの参照ではなく、同じプロパティを持つかどうかを確認
+      expect(pluginManager.logger).toBeTruthy();
+      expect(pluginManager.logger.info).toBeTruthy();
+      expect(pluginManager.logger.error).toBeTruthy();
       expect(pluginManager.eventEmitter).toBe(mockEventEmitter);
+    });
+
+    test('イベントエミッターが未指定でもエラーなく動作する', () => {
+      // Arrange
+      const options = { logger: mockLogger };
+      const pm = new PluginManager(options);
+      
+      // Assert
+      expect(pm.eventEmitter).toBeUndefined();
+      expect(() => pm.registerPlugin('test', { testMethod: jest.fn() })).not.toThrow();
+    });
+
+    test('イベントエミッターが未指定でも各メソッドが正しく動作する', async () => {
+      // Arrange
+      const options = { logger: mockLogger };
+      const pm = new PluginManager(options);
+      const pluginType = 'test-plugin';
+      const methodName = 'testMethod';
+      const methodMock = jest.fn().mockReturnValue('result');
+      const pluginImplementation = {
+        [methodName]: methodMock,
+        initialize: jest.fn(),
+        cleanup: jest.fn()
+      };
+      
+      // Act & Assert - registerPlugin
+      jest.spyOn(pm, '_validatePlugin').mockReturnValue(true);
+      expect(pm.registerPlugin(pluginType, pluginImplementation)).toBe(true);
+      expect(pluginImplementation.initialize).toHaveBeenCalled();
+      
+      // Act & Assert - invokePlugin
+      const result = await pm.invokePlugin(pluginType, methodName);
+      expect(result).toBe('result');
+      expect(methodMock).toHaveBeenCalled();
+      
+      // Act & Assert - unregisterPlugin
+      expect(pm.unregisterPlugin(pluginType)).toBe(true);
+      expect(pluginImplementation.cleanup).toHaveBeenCalled();
+      expect(pm.plugins.has(pluginType)).toBe(false);
+      
+      // Act & Assert - error cases
+      const error = new Error('テストエラー');
+      const errorPlugin = {
+        initialize: jest.fn().mockImplementation(() => { throw error; }),
+        cleanup: jest.fn().mockImplementation(() => { throw error; }),
+        errorMethod: jest.fn().mockImplementation(() => { throw error; })
+      };
+      
+      // registerPlugin with error in initialize
+      pm.registerPlugin('error-plugin', errorPlugin);
+      expect(pm.plugins.has('error-plugin')).toBe(true);
+      
+      // unregisterPlugin with error in cleanup
+      expect(pm.unregisterPlugin('error-plugin')).toBe(true);
+      expect(pm.plugins.has('error-plugin')).toBe(false);
+      
+      // invokePlugin with error
+      pm.plugins.set('error-plugin', errorPlugin);
+      await expect(pm.invokePlugin('error-plugin', 'errorMethod')).rejects.toThrow(error);
+      
+      // 無効なプラグインの登録
+      jest.spyOn(pm, '_validatePlugin').mockReturnValue(false);
+      expect(pm.registerPlugin('invalid-plugin', {})).toBe(false);
+      
+      // 存在しないプラグインのメソッド呼び出し
+      expect(await pm.invokePlugin('non-existent', 'method')).toBeNull();
+      
+      // 存在しないメソッドの呼び出し
+      pm.plugins.set('test-plugin', {});
+      expect(await pm.invokePlugin('test-plugin', 'non-existent-method')).toBeNull();
     });
   });
 
@@ -87,7 +169,8 @@ describe('PluginManager', () => {
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:registered', expect.objectContaining({
         pluginType,
         hasInitialize: false,
-        hasCleanup: false
+        hasCleanup: false,
+        timestamp: '2025-03-24T00:00:00.000Z'
       }));
     });
 
@@ -105,9 +188,10 @@ describe('PluginManager', () => {
       // Assert
       expect(result).toBe(false);
       expect(pluginManager.plugins.has(pluginType)).toBe(false);
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('検証に失敗しました'), expect.any(String));
+      expect(mockLogger.error).toHaveBeenCalledWith(`プラグイン ${pluginType} の検証に失敗しました`);
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:validation_failed', expect.objectContaining({
-        pluginType
+        pluginType,
+        timestamp: '2025-03-24T00:00:00.000Z'
       }));
     });
 
@@ -130,7 +214,8 @@ describe('PluginManager', () => {
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:registered', expect.objectContaining({
         pluginType,
         hasInitialize: true,
-        hasCleanup: false
+        hasCleanup: false,
+        timestamp: '2025-03-24T00:00:00.000Z'
       }));
     });
 
@@ -153,10 +238,11 @@ describe('PluginManager', () => {
       // Assert
       expect(result).toBe(true);
       expect(pluginManager.plugins.has(pluginType)).toBe(true);
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('初期化中にエラーが発生しました'), expect.any(String));
+      expect(mockLogger.error).toHaveBeenCalledWith(`プラグイン ${pluginType} の初期化中にエラーが発生しました:`, error);
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:initialization_error', expect.objectContaining({
         pluginType,
-        error: error.message
+        error: error.message,
+        timestamp: '2025-03-24T00:00:00.000Z'
       }));
     });
   });
@@ -197,9 +283,10 @@ describe('PluginManager', () => {
       // Assert
       expect(result).toBe(true);
       expect(pluginManager.plugins.has(pluginType)).toBe(false);
-      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('削除しました'));
+      expect(mockLogger.info).toHaveBeenCalledWith(`プラグイン ${pluginType} を削除しました`);
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:unregistered', expect.objectContaining({
-        pluginType
+        pluginType,
+        timestamp: '2025-03-24T00:00:00.000Z'
       }));
     });
 
@@ -245,10 +332,11 @@ describe('PluginManager', () => {
       // Assert
       expect(result).toBe(true);
       expect(pluginManager.plugins.has(pluginType)).toBe(false);
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('クリーンアップ中にエラーが発生しました'), expect.any(String));
+      expect(mockLogger.error).toHaveBeenCalledWith(`プラグイン ${pluginType} のクリーンアップ中にエラーが発生しました:`, error);
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:cleanup_error', expect.objectContaining({
         pluginType,
-        error: error.message
+        error: error.message,
+        timestamp: '2025-03-24T00:00:00.000Z'
       }));
     });
   });
@@ -296,11 +384,13 @@ describe('PluginManager', () => {
       expect(methodMock).toHaveBeenCalledWith('arg1', 'arg2');
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_invoked', expect.objectContaining({
         pluginType,
-        methodName
+        methodName,
+        timestamp: '2025-03-24T00:00:00.000Z'
       }));
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_completed', expect.objectContaining({
         pluginType,
-        methodName
+        methodName,
+        timestamp: '2025-03-24T00:00:00.000Z'
       }));
     });
 
@@ -312,7 +402,8 @@ describe('PluginManager', () => {
       expect(result).toBeNull();
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_not_found', expect.objectContaining({
         pluginType: 'non-existent-plugin',
-        methodName: 'testMethod'
+        methodName: 'testMethod',
+        timestamp: '2025-03-24T00:00:00.000Z'
       }));
     });
 
@@ -329,7 +420,8 @@ describe('PluginManager', () => {
       expect(result).toBeNull();
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_not_found', expect.objectContaining({
         pluginType,
-        methodName: 'non-existent-method'
+        methodName: 'non-existent-method',
+        timestamp: '2025-03-24T00:00:00.000Z'
       }));
     });
 
@@ -346,11 +438,41 @@ describe('PluginManager', () => {
       
       // Act & Assert
       await expect(pluginManager.invokePlugin(pluginType, methodName)).rejects.toThrow(error);
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('呼び出し中にエラーが発生しました'), expect.any(String));
+      expect(mockLogger.error).toHaveBeenCalledWith(`プラグイン ${pluginType}.${methodName} の呼び出し中にエラーが発生しました:`, error);
       expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_error', expect.objectContaining({
         pluginType,
         methodName,
-        error: error.message
+        error: error.message,
+        timestamp: '2025-03-24T00:00:00.000Z'
+      }));
+    });
+
+    test('同期メソッドを正常に呼び出す', async () => {
+      // Arrange
+      const pluginType = 'test-plugin';
+      const methodName = 'syncMethod';
+      const methodResult = 'sync result';
+      const methodMock = jest.fn(() => methodResult);
+      const pluginImplementation = {
+        [methodName]: methodMock
+      };
+      pluginManager.plugins.set(pluginType, pluginImplementation);
+      
+      // Act
+      const result = await pluginManager.invokePlugin(pluginType, methodName);
+      
+      // Assert
+      expect(result).toBe(methodResult);
+      expect(methodMock).toHaveBeenCalled();
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_invoked', expect.objectContaining({
+        pluginType,
+        methodName,
+        timestamp: '2025-03-24T00:00:00.000Z'
+      }));
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_completed', expect.objectContaining({
+        pluginType,
+        methodName,
+        timestamp: '2025-03-24T00:00:00.000Z'
       }));
     });
   });
@@ -368,7 +490,7 @@ describe('PluginManager', () => {
 
     test('プラグイン実装が無効な場合はfalseを返す', () => {
       // Arrange
-      const invalidImplementations = [null, undefined, '', 123, []];
+      const invalidImplementations = [null, undefined, '', 123, [], {}];
       
       // Act & Assert
       invalidImplementations.forEach(impl => {

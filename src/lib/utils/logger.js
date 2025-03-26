@@ -14,13 +14,13 @@ class Logger {
    */
   constructor(options = {}) {
     this.level = options.level || 'info';
-    this.levels = {
+    this.levels = Object.freeze({
       debug: 0,
       info: 1,
       warn: 2,
       error: 3,
       fatal: 4
-    };
+    });
     
     this.transports = options.transports || [
       {
