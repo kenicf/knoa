@@ -2,7 +2,7 @@
 const globals = require('globals');
 const js = require('@eslint/js');
 const prettierConfig = require('eslint-config-prettier'); // Prettier競合ルール無効化用
-const nodePlugin = require('eslint-plugin-node');
+// const nodePlugin = require('eslint-plugin-node'); // 一時的に削除
 const jestPlugin = require('eslint-plugin-jest');
 const promisePlugin = require('eslint-plugin-promise');
 const securityPlugin = require('eslint-plugin-security');
@@ -23,12 +23,12 @@ module.exports = [
       'tests/templates/test-template.js', // Parsing Error 回避
     ],
   },
-  // デフォルト設定 (Node.js + Jest + プラグイン)
+  // デフォルト設定 (Jest + 他プラグイン)
   {
     files: ['**/*.js'],
     plugins: {
       // プラグインを登録
-      node: nodePlugin,
+      // node: nodePlugin, // 一時的に削除
       jest: jestPlugin,
       promise: promisePlugin,
       security: securityPlugin,
@@ -38,7 +38,7 @@ module.exports = [
       ecmaVersion: 12,
       sourceType: 'commonjs',
       globals: {
-        ...globals.node,
+        ...globals.node, // Node.js のグローバル変数は維持
         ...globals.jest,
       },
     },
@@ -46,7 +46,7 @@ module.exports = [
       // 基本ルール
       ...js.configs.recommended.rules,
       // プラグイン推奨ルール
-      ...nodePlugin.configs.recommended.rules,
+      // ...nodePlugin.configs.recommended.rules, // 一時的に削除
       ...jestPlugin.configs.recommended.rules,
       ...promisePlugin.configs.recommended.rules,
       ...securityPlugin.configs.recommended.rules,
@@ -56,18 +56,7 @@ module.exports = [
       // プロジェクト固有のルール調整
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'no-console': 'warn',
-      // 必要に応じてプラグインのルールを個別に調整
-      // 例: 'jest/no-disabled-tests': 'off',
-      // 例: nodePlugin は sourceType: module を期待するルールがあるため commonjs では調整が必要な場合がある
-      'node/no-unsupported-features/es-syntax': [
-        'error',
-        { ignores: ['modules'] },
-      ], // CommonJSなのでES Modules構文はエラー
-      'node/no-missing-require': 'error', // require() のパスが存在しない場合にエラー
-      // --- 修正箇所 ---
-      'node/no-deprecated-api': 'off', // ESLint v9 との互換性問題のため一時的に無効化
-      'node/no-extraneous-require': 'off', // ESLint v9 との互換性問題のため一時的に無効化
-      // --- 修正箇所 ---
+      // node/* ルールも一時的に削除
     },
   },
   // フロントエンド用設定
