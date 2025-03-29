@@ -66,6 +66,7 @@ module.exports = [
       'node/no-missing-require': 'error', // require() のパスが存在しない場合にエラー
       // --- 修正箇所 ---
       'node/no-deprecated-api': 'off', // ESLint v9 との互換性問題のため一時的に無効化
+      'node/no-extraneous-require': 'off', // ESLint v9 との互換性問題のため一時的に無効化
       // --- 修正箇所 ---
     },
   },
