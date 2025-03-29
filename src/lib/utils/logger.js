@@ -61,8 +61,10 @@ class Logger {
    * @param {Object} [context] - コンテキスト情報
    */
   log(level, message, context = {}) {
+    // level が levels オブジェクト自身のプロパティであることを確認
     if (
-      this.levels[level] === undefined ||
+      !Object.prototype.hasOwnProperty.call(this.levels, level) ||
+      // eslint-disable-next-line security/detect-object-injection
       this.levels[level] < this.levels[this.level]
     ) {
       return;
@@ -92,10 +94,14 @@ class Logger {
 
     // 追加コンテキスト情報
     for (const [key, provider] of Object.entries(this.contextProviders)) {
-      try {
-        entry.context[key] = provider();
-      } catch (error) {
-        entry.context[`${key}_error`] = error.message;
+      // 安全でないキーへの代入を防ぐ
+      if (key !== '__proto__' && key !== 'constructor') {
+        try {
+          // eslint-disable-next-line security/detect-object-injection
+          entry.context[key] = provider();
+        } catch (error) {
+          entry.context[`${key}_error`] = error.message;
+        }
       }
     }
 

@@ -119,11 +119,16 @@ class PluginManager {
    * @returns {Promise<*>} メソッドの戻り値
    */
   async invokePlugin(pluginType, methodName, ...args) {
-    const plugin = this.plugins.get(pluginType);
+    const plugin = this.plugins.get(pluginType); // Map.get は安全
     const traceId = this._traceIdGenerator(); // 各イベントで共通のIDを使用
     const requestId = this._requestIdGenerator();
 
-    if (!plugin || typeof plugin[methodName] !== 'function') {
+    // methodName が plugin 自身のプロパティであり、かつ関数であることを確認
+    if (
+      !plugin ||
+      !Object.prototype.hasOwnProperty.call(plugin, methodName) ||
+      typeof plugin[methodName] !== 'function'
+    ) {
       if (
         this.eventEmitter &&
         typeof this.eventEmitter.emitStandardized === 'function'
@@ -157,6 +162,7 @@ class PluginManager {
         });
       }
 
+      // eslint-disable-next-line security/detect-object-injection
       const result = await plugin[methodName](...args);
 
       if (

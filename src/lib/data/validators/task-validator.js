@@ -68,6 +68,7 @@ class TaskValidator {
       'dependencies',
     ];
     for (const field of requiredFields) {
+      // eslint-disable-next-line security/detect-object-injection
       if (!task[field]) {
         errors.push(`${field}は必須フィールドです`);
       }
@@ -128,11 +129,14 @@ class TaskValidator {
     }
 
     // 依存関係の検証
+
     if (task.dependencies && Array.isArray(task.dependencies)) {
       for (let i = 0; i < task.dependencies.length; i++) {
+        // eslint-disable-next-line security/detect-object-injection
         const dep = task.dependencies[i];
 
         // task_idの検証
+
         if (!dep.task_id) {
           errors.push(`依存関係[${i}]のtask_idは必須です`);
         } else if (!dep.task_id.match(/^T[0-9]{3}$/)) {
@@ -176,6 +180,7 @@ class TaskValidator {
     }
 
     // epicsの検証
+
     if (!hierarchy.epics || !Array.isArray(hierarchy.epics)) {
       errors.push('epicsは配列である必要があります');
     } else {
@@ -183,6 +188,7 @@ class TaskValidator {
         const epic = hierarchy.epics[i];
 
         // epic_idの検証
+
         if (!epic.epic_id) {
           errors.push(`epic[${i}]のepic_idは必須です`);
         } else if (!epic.epic_id.match(/^E[0-9]{3}$/)) {
@@ -195,6 +201,7 @@ class TaskValidator {
         }
 
         // storiesの検証
+
         if (!epic.stories || !Array.isArray(epic.stories)) {
           errors.push(`epic[${i}]のstoriesは配列である必要があります`);
         } else {
@@ -213,6 +220,7 @@ class TaskValidator {
     }
 
     // storiesの検証
+
     if (!hierarchy.stories || !Array.isArray(hierarchy.stories)) {
       errors.push('storiesは配列である必要があります');
     } else {
@@ -227,15 +235,18 @@ class TaskValidator {
         }
 
         // titleの検証
+
         if (!story.title) {
           errors.push(`story[${i}]のtitleは必須です`);
         }
 
         // tasksの検証
+
         if (!story.tasks || !Array.isArray(story.tasks)) {
           errors.push(`story[${i}]のtasksは配列である必要があります`);
         } else {
           for (let j = 0; j < story.tasks.length; j++) {
+            // eslint-disable-next-line security/detect-object-injection
             const taskId = story.tasks[j];
 
             // task_idの検証

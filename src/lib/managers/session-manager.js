@@ -78,6 +78,7 @@ class SessionManager {
     // 必須フィールドのチェック
     const requiredFields = ['session_id', 'timestamp', 'project_state_summary'];
     for (const field of requiredFields) {
+      // eslint-disable-next-line security/detect-object-injection
       if (!handover[field]) {
         this.logger.error(`必須フィールド ${field} がありません`);
         return false;

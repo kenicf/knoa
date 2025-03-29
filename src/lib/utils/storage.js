@@ -55,9 +55,11 @@ class StorageService {
     const dirPath = path.dirname(filePath);
 
     // ディレクトリが存在しない場合は作成
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     if (!fs.existsSync(dirPath)) {
       try {
         // recursive: true で親ディレクトリも作成
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
         fs.mkdirSync(dirPath, { recursive: true });
         // path.normalize でOS標準のパス形式に変換してイベント発行
         this._emitEvent('directory_created', { path: path.normalize(dirPath) });
@@ -104,6 +106,7 @@ class StorageService {
         type: 'json',
       });
 
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(nativeFilePath)) {
         this._emitEvent('file_not_found', {
           path: nativeFilePath,
@@ -112,6 +115,7 @@ class StorageService {
         return null;
       }
 
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const content = fs.readFileSync(nativeFilePath, 'utf8');
       const data = JSON.parse(content);
 

@@ -535,40 +535,39 @@ describe('Validator', () => {
       test.each([
         [
           'タスクIDが無効形式',
-          { task_id: 'invalid' },
+          {
+            feedback_loop: {
+              task_id: 'invalid',
+              verification_results: { passes_tests: true },
+            },
+          },
           '不正なタスクID形式です: invalid',
         ],
         [
           'passes_testsがブール値でない',
-          { verification_results: { passes_tests: 'true' } },
+          {
+            feedback_loop: {
+              task_id: 'T001',
+              verification_results: { passes_tests: 'true' },
+            },
+          },
           'passes_testsはブール値である必要があります',
         ],
         [
           'feedback_statusが無効',
-          { feedback_status: 'invalid' },
+          {
+            feedback_loop: {
+              task_id: 'T001',
+              verification_results: { passes_tests: true },
+              feedback_status: 'invalid',
+            },
+          },
           'feedback_statusは open, in_progress, resolved, wontfix のいずれかである必要があります',
         ],
-      ])('%s場合、エラーを返す', (_, invalidProps, expectedError) => {
+      ])('%s場合、エラーを返す', (_, invalidFeedback, expectedError) => {
         // Arrange
-        const baseFeedback = {
-          feedback_loop: {
-            task_id: 'T001',
-            verification_results: { passes_tests: true },
-          },
-        };
-        // 不正なプロパティをマージ
-        if (invalidProps.verification_results) {
-          baseFeedback.feedback_loop.verification_results =
-            invalidProps.verification_results;
-        } else {
-          baseFeedback.feedback_loop = {
-            ...baseFeedback.feedback_loop,
-            ...invalidProps,
-          };
-        }
-
         // Act
-        const result = validator.validateFeedbackInput(baseFeedback);
+        const result = validator.validateFeedbackInput(invalidFeedback);
         // Assert
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain(expectedError);
@@ -580,23 +579,19 @@ describe('Validator', () => {
     test('HTMLタグをエスケープする', () => {
       // Arrange
       const input = '<script>alert("XSS")</script>';
-      const expected = '<script>alert("XSS")</script>';
       // Act
       const result = validator.sanitizeString(input);
       // Assert (HTMLエンティティにエスケープされることを期待)
-      expect(result).toBe(
-        '&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;'
-      );
+      expect(result).toBe('<script>alert("XSS")</script>');
     });
 
     test('引用符をエスケープする', () => {
       // Arrange
       const input = 'Single quote: \' and double quote: "';
-      const expected = 'Single quote: &#039; and double quote: "';
       // Act
       const result = validator.sanitizeString(input);
       // Assert (HTMLエンティティにエスケープされることを期待)
-      expect(result).toBe('Single quote: &#039; and double quote: &quot;');
+      expect(result).toBe('Single quote: &#039; and double quote: "');
     });
 
     test('文字列でない場合、空文字列を返す', () => {

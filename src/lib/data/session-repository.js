@@ -311,6 +311,7 @@ class SessionRepository extends Repository {
       'next_session_focus',
     ];
     for (const field of requiredFields) {
+      // eslint-disable-next-line security/detect-object-injection
       if (!handover[field]) {
         return false;
       }

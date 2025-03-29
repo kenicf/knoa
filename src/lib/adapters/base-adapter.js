@@ -132,7 +132,8 @@ class BaseAdapter {
     }
 
     for (const param of required) {
-      if (params[param] === undefined) {
+      // params オブジェクト自身がプロパティを持っているかを確認 (プロトタイプ汚染対策)
+      if (!Object.prototype.hasOwnProperty.call(params, param)) {
         throw new ValidationError(`Parameter '${param}' is required`);
       }
     }
@@ -217,9 +218,9 @@ class BaseAdapter {
 
       // 古いイベント名のサポート（オプション）
       if (bridgeOldEvents) {
-        const oldEventName = EVENT_MAP[standardEvent];
-
-        if (oldEventName) {
+        // EVENT_MAP 自身がプロパティを持っているかを確認 (プロトタイプ汚染対策)
+        if (Object.prototype.hasOwnProperty.call(EVENT_MAP, standardEvent)) {
+          const oldEventName = EVENT_MAP[standardEvent];
           this.eventEmitter.emit(oldEventName, enhancedData);
 
           // 警告ログを出力（開発環境のみ）

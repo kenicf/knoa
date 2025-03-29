@@ -92,7 +92,11 @@ class EnhancedEventEmitter {
   on(event, callback) {
     if (event.includes('*')) {
       // ワイルドカードリスナーとして登録
-      const pattern = new RegExp('^' + event.replace(/\*/g, '.*') + '$');
+      // 特殊文字をエスケープしてからワイルドカードを正規表現に変換
+      const escapedEvent = event.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(
+        '^' + escapedEvent.replace(/\\\*/g, '.*') + '$'
+      );
       const wildcardListener = { pattern, callback };
       this.wildcardListeners.push(wildcardListener);
 

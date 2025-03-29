@@ -494,6 +494,7 @@ async function generateReport(reportType, options) {
 
   // 出力ファイルが指定されている場合はファイルに保存
   if (options.output) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     fs.writeFileSync(options.output, report, 'utf8');
     console.log(colors.green('レポートを保存しました:'), options.output);
   } else {

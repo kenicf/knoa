@@ -211,6 +211,7 @@ class FeedbackRepository extends Repository {
         throw new NotFoundError(`Feedback with id ${feedbackId} not found`);
       }
 
+      // eslint-disable-next-line security/detect-object-injection
       const feedback = pendingFeedback[index];
 
       // 状態遷移の検証
@@ -234,7 +235,12 @@ class FeedbackRepository extends Repository {
         // バリデータがない場合は内部チェック
         if (
           currentStatus !== newStatus &&
-          !this.feedbackStateTransitions[currentStatus]?.includes(newStatus)
+          // feedbackStateTransitions 自身がプロパティを持っているかを確認
+          (!Object.prototype.hasOwnProperty.call(
+            this.feedbackStateTransitions,
+            currentStatus
+          ) ||
+            !this.feedbackStateTransitions[currentStatus]?.includes(newStatus))
         ) {
           throw new Error(
             `Transition from ${currentStatus} to ${newStatus} is not allowed`
@@ -243,8 +249,11 @@ class FeedbackRepository extends Repository {
       }
 
       // フィードバックを更新
+
       feedback.feedback_loop.status = newStatus;
+
       feedback.feedback_loop.resolution_details = resolutionDetails;
+
       feedback.feedback_loop.updated_at = new Date().toISOString();
 
       // 保存
@@ -335,6 +344,7 @@ class FeedbackRepository extends Repository {
       'status',
     ];
     for (const field of requiredFields) {
+      // eslint-disable-next-line security/detect-object-injection
       if (!loop[field]) {
         return false;
       }
@@ -387,6 +397,7 @@ class FeedbackRepository extends Repository {
       }
 
       // 状態別のカウント
+
       const statusCounts = {
         open: 0,
         in_progress: 0,
@@ -396,7 +407,9 @@ class FeedbackRepository extends Repository {
 
       for (const feedback of pendingFeedback) {
         const status = feedback.feedback_loop.status;
-        if (statusCounts[status] !== undefined) {
+        // statusCounts 自身がプロパティを持っているかを確認
+        if (Object.prototype.hasOwnProperty.call(statusCounts, status)) {
+          // eslint-disable-next-line security/detect-object-injection
           statusCounts[status]++;
         }
       }
@@ -407,7 +420,11 @@ class FeedbackRepository extends Repository {
       for (const feedback of [...pendingFeedback, ...historyFeedback]) {
         const type = feedback.feedback_loop.feedback_type;
         if (type) {
-          typeCounts[type] = (typeCounts[type] || 0) + 1;
+          // 安全でないキーへの代入を防ぐ
+          if (type !== '__proto__' && type !== 'constructor') {
+            // eslint-disable-next-line security/detect-object-injection
+            typeCounts[type] = (typeCounts[type] || 0) + 1;
+          }
         }
       }
 

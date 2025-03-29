@@ -209,8 +209,15 @@ class Repository {
         throw new NotFoundError(`${this.entityName} with id ${id} not found`);
       }
 
-      // エンティティを更新
-      const updatedEntity = { ...collection[index], ...data, id };
+      // エンティティを更新 (安全でないキーを除外)
+      const safeData = Object.keys(data).reduce((acc, key) => {
+        if (key !== '__proto__' && key !== 'constructor') {
+          acc[key] = data[key];
+        }
+        return acc;
+      }, {});
+      const updatedEntity = { ...collection[index], ...safeData, id };
+      // eslint-disable-next-line security/detect-object-injection
       collection[index] = updatedEntity;
       entities[`${this.entityName}s`] = collection;
 

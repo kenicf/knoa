@@ -121,6 +121,7 @@ class TaskManager {
     // 必須フィールドのチェック
     const requiredFields = ['id', 'title', 'description', 'priority', 'status'];
     for (const field of requiredFields) {
+      // eslint-disable-next-line security/detect-object-injection
       if (!task[field]) {
         errors.push(`必須フィールド ${field} がありません`);
       }

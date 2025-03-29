@@ -454,16 +454,18 @@ describe('FeedbackManagerAdapter', () => {
     });
 
     // 開発環境でのみ警告ログのテストを実行
-    if (process.env.NODE_ENV === 'development') {
-      test('開発環境では非推奨イベントの警告ログが出力される', async () => {
+    test.skipIf(process.env.NODE_ENV !== 'development')(
+      '開発環境では非推奨イベントの警告ログが出力される',
+      async () => {
         mockEventEmitter.on('feedback:created', jest.fn()); // リスナー登録が必要
         await adapter.createNewFeedback('T001', 1);
+        // eslint-disable-next-line jest/no-standalone-expect
         expect(mockLogger.warn).toHaveBeenCalledWith(
           expect.stringContaining('非推奨のイベント名'),
           expect.any(Object)
         );
-      });
-    }
+      }
+    );
   });
 
   // バリデーションのテスト

@@ -180,7 +180,10 @@ class TaskRepository extends Repository {
       }
 
       // 進捗状態の検証
-      if (!this.progressStates[newState]) {
+      // progressStates 自身がプロパティを持っているかを確認
+      if (
+        !Object.prototype.hasOwnProperty.call(this.progressStates, newState)
+      ) {
         throw new Error(`Invalid progress state: ${newState}`);
       }
 
@@ -188,7 +191,12 @@ class TaskRepository extends Repository {
       const currentState = task.progress_state || 'not_started';
       if (
         currentState !== newState &&
-        !this.stateTransitions[currentState].includes(newState)
+        // stateTransitions 自身がプロパティを持っているかを確認
+        (!Object.prototype.hasOwnProperty.call(
+          this.stateTransitions,
+          currentState
+        ) ||
+          !this.stateTransitions[currentState].includes(newState))
       ) {
         throw new Error(
           `Transition from ${currentState} to ${newState} is not allowed`
@@ -205,8 +213,17 @@ class TaskRepository extends Repository {
       if (customPercentage !== undefined) {
         updatedTask.progress_percentage = customPercentage;
       } else {
-        updatedTask.progress_percentage =
-          this.progressStates[newState].default_percentage;
+        // progressStates 自身がプロパティを持っているかを確認
+        if (
+          Object.prototype.hasOwnProperty.call(this.progressStates, newState)
+        ) {
+          updatedTask.progress_percentage =
+            this.progressStates[newState].default_percentage;
+        } else {
+          // newState が不正な場合はエラーにするか、デフォルト値を設定するか検討
+          // ここでは念のため 0 を設定
+          updatedTask.progress_percentage = 0;
+        }
       }
 
       // タスクのステータスを更新

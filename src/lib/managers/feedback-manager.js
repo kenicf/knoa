@@ -104,6 +104,7 @@ class FeedbackManager {
       'status',
     ];
     for (const field of requiredFields) {
+      // eslint-disable-next-line security/detect-object-injection
       if (!loop[field]) {
         this.logger.error(`必須フィールド ${field} がありません`);
         return false;

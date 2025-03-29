@@ -176,9 +176,12 @@ class EventMigrationHelper {
 
     // メソッドをラップ
     for (const methodName of Object.keys(methodToEventMap)) {
-      const originalMethod = originalObject[methodName];
-
-      if (typeof originalMethod === 'function') {
+      // methodName が originalObject 自身のプロパティであり、かつ関数であることを確認
+      if (
+        Object.prototype.hasOwnProperty.call(originalObject, methodName) &&
+        typeof originalObject[methodName] === 'function'
+      ) {
+        const originalMethod = originalObject[methodName];
         wrapper[methodName] = function (...args) {
           // 直接メソッド呼び出しをログ
           self.logDirectCall(component, methodName, args);
@@ -187,8 +190,15 @@ class EventMigrationHelper {
           const result = originalMethod.apply(originalObject, args);
 
           // 対応するイベントがあれば発行
-          const eventName = methodToEventMap[methodName];
-          if (eventName && self.eventEmitter) {
+          // methodName が methodToEventMap 自身のプロパティであることを確認
+          if (
+            Object.prototype.hasOwnProperty.call(
+              methodToEventMap,
+              methodName
+            ) &&
+            self.eventEmitter
+          ) {
+            const eventName = methodToEventMap[methodName];
             // メソッド名からイベントデータを生成
             const eventData = {};
 
@@ -201,7 +211,11 @@ class EventMigrationHelper {
               const paramNames = self._guessParamNames(methodName, args);
               args.forEach((arg, index) => {
                 if (index < paramNames.length) {
-                  eventData[paramNames[index]] = arg;
+                  const key = paramNames[index];
+                  // 安全でないキーへの代入を防ぐ
+                  if (key !== '__proto__' && key !== 'constructor') {
+                    eventData[key] = arg;
+                  }
                 }
               });
             }

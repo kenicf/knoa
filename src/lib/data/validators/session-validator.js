@@ -42,6 +42,7 @@ class SessionValidator {
       'next_session_focus',
     ];
     for (const field of requiredFields) {
+      // eslint-disable-next-line security/detect-object-injection
       if (!handover[field]) {
         errors.push(`必須フィールド ${field} がありません`);
       }
@@ -111,9 +112,11 @@ class SessionValidator {
         errors.push('key_artifacts は配列である必要があります');
       } else {
         for (let i = 0; i < handover.key_artifacts.length; i++) {
+          // eslint-disable-next-line security/detect-object-injection
           const artifact = handover.key_artifacts[i];
 
           // 必須フィールドのチェック
+
           if (!artifact.path) {
             errors.push(`key_artifacts[${i}].path は必須です`);
           }
@@ -152,7 +155,9 @@ class SessionValidator {
               );
             } else {
               const taskPattern = /^T[0-9]{3}$/;
+
               for (let j = 0; j < artifact.related_tasks.length; j++) {
+                // eslint-disable-next-line security/detect-object-injection
                 const taskId = artifact.related_tasks[j];
                 if (!taskPattern.test(taskId)) {
                   errors.push(
@@ -172,14 +177,17 @@ class SessionValidator {
         errors.push('git_changes はオブジェクトである必要があります');
       } else {
         // commitsのチェック
+
         if (handover.git_changes.commits !== undefined) {
           if (!Array.isArray(handover.git_changes.commits)) {
             errors.push('git_changes.commits は配列である必要があります');
           } else {
             for (let i = 0; i < handover.git_changes.commits.length; i++) {
+              // eslint-disable-next-line security/detect-object-injection
               const commit = handover.git_changes.commits[i];
 
               // 必須フィールドのチェック
+
               if (!commit.hash) {
                 errors.push(`git_changes.commits[${i}].hash は必須です`);
               }
@@ -193,6 +201,7 @@ class SessionValidator {
               }
 
               // related_tasksのチェック
+
               if (commit.related_tasks !== undefined) {
                 if (!Array.isArray(commit.related_tasks)) {
                   errors.push(
@@ -232,7 +241,9 @@ class SessionValidator {
             for (const field of numericFields) {
               if (
                 handover.git_changes.summary[field] !== undefined &&
+                // eslint-disable-next-line security/detect-object-injection
                 (typeof handover.git_changes.summary[field] !== 'number' ||
+                  // eslint-disable-next-line security/detect-object-injection
                   handover.git_changes.summary[field] < 0)
               ) {
                 errors.push(
@@ -297,6 +308,7 @@ class SessionValidator {
           }
 
           // related_tasksのチェック
+
           if (challenge.related_tasks !== undefined) {
             if (!Array.isArray(challenge.related_tasks)) {
               errors.push(
@@ -304,8 +316,11 @@ class SessionValidator {
               );
             } else {
               const taskPattern = /^T[0-9]{3}$/;
+
               for (let j = 0; j < challenge.related_tasks.length; j++) {
+                // eslint-disable-next-line security/detect-object-injection
                 const taskId = challenge.related_tasks[j];
+
                 if (!taskPattern.test(taskId)) {
                   errors.push(
                     `current_challenges[${i}].related_tasks[${j}] は T001 形式である必要があります`

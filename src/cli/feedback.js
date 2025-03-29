@@ -238,6 +238,7 @@ async function main() {
         const report = feedbackManager.generateFeedbackMarkdown(taskId);
         if (report) {
           if (outputPath) {
+            // eslint-disable-next-line security/detect-non-literal-fs-filename
             fs.writeFileSync(outputPath, report, 'utf8');
             console.log(`レポートを ${outputPath} に保存しました`);
           } else {

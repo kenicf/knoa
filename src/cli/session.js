@@ -293,6 +293,7 @@ async function main() {
           return;
         }
 
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
         fs.writeFileSync(outputPath, JSON.stringify(session, null, 2), 'utf8');
         console.log(
           colors.green(`セッション情報を ${outputPath} にエクスポートしました`)
@@ -321,11 +322,13 @@ async function main() {
       );
 
       try {
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
         if (!fs.existsSync(inputPath)) {
           console.error(colors.red(`ファイル ${inputPath} が見つかりません`));
           return;
         }
 
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
         const sessionData = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
         const session = await sessionManager.importSession(sessionData);
 

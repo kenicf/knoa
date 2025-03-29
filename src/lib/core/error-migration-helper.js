@@ -118,9 +118,12 @@ function migrateClassMethods(classInstance, methodNames, options = {}) {
   const { component, errorHandler } = options;
 
   for (const methodName of methodNames) {
-    const originalMethod = classInstance[methodName];
-
-    if (typeof originalMethod === 'function') {
+    // methodName が classInstance 自身のプロパティであり、かつ関数であることを確認
+    if (
+      Object.prototype.hasOwnProperty.call(classInstance, methodName) &&
+      typeof classInstance[methodName] === 'function'
+    ) {
+      const originalMethod = classInstance[methodName];
       classInstance[methodName] = migrateFunction(originalMethod, {
         component,
         operation: methodName,

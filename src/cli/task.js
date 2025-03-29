@@ -405,6 +405,7 @@ async function main() {
           return;
         }
 
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
         fs.writeFileSync(outputPath, JSON.stringify(task, null, 2), 'utf8');
         console.log(
           colors.green(`タスク情報を ${outputPath} にエクスポートしました`)
@@ -428,11 +429,13 @@ async function main() {
       console.log(colors.cyan(`タスク情報をインポートします: ${inputPath}`));
 
       try {
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
         if (!fs.existsSync(inputPath)) {
           console.error(colors.red(`ファイル ${inputPath} が見つかりません`));
           return;
         }
 
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
         const taskData = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
         const task = await taskManager.importTask(taskData);
 

@@ -246,6 +246,7 @@ class StateManager {
     // エラー前の状態を取得
     let targetState = this.states.INITIALIZED;
     for (let i = this.stateHistory.length - 2; i >= 0; i--) {
+      // eslint-disable-next-line security/detect-object-injection
       const historyEntry = this.stateHistory[i];
       if (historyEntry.state !== this.states.ERROR) {
         targetState = historyEntry.state;
