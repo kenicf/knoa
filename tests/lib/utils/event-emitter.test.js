@@ -35,9 +35,9 @@ describe('EventEmitter', () => {
   });
 
   describe('constructor', () => {
-     test('logger がないとエラーをスローする', () => {
-       expect(() => new EventEmitter()).toThrow('Logger instance is required');
-     });
+    test('logger がないとエラーをスローする', () => {
+      expect(() => new EventEmitter()).toThrow('Logger instance is required');
+    });
 
     test('カスタム値で初期化される', () => {
       // Arrange
@@ -132,7 +132,7 @@ describe('EventEmitter', () => {
           action,
         })
       );
-       expect(superEmit).toHaveBeenCalledTimes(2);
+      expect(superEmit).toHaveBeenCalledTimes(2);
     });
 
     test('dataパラメータのデフォルト値を使用してイベントを発行する', () => {
@@ -154,7 +154,7 @@ describe('EventEmitter', () => {
           action,
         })
       );
-       // グローバルイベントの発行検証 (空のデータ)
+      // グローバルイベントの発行検証 (空のデータ)
       expect(superEmit).toHaveBeenCalledWith(
         'event',
         expect.objectContaining({
@@ -164,7 +164,7 @@ describe('EventEmitter', () => {
           action,
         })
       );
-       expect(superEmit).toHaveBeenCalledTimes(2);
+      expect(superEmit).toHaveBeenCalledTimes(2);
     });
 
     test('エラーが発生した場合でも例外をスローする', () => {
@@ -172,9 +172,11 @@ describe('EventEmitter', () => {
       const component = 'component';
       const action = 'action';
       const data = { key: 'value' };
-      jest.spyOn(EnhancedEventEmitter.prototype, 'emit').mockImplementation(() => {
-        throw new Error('テストエラー');
-      });
+      jest
+        .spyOn(EnhancedEventEmitter.prototype, 'emit')
+        .mockImplementation(() => {
+          throw new Error('テストエラー');
+        });
 
       // Act & Assert
       expect(() => {
@@ -191,7 +193,9 @@ describe('EventEmitter', () => {
       const component = 'component';
       const action = 'action';
       const data = { key: 'value' };
-      const superEmitAsync = jest.spyOn(EnhancedEventEmitter.prototype, 'emitAsync').mockResolvedValue(true);
+      const superEmitAsync = jest
+        .spyOn(EnhancedEventEmitter.prototype, 'emitAsync')
+        .mockResolvedValue(true);
 
       // Act
       await eventEmitter.emitStandardizedAsync(component, action, data);
@@ -219,14 +223,16 @@ describe('EventEmitter', () => {
           action,
         })
       );
-       expect(superEmitAsync).toHaveBeenCalledTimes(2);
+      expect(superEmitAsync).toHaveBeenCalledTimes(2);
     });
 
     test('dataパラメータのデフォルト値を使用してイベントを発行する', async () => {
       // Arrange
       const component = 'component';
       const action = 'action';
-      const superEmitAsync = jest.spyOn(EnhancedEventEmitter.prototype, 'emitAsync').mockResolvedValue(true);
+      const superEmitAsync = jest
+        .spyOn(EnhancedEventEmitter.prototype, 'emitAsync')
+        .mockResolvedValue(true);
 
       // Act
       await eventEmitter.emitStandardizedAsync(component, action); // dataパラメータを省略
@@ -241,7 +247,7 @@ describe('EventEmitter', () => {
           action,
         })
       );
-       // グローバルイベントの発行検証 (空のデータ)
+      // グローバルイベントの発行検証 (空のデータ)
       expect(superEmitAsync).toHaveBeenCalledWith(
         'event',
         expect.objectContaining({
@@ -251,7 +257,7 @@ describe('EventEmitter', () => {
           action,
         })
       );
-       expect(superEmitAsync).toHaveBeenCalledTimes(2);
+      expect(superEmitAsync).toHaveBeenCalledTimes(2);
     });
 
     test('エラーが発生した場合でも例外をスローする', async () => {
@@ -259,7 +265,9 @@ describe('EventEmitter', () => {
       const component = 'component';
       const action = 'action';
       const data = { key: 'value' };
-      jest.spyOn(EnhancedEventEmitter.prototype, 'emitAsync').mockRejectedValue(new Error('テストエラー'));
+      jest
+        .spyOn(EnhancedEventEmitter.prototype, 'emitAsync')
+        .mockRejectedValue(new Error('テストエラー'));
 
       // Act & Assert
       await expect(
@@ -271,7 +279,9 @@ describe('EventEmitter', () => {
   describe('getRegisteredEvents', () => {
     test('親クラスのgetRegisteredEventsメソッドを呼び出す', () => {
       // Arrange
-      const superGetRegisteredEvents = jest.spyOn(EnhancedEventEmitter.prototype, 'getRegisteredEvents').mockReturnValue(['event1']);
+      const superGetRegisteredEvents = jest
+        .spyOn(EnhancedEventEmitter.prototype, 'getRegisteredEvents')
+        .mockReturnValue(['event1']);
 
       // Act
       const result = eventEmitter.getRegisteredEvents();
@@ -286,7 +296,9 @@ describe('EventEmitter', () => {
     test('親クラスのlistenerCountメソッドを呼び出す', () => {
       // Arrange
       const event = 'test-event';
-      const superListenerCount = jest.spyOn(EnhancedEventEmitter.prototype, 'listenerCount').mockReturnValue(5);
+      const superListenerCount = jest
+        .spyOn(EnhancedEventEmitter.prototype, 'listenerCount')
+        .mockReturnValue(5);
 
       // Act
       const result = eventEmitter.listenerCount(event);

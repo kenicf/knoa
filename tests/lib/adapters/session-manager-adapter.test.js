@@ -6,7 +6,9 @@ const SessionManagerAdapter = require('../../../src/lib/adapters/session-manager
 const { EnhancedEventEmitter } = require('../../../src/lib/core/event-system');
 const { ValidationError } = require('../../../src/lib/utils/errors'); // エラークラスは utils から取得
 const { createMockLogger } = require('../../helpers/mock-factory'); // Logger モックを使用
-const { expectStandardizedEventEmitted } = require('../../helpers/test-helpers'); // 標準化ヘルパーを使用
+const {
+  expectStandardizedEventEmitted,
+} = require('../../helpers/test-helpers'); // 標準化ヘルパーを使用
 
 describe('SessionManagerAdapter', () => {
   let adapter;
@@ -57,8 +59,8 @@ describe('SessionManagerAdapter', () => {
 
     // EventEmitter のモックを作成 (emitStandardized をスパイ)
     mockEventEmitter = {
-        emitStandardized: jest.fn(),
-        // on メソッドは後方互換性テスト削除のため不要
+      emitStandardized: jest.fn(),
+      // on メソッドは後方互換性テスト削除のため不要
     };
 
     // イベントキャプチャは不要に
@@ -73,10 +75,10 @@ describe('SessionManagerAdapter', () => {
     });
   });
 
-   afterEach(() => {
-       jest.clearAllMocks();
-       jest.restoreAllMocks();
-   });
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
 
   // 基本機能のテスト
   describe('基本機能', () => {
@@ -94,7 +96,9 @@ describe('SessionManagerAdapter', () => {
       const previousSessionId = 'previous-session-1';
       const result = await adapter.createNewSession(previousSessionId);
 
-      expect(mockSessionManager.createNewSession).toHaveBeenCalledWith(previousSessionId);
+      expect(mockSessionManager.createNewSession).toHaveBeenCalledWith(
+        previousSessionId
+      );
       expect(result).toEqual({
         session_handover: {
           session_id: 'session-test-1',
@@ -103,22 +107,36 @@ describe('SessionManagerAdapter', () => {
       });
 
       // イベント発行のテスト (expectStandardizedEventEmitted を使用)
-      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'session_created', {
+      expectStandardizedEventEmitted(
+        mockEventEmitter,
+        'session',
+        'session_created',
+        {
           id: 'session-test-1',
           previousSessionId: previousSessionId,
           // timestamp, traceId, requestId はヘルパー内で検証
-      });
+        }
+      );
     });
 
     test('エラー時に適切に処理する', async () => {
       const error = new Error('セッション作成エラー');
-      mockSessionManager.createNewSession.mockImplementationOnce(() => { throw error; });
+      mockSessionManager.createNewSession.mockImplementationOnce(() => {
+        throw error;
+      });
 
       const result = await adapter.createNewSession('previous-session-1');
-      expect(result).toMatchObject({ error: true, message: 'セッション作成エラー', operation: 'createNewSession' });
+      expect(result).toMatchObject({
+        error: true,
+        message: 'セッション作成エラー',
+        operation: 'createNewSession',
+      });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('createNewSession'), error);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('createNewSession'),
+        error
+      );
     });
   });
 
@@ -130,25 +148,47 @@ describe('SessionManagerAdapter', () => {
 
       const result = await adapter.updateSession(sessionId, updateData);
 
-      expect(mockSessionManager.updateSession).toHaveBeenCalledWith(sessionId, updateData);
-      expect(result).toEqual({ session_handover: { session_id: sessionId }, status: 'active' });
+      expect(mockSessionManager.updateSession).toHaveBeenCalledWith(
+        sessionId,
+        updateData
+      );
+      expect(result).toEqual({
+        session_handover: { session_id: sessionId },
+        status: 'active',
+      });
 
       // イベント発行のテスト
-      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'session_updated', {
+      expectStandardizedEventEmitted(
+        mockEventEmitter,
+        'session',
+        'session_updated',
+        {
           id: sessionId,
           updates: updateData,
-      });
+        }
+      );
     });
 
     test('エラー時に適切に処理する', async () => {
-        const error = new Error('セッション更新エラー');
-      mockSessionManager.updateSession.mockImplementationOnce(() => { throw error; });
+      const error = new Error('セッション更新エラー');
+      mockSessionManager.updateSession.mockImplementationOnce(() => {
+        throw error;
+      });
 
-      const result = await adapter.updateSession('session-test-1', { status: 'active' });
-      expect(result).toMatchObject({ error: true, message: 'セッション更新エラー', operation: 'updateSession' });
+      const result = await adapter.updateSession('session-test-1', {
+        status: 'active',
+      });
+      expect(result).toMatchObject({
+        error: true,
+        message: 'セッション更新エラー',
+        operation: 'updateSession',
+      });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('updateSession'), error);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('updateSession'),
+        error
+      );
     });
   });
 
@@ -160,25 +200,43 @@ describe('SessionManagerAdapter', () => {
       const result = await adapter.endSession(sessionId);
 
       expect(mockSessionManager.endSession).toHaveBeenCalledWith(sessionId);
-      expect(result).toEqual({ session_handover: { session_id: sessionId }, ended: true, duration: 3600 });
+      expect(result).toEqual({
+        session_handover: { session_id: sessionId },
+        ended: true,
+        duration: 3600,
+      });
 
       // イベント発行のテスト
-      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'session_ended', {
+      expectStandardizedEventEmitted(
+        mockEventEmitter,
+        'session',
+        'session_ended',
+        {
           id: sessionId,
           endTime: expect.any(String), // 実際の終了時間が入る
           duration: 3600,
-      });
+        }
+      );
     });
 
     test('エラー時に適切に処理する', async () => {
-        const error = new Error('セッション終了エラー');
-      mockSessionManager.endSession.mockImplementationOnce(() => { throw error; });
+      const error = new Error('セッション終了エラー');
+      mockSessionManager.endSession.mockImplementationOnce(() => {
+        throw error;
+      });
 
       const result = await adapter.endSession('session-test-1');
-      expect(result).toMatchObject({ error: true, message: 'セッション終了エラー', operation: 'endSession' });
+      expect(result).toMatchObject({
+        error: true,
+        message: 'セッション終了エラー',
+        operation: 'endSession',
+      });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('endSession'), error);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('endSession'),
+        error
+      );
     });
   });
 
@@ -190,33 +248,63 @@ describe('SessionManagerAdapter', () => {
 
       const result = await adapter.addTaskToSession(sessionId, taskId);
 
-      expect(mockSessionManager.addTaskToSession).toHaveBeenCalledWith(sessionId, taskId);
-      expect(result).toEqual({ session_handover: { session_id: sessionId }, tasks: [taskId] });
+      expect(mockSessionManager.addTaskToSession).toHaveBeenCalledWith(
+        sessionId,
+        taskId
+      );
+      expect(result).toEqual({
+        session_handover: { session_id: sessionId },
+        tasks: [taskId],
+      });
 
       // イベント発行のテスト
-      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'task_added', {
+      expectStandardizedEventEmitted(
+        mockEventEmitter,
+        'session',
+        'task_added',
+        {
           sessionId: sessionId,
           taskId: taskId,
-      });
+        }
+      );
     });
 
     test('タスクIDが不正な形式の場合はエラーを返す', async () => {
-      const result = await adapter.addTaskToSession('session-test-1', 'invalid-task-id');
-      expect(result).toMatchObject({ error: true, message: expect.stringContaining('タスクIDはT000形式'), operation: 'addTaskToSession' });
+      const result = await adapter.addTaskToSession(
+        'session-test-1',
+        'invalid-task-id'
+      );
+      expect(result).toMatchObject({
+        error: true,
+        message: expect.stringContaining('タスクIDはT000形式'),
+        operation: 'addTaskToSession',
+      });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('addTaskToSession'), expect.any(ValidationError));
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('addTaskToSession'),
+        expect.any(ValidationError)
+      );
     });
 
     test('エラー時に適切に処理する', async () => {
-        const error = new Error('タスク追加エラー');
-      mockSessionManager.addTaskToSession.mockImplementationOnce(() => { throw error; });
+      const error = new Error('タスク追加エラー');
+      mockSessionManager.addTaskToSession.mockImplementationOnce(() => {
+        throw error;
+      });
 
       const result = await adapter.addTaskToSession('session-test-1', 'T001');
-      expect(result).toMatchObject({ error: true, message: 'タスク追加エラー', operation: 'addTaskToSession' });
+      expect(result).toMatchObject({
+        error: true,
+        message: 'タスク追加エラー',
+        operation: 'addTaskToSession',
+      });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('addTaskToSession'), error);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('addTaskToSession'),
+        error
+      );
     });
   });
 
@@ -228,33 +316,66 @@ describe('SessionManagerAdapter', () => {
 
       const result = await adapter.removeTaskFromSession(sessionId, taskId);
 
-      expect(mockSessionManager.removeTaskFromSession).toHaveBeenCalledWith(sessionId, taskId);
-      expect(result).toEqual({ session_handover: { session_id: sessionId }, tasks: [] });
+      expect(mockSessionManager.removeTaskFromSession).toHaveBeenCalledWith(
+        sessionId,
+        taskId
+      );
+      expect(result).toEqual({
+        session_handover: { session_id: sessionId },
+        tasks: [],
+      });
 
       // イベント発行のテスト
-      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'task_removed', {
+      expectStandardizedEventEmitted(
+        mockEventEmitter,
+        'session',
+        'task_removed',
+        {
           sessionId: sessionId,
           taskId: taskId,
-      });
+        }
+      );
     });
 
     test('タスクIDが不正な形式の場合はエラーを返す', async () => {
-      const result = await adapter.removeTaskFromSession('session-test-1', 'invalid-task-id');
-      expect(result).toMatchObject({ error: true, message: expect.stringContaining('タスクIDはT000形式'), operation: 'removeTaskFromSession' });
+      const result = await adapter.removeTaskFromSession(
+        'session-test-1',
+        'invalid-task-id'
+      );
+      expect(result).toMatchObject({
+        error: true,
+        message: expect.stringContaining('タスクIDはT000形式'),
+        operation: 'removeTaskFromSession',
+      });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('removeTaskFromSession'), expect.any(ValidationError));
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('removeTaskFromSession'),
+        expect.any(ValidationError)
+      );
     });
 
     test('エラー時に適切に処理する', async () => {
-        const error = new Error('タスク削除エラー');
-      mockSessionManager.removeTaskFromSession.mockImplementationOnce(() => { throw error; });
+      const error = new Error('タスク削除エラー');
+      mockSessionManager.removeTaskFromSession.mockImplementationOnce(() => {
+        throw error;
+      });
 
-      const result = await adapter.removeTaskFromSession('session-test-1', 'T001');
-      expect(result).toMatchObject({ error: true, message: 'タスク削除エラー', operation: 'removeTaskFromSession' });
+      const result = await adapter.removeTaskFromSession(
+        'session-test-1',
+        'T001'
+      );
+      expect(result).toMatchObject({
+        error: true,
+        message: 'タスク削除エラー',
+        operation: 'removeTaskFromSession',
+      });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('removeTaskFromSession'), error);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('removeTaskFromSession'),
+        error
+      );
     });
   });
 
@@ -266,25 +387,48 @@ describe('SessionManagerAdapter', () => {
 
       const result = await adapter.addGitCommitToSession(sessionId, commitHash);
 
-      expect(mockSessionManager.addGitCommitToSession).toHaveBeenCalledWith(sessionId, commitHash);
-      expect(result).toEqual({ session_handover: { session_id: sessionId }, commits: [commitHash] });
+      expect(mockSessionManager.addGitCommitToSession).toHaveBeenCalledWith(
+        sessionId,
+        commitHash
+      );
+      expect(result).toEqual({
+        session_handover: { session_id: sessionId },
+        commits: [commitHash],
+      });
 
       // イベント発行のテスト
-      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'git_commit_added', {
+      expectStandardizedEventEmitted(
+        mockEventEmitter,
+        'session',
+        'git_commit_added',
+        {
           sessionId: sessionId,
           commitHash: commitHash,
-      });
+        }
+      );
     });
 
     test('エラー時に適切に処理する', async () => {
-        const error = new Error('コミット関連付けエラー');
-      mockSessionManager.addGitCommitToSession.mockImplementationOnce(() => { throw error; });
+      const error = new Error('コミット関連付けエラー');
+      mockSessionManager.addGitCommitToSession.mockImplementationOnce(() => {
+        throw error;
+      });
 
-      const result = await adapter.addGitCommitToSession('session-test-1', 'abc123');
-      expect(result).toMatchObject({ error: true, message: 'コミット関連付けエラー', operation: 'addGitCommitToSession' });
+      const result = await adapter.addGitCommitToSession(
+        'session-test-1',
+        'abc123'
+      );
+      expect(result).toMatchObject({
+        error: true,
+        message: 'コミット関連付けエラー',
+        operation: 'addGitCommitToSession',
+      });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('addGitCommitToSession'), error);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('addGitCommitToSession'),
+        error
+      );
     });
   });
 
@@ -295,11 +439,22 @@ describe('SessionManagerAdapter', () => {
     test('必須パラメータがない場合はエラーを返す', async () => {
       // _validateParams はプライベートメソッドなので直接スパイせず、
       // 実際にエラーが発生するケースで検証する
-      const result = await adapter.updateSession(undefined, { status: 'active' });
-      expect(result).toMatchObject({ error: true, message: expect.stringContaining('必須パラメータ sessionId がありません'), operation: 'updateSession' });
+      const result = await adapter.updateSession(undefined, {
+        status: 'active',
+      });
+      expect(result).toMatchObject({
+        error: true,
+        message: expect.stringContaining(
+          '必須パラメータ sessionId がありません'
+        ),
+        operation: 'updateSession',
+      });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('updateSession'), expect.any(ValidationError));
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('updateSession'),
+        expect.any(ValidationError)
+      );
     });
   });
 });

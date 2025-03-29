@@ -270,25 +270,31 @@ describe('エラー処理フレームワーク', () => {
       expect(result).toBe('recovered');
     });
 
-    test('回復戦略が失敗した場合、元のエラーが返される', async () => {
+    test('回復戦略が失敗した場合、エラーがスローされる', async () => {
       const error = new ValidationError('検証エラー', {
         code: 'TEST_RECOVERY_FAIL',
       });
+      const recoveryError = new Error('回復失敗');
       const mockRecovery = jest.fn().mockImplementation(() => {
-        throw new Error('回復失敗');
+        throw recoveryError;
       });
 
       errorHandler.registerRecoveryStrategy('TEST_RECOVERY_FAIL', mockRecovery);
 
-      try {
-        await errorHandler.handle(error, 'TestComponent', 'testOperation');
-        // 例外が発生するはずなので、ここには到達しないはず
-        fail('例外が発生しませんでした');
-      } catch (e) {
-        expect(mockRecovery).toHaveBeenCalled();
-        expect(mockLogger.error).toHaveBeenCalled(); // 回復失敗のエラーログ
-        expect(e.message).toBe('回復失敗');
-      }
+      // errorHandler.handle が '回復失敗' エラーで reject されることを期待
+      await expect(
+        errorHandler.handle(error, 'TestComponent', 'testOperation')
+      ).rejects.toThrow('回復失敗');
+
+      // 回復戦略とエラーログが呼び出されたことを確認
+      expect(mockRecovery).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Recovery strategy failed'),
+        expect.objectContaining({
+          original_error_code: 'TEST_RECOVERY_FAIL',
+          recovery_error_message: '回復失敗',
+        })
+      );
     });
 
     test('回復不可能なエラーは回復戦略が実行されない', async () => {

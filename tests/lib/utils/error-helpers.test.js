@@ -40,7 +40,15 @@ describe('error-helpers', () => {
       const details = { param1: 'value1' };
 
       // Act
-      emitErrorEvent(mockEventEmitter, mockLogger, component, operation, error, mockContext, details);
+      emitErrorEvent(
+        mockEventEmitter,
+        mockLogger,
+        component,
+        operation,
+        error,
+        mockContext,
+        details
+      );
 
       // Assert
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -56,7 +64,7 @@ describe('error-helpers', () => {
 
       // Act & Assert
       expect(() => {
-          emitErrorEvent(mockEventEmitter, null, 'Comp', 'Op', error);
+        emitErrorEvent(mockEventEmitter, null, 'Comp', 'Op', error);
       }).not.toThrow();
       // emit が 'app:error' イベントで呼び出されることを確認 (テストケースの値に合わせる)
       expect(mockEventEmitter.emit).toHaveBeenCalledWith(
@@ -71,7 +79,6 @@ describe('error-helpers', () => {
       );
     });
 
-
     test('コンテキストがある場合、setError を呼び出す', () => {
       // Arrange
       const error = new Error('テストエラー');
@@ -80,10 +87,23 @@ describe('error-helpers', () => {
       const details = { param1: 'value1' };
 
       // Act
-      emitErrorEvent(mockEventEmitter, mockLogger, component, operation, error, mockContext, details);
+      emitErrorEvent(
+        mockEventEmitter,
+        mockLogger,
+        component,
+        operation,
+        error,
+        mockContext,
+        details
+      );
 
       // Assert
-      expect(mockContext.setError).toHaveBeenCalledWith(error, component, operation, details);
+      expect(mockContext.setError).toHaveBeenCalledWith(
+        error,
+        component,
+        operation,
+        details
+      );
     });
 
     test('コンテキストがない場合、setError は呼び出されない', () => {
@@ -109,10 +129,7 @@ describe('error-helpers', () => {
           _context: null, // コンテキストがない場合は null
         })
       );
-      // context.setError が呼び出されないことを確認 (mockContext があれば)
-      // expect(mockContext.setError).not.toHaveBeenCalled();
     });
-
 
     test.each([
       ['エラーコードあり', new Error('テストエラー'), 'ERR_TEST', 'ERR_TEST'],
@@ -127,7 +144,15 @@ describe('error-helpers', () => {
         const details = { param1: 'value1' };
 
         // Act
-        emitErrorEvent(mockEventEmitter, mockLogger, component, operation, error, mockContext, details);
+        emitErrorEvent(
+          mockEventEmitter,
+          mockLogger,
+          component,
+          operation,
+          error,
+          mockContext,
+          details
+        );
 
         // Assert
         expectStandardizedEventEmitted(mockEventEmitter, 'app', 'error', {
@@ -142,36 +167,63 @@ describe('error-helpers', () => {
       }
     );
 
-    test.each([
-      ['コンテキストなし', null, null],
-      ['コンテキストあり', { id: 'context-123', setError: jest.fn() }, 'context-123'],
-    ])(
-      '%s の場合も適切に動作し、app:error イベントを発行する',
-      (_, context, expectedContextId) => {
-        // Arrange
-        const error = new Error('テストエラー');
-        const component = 'TestComponent';
-        const operation = 'testOperation';
+    test('コンテキストがない場合も適切に動作し、app:error イベントを発行する', () => {
+      // Arrange
+      const error = new Error('テストエラー');
+      const component = 'TestComponent';
+      const operation = 'testOperation';
 
-        // Act
-        emitErrorEvent(mockEventEmitter, mockLogger, component, operation, error, context);
+      // Act
+      emitErrorEvent(
+        mockEventEmitter,
+        mockLogger,
+        component,
+        operation,
+        error,
+        null
+      );
 
-        // Assert
-        expectStandardizedEventEmitted(mockEventEmitter, 'app', 'error', {
-          component,
-          operation,
-          message: error.message,
-          code: 'ERR_UNKNOWN',
-          timestamp: 'any', // タイムスタンプの存在と形式を検証
-          details: {}, // details なしの場合
-          _context: expectedContextId,
-        });
+      // Assert
+      expectStandardizedEventEmitted(mockEventEmitter, 'app', 'error', {
+        component,
+        operation,
+        message: error.message,
+        code: 'ERR_UNKNOWN',
+        timestamp: 'any', // タイムスタンプの存在と形式を検証
+        details: {}, // details なしの場合
+        _context: null,
+      });
+    });
 
-        if (context) {
-          expect(context.setError).toHaveBeenCalled();
-        }
-      }
-    );
+    test('コンテキストがある場合も適切に動作し、app:error イベントを発行し、setErrorを呼び出す', () => {
+      // Arrange
+      const error = new Error('テストエラー');
+      const component = 'TestComponent';
+      const operation = 'testOperation';
+      const context = { id: 'context-123', setError: jest.fn() };
+
+      // Act
+      emitErrorEvent(
+        mockEventEmitter,
+        mockLogger,
+        component,
+        operation,
+        error,
+        context
+      );
+
+      // Assert
+      expectStandardizedEventEmitted(mockEventEmitter, 'app', 'error', {
+        component,
+        operation,
+        message: error.message,
+        code: 'ERR_UNKNOWN',
+        timestamp: 'any', // タイムスタンプの存在と形式を検証
+        details: {}, // details なしの場合
+        _context: context.id,
+      });
+      expect(context.setError).toHaveBeenCalled();
+    });
 
     test('イベントエミッターがない場合、イベントは発行されない', () => {
       // Arrange

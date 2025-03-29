@@ -39,7 +39,10 @@ function expectStandardizedEventEmitted(
       if (key === 'timestamp' && typeof expectedData[key] === 'string') {
         // 期待値が 'any' の場合は型のみチェック
         if (expectedData[key].toLowerCase() === 'any') {
-            return typeof callData[key] === 'string' && !isNaN(Date.parse(callData[key]));
+          return (
+            typeof callData[key] === 'string' &&
+            !isNaN(Date.parse(callData[key]))
+          );
         }
         // それ以外は厳密比較
         return callData[key] === expectedData[key];

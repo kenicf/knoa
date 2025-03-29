@@ -306,7 +306,7 @@ describe('アダプター統合テスト', () => {
     expect(feedbackCreatedEvents.length).toBe(0);
   });
 
-  test('後方互換性のあるイベントリスナー', async () => {
+  test('後方互換性のあるイベントリスナーが呼び出される', async () => {
     // 古いイベント名でリスナーを登録
     const oldTaskCreatedListener = jest.fn();
     const oldSessionStartedListener = jest.fn();
@@ -321,13 +321,19 @@ describe('アダプター統合テスト', () => {
     // 古いイベント名のリスナーも呼び出されることを確認
     expect(oldTaskCreatedListener).toHaveBeenCalled();
     expect(oldSessionStartedListener).toHaveBeenCalled();
+  });
 
-    // 警告ログが出力されることを確認（開発環境の場合）
-    if (process.env.NODE_ENV === 'development') {
+  // 開発環境でのみ警告ログのテストを実行
+  if (process.env.NODE_ENV === 'development') {
+    test('開発環境では非推奨イベントの警告ログが出力される', async () => {
+      eventEmitter.on('task:created', jest.fn()); // リスナー登録が必要
+      eventEmitter.on('session:started', jest.fn()); // リスナー登録が必要
+      await taskAdapter.createTask({ title: '後方互換性テスト' });
+      await sessionAdapter.createNewSession();
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining('非推奨のイベント名'),
         expect.any(Object)
       );
-    }
-  });
+    });
+  }
 });

@@ -22,7 +22,7 @@ class Validator {
     }
     this.logger = options.logger;
   }
-  
+
   /**
    * タスク入力を検証
    * @param {Object} taskData - タスクデータ

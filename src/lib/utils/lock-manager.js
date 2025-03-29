@@ -19,7 +19,7 @@ class LockManager {
    * @param {number} [options.maxRetries=50] - 最大再試行回数
    */
   constructor(options = {}) {
-     // logger を必須にする
+    // logger を必須にする
     if (!options.logger) {
       throw new Error('Logger instance is required in LockManager options.');
     }
@@ -44,12 +44,16 @@ class LockManager {
     while (Date.now() - startTime < timeout && retries < this.maxRetries) {
       const lockAcquired = this._tryAcquireLock(resourceId, lockerId);
       if (lockAcquired) {
-        this.logger.debug(`Lock acquired for resource: ${resourceId} by ${lockerId}`);
+        this.logger.debug(
+          `Lock acquired for resource: ${resourceId} by ${lockerId}`
+        );
         return true;
       }
 
       retries++;
-      this.logger.debug(`Retrying lock acquisition for resource: ${resourceId} (Attempt ${retries})`);
+      this.logger.debug(
+        `Retrying lock acquisition for resource: ${resourceId} (Attempt ${retries})`
+      );
       await this._sleep(this.retryInterval);
     }
 
@@ -66,7 +70,9 @@ class LockManager {
         },
       }
     );
-     this.logger.warn(`Lock acquisition timed out for resource: ${resourceId}`, { error });
+    this.logger.warn(`Lock acquisition timed out for resource: ${resourceId}`, {
+      error,
+    });
     throw error;
   }
 
@@ -80,7 +86,9 @@ class LockManager {
     const lock = this.locks.get(resourceId);
 
     if (!lock) {
-       this.logger.debug(`Lock not found for resource: ${resourceId}, assuming released.`);
+      this.logger.debug(
+        `Lock not found for resource: ${resourceId}, assuming released.`
+      );
       return true; // 既にロックされていない
     }
 
@@ -89,12 +97,19 @@ class LockManager {
       const error = new Error(
         `リソース ${resourceId} のロックは別のプロセス (${lock.lockerId}) が保持しています`
       );
-       this.logger.error(`Attempted to release lock held by another locker`, { resourceId, attemptedLockerId: lockerId, actualLockerId: lock.lockerId, error });
+      this.logger.error(`Attempted to release lock held by another locker`, {
+        resourceId,
+        attemptedLockerId: lockerId,
+        actualLockerId: lock.lockerId,
+        error,
+      });
       throw error;
     }
 
     this.locks.delete(resourceId);
-    this.logger.debug(`Lock released for resource: ${resourceId} by ${lockerId}`);
+    this.logger.debug(
+      `Lock released for resource: ${resourceId} by ${lockerId}`
+    );
     return true;
   }
 
@@ -111,9 +126,11 @@ class LockManager {
 
     // ロックがない、または期限切れの場合は新しいロックを設定
     if (!lock || now - lock.timestamp > this.lockTimeout) {
-       if (lock && now - lock.timestamp > this.lockTimeout) {
-           this.logger.warn(`Overwriting expired lock for resource: ${resourceId} held by ${lock.lockerId}`);
-       }
+      if (lock && now - lock.timestamp > this.lockTimeout) {
+        this.logger.warn(
+          `Overwriting expired lock for resource: ${resourceId} held by ${lock.lockerId}`
+        );
+      }
       this.locks.set(resourceId, {
         lockerId,
         timestamp: now,

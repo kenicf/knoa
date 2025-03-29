@@ -17,7 +17,9 @@ describe('Repository', () => {
   beforeEach(() => {
     mockDeps = createMockDependencies();
     // logger をオプションで渡すように修正
-    repository = new Repository(mockDeps.storageService, 'test', { logger: mockDeps.logger });
+    repository = new Repository(mockDeps.storageService, 'test', {
+      logger: mockDeps.logger,
+    });
   });
 
   afterEach(() => {
@@ -32,10 +34,10 @@ describe('Repository', () => {
       );
     });
     test('should throw error if storageService is not provided', () => {
-       // logger を渡して storageService 不足のエラーをテスト
-      expect(() => new Repository(undefined, 'test', { logger: mockDeps.logger })).toThrow(
-        'Repository requires a storageService instance'
-      );
+      // logger を渡して storageService 不足のエラーをテスト
+      expect(
+        () => new Repository(undefined, 'test', { logger: mockDeps.logger })
+      ).toThrow('Repository requires a storageService instance');
     });
 
     test('should create repository with default options', () => {

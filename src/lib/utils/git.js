@@ -62,7 +62,10 @@ class GitService {
       this._emitEvent('commit_get_hash_after', { hash, success: true });
       return hash;
     } catch (error) {
-      this._emitEvent('commit_get_hash_after', { success: false, error: error.message });
+      this._emitEvent('commit_get_hash_after', {
+        success: false,
+        error: error.message,
+      });
       throw this._handleError(
         'コミットハッシュの取得に失敗しました',
         error,
@@ -77,22 +80,25 @@ class GitService {
    * @returns {Array<string>} タスクIDの配列
    */
   extractTaskIdsFromCommitMessage(message) {
-   const operationContext = { operation: 'extractTaskIdsFromCommitMessage', message };
-  try {
-    // message が null や undefined の場合は空配列を返す
-    if (message == null) {
+    const operationContext = {
+      operation: 'extractTaskIdsFromCommitMessage',
+      message,
+    };
+    try {
+      // message が null や undefined の場合は空配列を返す
+      if (message == null) {
         return [];
-    }
-    // イベント発行は削除
-    const matches = message.match(this.taskIdPattern) || [];
-    const taskIds = matches.map((match) => match.substring(1)); // #を除去
-    return taskIds;
-  } catch (error) {
-       throw this._handleError(
-         'タスクIDの抽出に失敗しました',
-         error,
-         operationContext
-       );
+      }
+      // イベント発行は削除
+      const matches = message.match(this.taskIdPattern) || [];
+      const taskIds = matches.map((match) => match.substring(1)); // #を除去
+      return taskIds;
+    } catch (error) {
+      throw this._handleError(
+        'タスクIDの抽出に失敗しました',
+        error,
+        operationContext
+      );
     }
   }
 
@@ -103,7 +109,11 @@ class GitService {
    * @returns {Promise<Array<Object>>} コミット情報の配列
    */
   async getCommitsBetween(startCommit, endCommit) {
-     const operationContext = { operation: 'getCommitsBetween', startCommit, endCommit };
+    const operationContext = {
+      operation: 'getCommitsBetween',
+      startCommit,
+      endCommit,
+    };
     try {
       this._emitEvent('commit_get_between_before', { startCommit, endCommit });
 
@@ -139,11 +149,11 @@ class GitService {
         success: false,
         error: error.message,
       });
-       throw this._handleError(
-         'コミット間の情報取得に失敗しました',
-         error,
-         operationContext
-       );
+      throw this._handleError(
+        'コミット間の情報取得に失敗しました',
+        error,
+        operationContext
+      );
     }
   }
 
@@ -153,35 +163,60 @@ class GitService {
    * @returns {Promise<Array<Object>>} 変更されたファイルの配列 { status: string, path: string }
    */
   async getChangedFilesInCommit(commitHash) {
-     const operationContext = { operation: 'getChangedFilesInCommit', commitHash };
+    const operationContext = {
+      operation: 'getChangedFilesInCommit',
+      commitHash,
+    };
     try {
       this._emitEvent('commit_get_changed_files_before', { commitHash });
 
       // simple-git の show を使用 (--name-status オプション)
       // simple-git v3 では show のパースが改善されている可能性があるが、一旦文字列で取得
-      const output = await this.git.show([`${commitHash}`, '--name-status', '--format=']);
+      const output = await this.git.show([
+        `${commitHash}`,
+        '--name-status',
+        '--format=',
+      ]);
 
       if (!output) {
-         this._emitEvent('commit_get_changed_files_after', { commitHash, files: [], success: true });
+        this._emitEvent('commit_get_changed_files_after', {
+          commitHash,
+          files: [],
+          success: true,
+        });
         return [];
       }
 
-      const files = output.split('\n').filter(line => line.trim()).map((line) => {
-        const parts = line.split('\t');
-        const status = parts[0];
-        const path = parts[parts.length - 1];
-        let fileStatus;
+      const files = output
+        .split('\n')
+        .filter((line) => line.trim())
+        .map((line) => {
+          const parts = line.split('\t');
+          const status = parts[0];
+          const path = parts[parts.length - 1];
+          let fileStatus;
 
-        switch (status.charAt(0)) {
-          case 'A': fileStatus = 'added'; break;
-          case 'M': fileStatus = 'modified'; break;
-          case 'D': fileStatus = 'deleted'; break;
-          case 'R': fileStatus = 'renamed'; break;
-          case 'C': fileStatus = 'copied'; break;
-          default: fileStatus = status;
-        }
-        return { status: fileStatus, path };
-      });
+          switch (status.charAt(0)) {
+            case 'A':
+              fileStatus = 'added';
+              break;
+            case 'M':
+              fileStatus = 'modified';
+              break;
+            case 'D':
+              fileStatus = 'deleted';
+              break;
+            case 'R':
+              fileStatus = 'renamed';
+              break;
+            case 'C':
+              fileStatus = 'copied';
+              break;
+            default:
+              fileStatus = status;
+          }
+          return { status: fileStatus, path };
+        });
 
       this._emitEvent('commit_get_changed_files_after', {
         commitHash,
@@ -196,11 +231,11 @@ class GitService {
         success: false,
         error: error.message,
       });
-       throw this._handleError(
-         '変更されたファイルの取得に失敗しました',
-         error,
-         operationContext
-       );
+      throw this._handleError(
+        '変更されたファイルの取得に失敗しました',
+        error,
+        operationContext
+      );
     }
   }
 
@@ -210,7 +245,7 @@ class GitService {
    * @returns {Promise<Object>} 差分統計 { files: Array, lines_added: number, lines_deleted: number }
    */
   async getCommitDiffStats(commitHash) {
-     const operationContext = { operation: 'getCommitDiffStats', commitHash };
+    const operationContext = { operation: 'getCommitDiffStats', commitHash };
     try {
       this._emitEvent('commit_get_diff_stats_before', { commitHash });
 
@@ -218,19 +253,26 @@ class GitService {
       const files = await this.getChangedFilesInCommit(commitHash);
 
       // 行数の変更を取得 (--numstat オプション)
-      const output = await this.git.show([`${commitHash}`, '--numstat', '--format=']);
+      const output = await this.git.show([
+        `${commitHash}`,
+        '--numstat',
+        '--format=',
+      ]);
 
       let lines_added = 0;
       let lines_deleted = 0;
 
       if (output) {
-        output.split('\n').filter(line => line.trim()).forEach((line) => {
-          const [added, deleted] = line.split('\t');
-          if (added !== '-' && deleted !== '-') {
-            lines_added += parseInt(added, 10) || 0;
-            lines_deleted += parseInt(deleted, 10) || 0;
-          }
-        });
+        output
+          .split('\n')
+          .filter((line) => line.trim())
+          .forEach((line) => {
+            const [added, deleted] = line.split('\t');
+            if (added !== '-' && deleted !== '-') {
+              lines_added += parseInt(added, 10) || 0;
+              lines_deleted += parseInt(deleted, 10) || 0;
+            }
+          });
       }
 
       const stats = {
@@ -252,11 +294,11 @@ class GitService {
         success: false,
         error: error.message,
       });
-       throw this._handleError(
-         'コミットの差分統計の取得に失敗しました',
-         error,
-         operationContext
-       );
+      throw this._handleError(
+        'コミットの差分統計の取得に失敗しました',
+        error,
+        operationContext
+      );
     }
   }
 
@@ -265,7 +307,7 @@ class GitService {
    * @returns {Promise<Array<string>>} ブランチ名の配列
    */
   async getBranches() {
-     const operationContext = { operation: 'getBranches' };
+    const operationContext = { operation: 'getBranches' };
     try {
       this._emitEvent('branch_get_all_before', {});
       // simple-git の branch を使用
@@ -275,12 +317,15 @@ class GitService {
       this._emitEvent('branch_get_all_after', { branches, success: true });
       return branches;
     } catch (error) {
-      this._emitEvent('branch_get_all_after', { success: false, error: error.message });
-       throw this._handleError(
-         'ブランチ一覧の取得に失敗しました',
-         error,
-         operationContext
-       );
+      this._emitEvent('branch_get_all_after', {
+        success: false,
+        error: error.message,
+      });
+      throw this._handleError(
+        'ブランチ一覧の取得に失敗しました',
+        error,
+        operationContext
+      );
     }
   }
 
@@ -289,7 +334,7 @@ class GitService {
    * @returns {Promise<string>} ブランチ名
    */
   async getCurrentBranch() {
-     const operationContext = { operation: 'getCurrentBranch' };
+    const operationContext = { operation: 'getCurrentBranch' };
     try {
       this._emitEvent('branch_get_current_before', {});
       // simple-git の branch を使用
@@ -299,12 +344,15 @@ class GitService {
       this._emitEvent('branch_get_current_after', { branch, success: true });
       return branch;
     } catch (error) {
-      this._emitEvent('branch_get_current_after', { success: false, error: error.message });
-       throw this._handleError(
-         '現在のブランチの取得に失敗しました',
-         error,
-         operationContext
-       );
+      this._emitEvent('branch_get_current_after', {
+        success: false,
+        error: error.message,
+      });
+      throw this._handleError(
+        '現在のブランチの取得に失敗しました',
+        error,
+        operationContext
+      );
     }
   }
 
@@ -314,7 +362,7 @@ class GitService {
    * @returns {Promise<Array<Object>>} コミット情報の配列
    */
   async getCommitHistory(limit = 10) {
-     const operationContext = { operation: 'getCommitHistory', limit };
+    const operationContext = { operation: 'getCommitHistory', limit };
     try {
       this._emitEvent('commit_get_history_before', { limit });
 
@@ -347,11 +395,11 @@ class GitService {
         success: false,
         error: error.message,
       });
-       throw this._handleError(
-         'コミット履歴の取得に失敗しました',
-         error,
-         operationContext
-       );
+      throw this._handleError(
+        'コミット履歴の取得に失敗しました',
+        error,
+        operationContext
+      );
     }
   }
 
@@ -362,7 +410,7 @@ class GitService {
    * @returns {Promise<Array<Object>>} コミット情報の配列
    */
   async getFileHistory(filePath, limit = 10) {
-     const operationContext = { operation: 'getFileHistory', filePath, limit };
+    const operationContext = { operation: 'getFileHistory', filePath, limit };
     try {
       this._emitEvent('file_get_history_before', { filePath, limit });
 
@@ -375,7 +423,7 @@ class GitService {
         '--date': 'iso',
       });
 
-       const commits = log.all.map((commit) => ({
+      const commits = log.all.map((commit) => ({
         hash: commit.hash,
         message: commit.message,
         timestamp: commit.date,
@@ -398,11 +446,11 @@ class GitService {
         success: false,
         error: error.message,
       });
-       throw this._handleError(
-         'ファイルの変更履歴の取得に失敗しました',
-         error,
-         operationContext
-       );
+      throw this._handleError(
+        'ファイルの変更履歴の取得に失敗しました',
+        error,
+        operationContext
+      );
     }
   }
 
@@ -413,11 +461,14 @@ class GitService {
    * @param {Object} data - イベントデータ
    */
   _emitEvent(eventName, data) {
-    if (!this.eventEmitter || typeof this.eventEmitter.emitStandardized !== 'function') {
+    if (
+      !this.eventEmitter ||
+      typeof this.eventEmitter.emitStandardized !== 'function'
+    ) {
       return;
     }
     try {
-       // ID生成 (Step 5 で見直し)
+      // ID生成 (Step 5 で見直し)
       const traceId = this._traceIdGenerator();
       const requestId = this._requestIdGenerator();
 
@@ -478,7 +529,7 @@ class GitService {
    * @returns {Promise<Object|null>} コミットの詳細情報、またはエラー時にnullを返す代わりにエラーをスロー
    */
   async getCommitDetails(commitHash) {
-     const operationContext = { operation: 'getCommitDetails', commitHash };
+    const operationContext = { operation: 'getCommitDetails', commitHash };
     try {
       this._emitEvent('commit_get_details_before', { commitHash });
 
@@ -486,15 +537,31 @@ class GitService {
       // %B: message, %H: hash, %an: author name, %ae: author email, %ai: author date (ISO 8601),
       // %cn: committer name, %ce: committer email, %ci: committer date (ISO 8601), %P: parent hashes
       const format = {
-          message: '%B', hash: '%H', author_name: '%an', author_email: '%ae', author_date: '%ai',
-          committer_name: '%cn', committer_email: '%ce', committer_date: '%ci', parents: '%P'
+        message: '%B',
+        hash: '%H',
+        author_name: '%an',
+        author_email: '%ae',
+        author_date: '%ai',
+        committer_name: '%cn',
+        committer_email: '%ce',
+        committer_date: '%ci',
+        parents: '%P',
       };
       const log = await this.git.log({ format, n: 1, [commitHash]: null }); // 特定のコミットを指定
 
       if (!log || !log.latest) {
-         this._emitEvent('commit_get_details_after', { commitHash, details: null, success: false, error: 'Commit info not found' });
-         // null を返す代わりにエラーをスローする方が一貫性があるかもしれない
-         throw new GitError(`Commit not found: ${commitHash}`, null, operationContext);
+        this._emitEvent('commit_get_details_after', {
+          commitHash,
+          details: null,
+          success: false,
+          error: 'Commit info not found',
+        });
+        // null を返す代わりにエラーをスローする方が一貫性があるかもしれない
+        throw new GitError(
+          `Commit not found: ${commitHash}`,
+          null,
+          operationContext
+        );
       }
       const commit = log.latest;
 
@@ -540,11 +607,11 @@ class GitService {
         success: false,
         error: error.message,
       });
-       throw this._handleError(
-         'コミットの詳細情報の取得に失敗しました',
-         error,
-         operationContext
-       );
+      throw this._handleError(
+        'コミットの詳細情報の取得に失敗しました',
+        error,
+        operationContext
+      );
     }
   }
 
@@ -556,7 +623,7 @@ class GitService {
    * @returns {Promise<boolean>} 成功したかどうか
    */
   async stageFiles(files) {
-     const operationContext = { operation: 'stageFiles', files };
+    const operationContext = { operation: 'stageFiles', files };
     try {
       this._emitEvent('stage_before', { files });
       // simple-git の add を使用
@@ -564,12 +631,16 @@ class GitService {
       this._emitEvent('stage_after', { files, success: true });
       return true;
     } catch (error) {
-      this._emitEvent('stage_after', { files, success: false, error: error.message });
-       throw this._handleError(
-         'ファイルのステージに失敗しました',
-         error,
-         operationContext
-       );
+      this._emitEvent('stage_after', {
+        files,
+        success: false,
+        error: error.message,
+      });
+      throw this._handleError(
+        'ファイルのステージに失敗しました',
+        error,
+        operationContext
+      );
     }
   }
 
@@ -579,12 +650,20 @@ class GitService {
    * @returns {Promise<string>} 作成されたコミットのハッシュ
    */
   async createCommit(message) {
-     const operationContext = { operation: 'createCommit', message };
+    const operationContext = { operation: 'createCommit', message };
     try {
       if (!message || message.trim() === '') {
-        const error = new GitError('コミットメッセージが空です', null, operationContext);
-        this._emitEvent('commit_create_after', { message, success: false, error: error.message });
-         throw error;
+        const error = new GitError(
+          'コミットメッセージが空です',
+          null,
+          operationContext
+        );
+        this._emitEvent('commit_create_after', {
+          message,
+          success: false,
+          error: error.message,
+        });
+        throw error;
       }
 
       this._emitEvent('commit_create_before', { message });
@@ -595,12 +674,12 @@ class GitService {
       this._emitEvent('commit_create_after', { message, hash, success: true });
       return hash;
     } catch (error) {
-       // _emitEvent は _handleError 内で呼ばれるか、既に呼ばれている可能性がある
-       throw this._handleError(
-         'コミットの作成に失敗しました',
-         error,
-         operationContext
-       );
+      // _emitEvent は _handleError 内で呼ばれるか、既に呼ばれている可能性がある
+      throw this._handleError(
+        'コミットの作成に失敗しました',
+        error,
+        operationContext
+      );
     }
   }
 }

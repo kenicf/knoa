@@ -17,7 +17,11 @@ describe('TaskRepository', () => {
       validate: jest.fn().mockReturnValue({ isValid: true }),
     };
     // logger をオプションで渡すように修正
-    taskRepository = new TaskRepository(mockDeps.storageService, mockValidator, { logger: mockDeps.logger });
+    taskRepository = new TaskRepository(
+      mockDeps.storageService,
+      mockValidator,
+      { logger: mockDeps.logger }
+    );
   });
 
   afterEach(() => {

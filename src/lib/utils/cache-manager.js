@@ -120,8 +120,11 @@ class CacheManager {
   invalidate(keyPattern) {
     // keyPattern の型チェックを追加
     if (typeof keyPattern !== 'string' && !(keyPattern instanceof RegExp)) {
-        this.logger.warn('Invalid keyPattern provided to invalidate. Must be a string or RegExp.', { keyPattern });
-        return 0;
+      this.logger.warn(
+        'Invalid keyPattern provided to invalidate. Must be a string or RegExp.',
+        { keyPattern }
+      );
+      return 0;
     }
 
     let count = 0;
@@ -137,15 +140,21 @@ class CacheManager {
         }
       }
     } catch (error) {
-       // RegExp コンストラクタや test メソッドでエラーが発生した場合
-       this.logger.error(`キャッシュ無効化中にエラーが発生しました (パターン: ${keyPattern})`, error);
-       return 0; // エラー時は 0 を返す
+      // RegExp コンストラクタや test メソッドでエラーが発生した場合
+      this.logger.error(
+        `キャッシュ無効化中にエラーが発生しました (パターン: ${keyPattern})`,
+        error
+      );
+      return 0; // エラー時は 0 を返す
     }
 
     if (count > 0) {
       // cache:invalidated イベントを標準化 (items_invalidated)
       // keyPattern が安全に文字列化できる場合のみ pattern プロパティを設定
-      const patternString = (typeof keyPattern === 'string' || keyPattern instanceof RegExp) ? keyPattern.toString() : '[Invalid Pattern]';
+      const patternString =
+        typeof keyPattern === 'string' || keyPattern instanceof RegExp
+          ? keyPattern.toString()
+          : '[Invalid Pattern]';
       this.eventEmitter.emitStandardized('cache', 'items_invalidated', {
         pattern: patternString,
         count,

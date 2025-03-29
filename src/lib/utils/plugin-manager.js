@@ -45,7 +45,10 @@ class PluginManager {
     if (!this._validatePlugin(pluginType, pluginImplementation)) {
       this.logger.error(`プラグイン ${pluginType} の検証に失敗しました`);
 
-      if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+      if (
+        this.eventEmitter &&
+        typeof this.eventEmitter.emitStandardized === 'function'
+      ) {
         const traceId = this._traceIdGenerator();
         const requestId = this._requestIdGenerator();
         this.eventEmitter.emitStandardized('plugin', 'validation_failed', {
@@ -72,9 +75,12 @@ class PluginManager {
           error
         );
 
-        if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
-           const traceId = this._traceIdGenerator();
-           const requestId = this._requestIdGenerator();
+        if (
+          this.eventEmitter &&
+          typeof this.eventEmitter.emitStandardized === 'function'
+        ) {
+          const traceId = this._traceIdGenerator();
+          const requestId = this._requestIdGenerator();
           this.eventEmitter.emitStandardized('plugin', 'initialization_error', {
             pluginType,
             error: error.message,
@@ -86,9 +92,12 @@ class PluginManager {
       }
     }
 
-    if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
-       const traceId = this._traceIdGenerator();
-       const requestId = this._requestIdGenerator();
+    if (
+      this.eventEmitter &&
+      typeof this.eventEmitter.emitStandardized === 'function'
+    ) {
+      const traceId = this._traceIdGenerator();
+      const requestId = this._requestIdGenerator();
       this.eventEmitter.emitStandardized('plugin', 'registered', {
         pluginType,
         hasInitialize: typeof pluginImplementation.initialize === 'function',
@@ -115,7 +124,10 @@ class PluginManager {
     const requestId = this._requestIdGenerator();
 
     if (!plugin || typeof plugin[methodName] !== 'function') {
-      if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+      if (
+        this.eventEmitter &&
+        typeof this.eventEmitter.emitStandardized === 'function'
+      ) {
         this.eventEmitter.emitStandardized('plugin', 'method_not_found', {
           pluginType,
           methodName,
@@ -125,12 +137,17 @@ class PluginManager {
         });
       }
       // エラーを返すか、nullを返すか検討 (既存の挙動はnull)
-      this.logger.warn(`プラグインメソッドが見つかりません: ${pluginType}.${methodName}`);
+      this.logger.warn(
+        `プラグインメソッドが見つかりません: ${pluginType}.${methodName}`
+      );
       return null;
     }
 
     try {
-      if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+      if (
+        this.eventEmitter &&
+        typeof this.eventEmitter.emitStandardized === 'function'
+      ) {
         this.eventEmitter.emitStandardized('plugin', 'method_invoked', {
           pluginType,
           methodName,
@@ -142,7 +159,10 @@ class PluginManager {
 
       const result = await plugin[methodName](...args);
 
-      if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+      if (
+        this.eventEmitter &&
+        typeof this.eventEmitter.emitStandardized === 'function'
+      ) {
         this.eventEmitter.emitStandardized('plugin', 'method_completed', {
           pluginType,
           methodName,
@@ -160,7 +180,10 @@ class PluginManager {
         error
       );
 
-      if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+      if (
+        this.eventEmitter &&
+        typeof this.eventEmitter.emitStandardized === 'function'
+      ) {
         this.eventEmitter.emitStandardized('plugin', 'method_error', {
           pluginType,
           methodName,
@@ -206,9 +229,12 @@ class PluginManager {
           error
         );
 
-        if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
-           const traceId = this._traceIdGenerator();
-           const requestId = this._requestIdGenerator();
+        if (
+          this.eventEmitter &&
+          typeof this.eventEmitter.emitStandardized === 'function'
+        ) {
+          const traceId = this._traceIdGenerator();
+          const requestId = this._requestIdGenerator();
           this.eventEmitter.emitStandardized('plugin', 'cleanup_error', {
             pluginType,
             error: error.message,
@@ -223,20 +249,22 @@ class PluginManager {
 
     const deleted = this.plugins.delete(pluginType);
     if (deleted) {
-        this.logger.info(`プラグイン ${pluginType} を削除しました`);
+      this.logger.info(`プラグイン ${pluginType} を削除しました`);
 
-        if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
-           const traceId = this._traceIdGenerator();
-           const requestId = this._requestIdGenerator();
-          this.eventEmitter.emitStandardized('plugin', 'unregistered', {
-            pluginType,
-            timestamp: new Date().toISOString(),
-            traceId,
-            requestId,
-          });
-        }
+      if (
+        this.eventEmitter &&
+        typeof this.eventEmitter.emitStandardized === 'function'
+      ) {
+        const traceId = this._traceIdGenerator();
+        const requestId = this._requestIdGenerator();
+        this.eventEmitter.emitStandardized('plugin', 'unregistered', {
+          pluginType,
+          timestamp: new Date().toISOString(),
+          traceId,
+          requestId,
+        });
+      }
     }
-
 
     return deleted;
   }
@@ -258,13 +286,23 @@ class PluginManager {
    */
   _validatePlugin(pluginType, pluginImplementation) {
     if (!pluginType || typeof pluginType !== 'string') {
-       this.logger.warn('プラグインタイプの検証に失敗: タイプが文字列ではありません。', { pluginType });
+      this.logger.warn(
+        'プラグインタイプの検証に失敗: タイプが文字列ではありません。',
+        { pluginType }
+      );
       return false;
     }
 
     // 配列もオブジェクトとして扱わないように Array.isArray() を追加
-    if (!pluginImplementation || typeof pluginImplementation !== 'object' || Array.isArray(pluginImplementation)) {
-       this.logger.warn(`プラグイン実装の検証に失敗 (${pluginType}): 実装がオブジェクトではありません。`, { pluginImplementation });
+    if (
+      !pluginImplementation ||
+      typeof pluginImplementation !== 'object' ||
+      Array.isArray(pluginImplementation)
+    ) {
+      this.logger.warn(
+        `プラグイン実装の検証に失敗 (${pluginType}): 実装がオブジェクトではありません。`,
+        { pluginImplementation }
+      );
       return false;
     }
 
@@ -272,20 +310,26 @@ class PluginManager {
     switch (pluginType) {
       case 'ci':
         if (typeof pluginImplementation.runTests !== 'function') {
-           this.logger.warn(`プラグイン検証失敗 (${pluginType}): runTests メソッドが必要です。`);
-           return false;
+          this.logger.warn(
+            `プラグイン検証失敗 (${pluginType}): runTests メソッドが必要です。`
+          );
+          return false;
         }
         break;
       case 'notification':
-         if (typeof pluginImplementation.sendNotification !== 'function') {
-           this.logger.warn(`プラグイン検証失敗 (${pluginType}): sendNotification メソッドが必要です。`);
-           return false;
+        if (typeof pluginImplementation.sendNotification !== 'function') {
+          this.logger.warn(
+            `プラグイン検証失敗 (${pluginType}): sendNotification メソッドが必要です。`
+          );
+          return false;
         }
         break;
       case 'report':
-         if (typeof pluginImplementation.generateReport !== 'function') {
-           this.logger.warn(`プラグイン検証失敗 (${pluginType}): generateReport メソッドが必要です。`);
-           return false;
+        if (typeof pluginImplementation.generateReport !== 'function') {
+          this.logger.warn(
+            `プラグイン検証失敗 (${pluginType}): generateReport メソッドが必要です。`
+          );
+          return false;
         }
         break;
       case 'storage':
@@ -293,19 +337,23 @@ class PluginManager {
           typeof pluginImplementation.save !== 'function' ||
           typeof pluginImplementation.load !== 'function'
         ) {
-           this.logger.warn(`プラグイン検証失敗 (${pluginType}): save および load メソッドが必要です。`);
-           return false;
+          this.logger.warn(
+            `プラグイン検証失敗 (${pluginType}): save および load メソッドが必要です。`
+          );
+          return false;
         }
         break;
       default:
         // 汎用プラグインの場合は最低限のチェックのみ
         if (Object.keys(pluginImplementation).length === 0) {
-            this.logger.warn(`プラグイン検証失敗 (${pluginType}): 実装が空のオブジェクトです。`);
-            return false;
+          this.logger.warn(
+            `プラグイン検証失敗 (${pluginType}): 実装が空のオブジェクトです。`
+          );
+          return false;
         }
         break;
     }
-     return true; // すべてのチェックをパスした場合
+    return true; // すべてのチェックをパスした場合
   }
 }
 

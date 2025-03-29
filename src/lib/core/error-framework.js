@@ -279,7 +279,6 @@ class ExternalServiceError extends ApplicationError {
   }
 }
 
-
 /**
  * 依存関係エラー
  * 依存関係の解決に失敗した場合に使用

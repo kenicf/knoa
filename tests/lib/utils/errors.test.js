@@ -40,15 +40,15 @@ describe('Custom Error Classes', () => {
     });
 
     test('cause と context がなくてもインスタンス化できる', () => {
-        // Arrange
-        const message = 'Simple Git error';
-        // Act
-        const error = new GitError(message);
-        // Assert
-        expect(error.message).toBe(message);
-        expect(error.cause).toBeUndefined();
-        expect(error.context).toEqual({}); // デフォルトは空オブジェクト
-      });
+      // Arrange
+      const message = 'Simple Git error';
+      // Act
+      const error = new GitError(message);
+      // Assert
+      expect(error.message).toBe(message);
+      expect(error.cause).toBeUndefined();
+      expect(error.context).toEqual({}); // デフォルトは空オブジェクト
+    });
   });
 
   describe('StorageError', () => {
@@ -73,15 +73,15 @@ describe('Custom Error Classes', () => {
     });
 
     test('cause と context がなくてもインスタンス化できる', () => {
-        // Arrange
-        const message = 'Simple Storage error';
-        // Act
-        const error = new StorageError(message);
-        // Assert
-        expect(error.message).toBe(message);
-        expect(error.cause).toBeUndefined();
-        expect(error.context).toEqual({}); // デフォルトは空オブジェクト
-      });
+      // Arrange
+      const message = 'Simple Storage error';
+      // Act
+      const error = new StorageError(message);
+      // Assert
+      expect(error.message).toBe(message);
+      expect(error.cause).toBeUndefined();
+      expect(error.context).toEqual({}); // デフォルトは空オブジェクト
+    });
   });
 
   // 再エクスポートされたコアエラークラスの基本的なテスト（必要に応じて）

@@ -117,7 +117,6 @@ function mockTimestamp(isoString) {
   );
 }
 
-
 /**
  * 共通のモック依存関係オブジェクトを作成
  * @returns {Object} モック依存関係オブジェクト { logger, eventEmitter, errorHandler }
@@ -143,5 +142,5 @@ module.exports = {
   createMockEventEmitter,
   createMockErrorHandler,
   mockTimestamp,
-  createMockDependencies
+  createMockDependencies,
 };

@@ -61,7 +61,10 @@ class Logger {
    * @param {Object} [context] - コンテキスト情報
    */
   log(level, message, context = {}) {
-    if (this.levels[level] === undefined || this.levels[level] < this.levels[this.level]) {
+    if (
+      this.levels[level] === undefined ||
+      this.levels[level] < this.levels[this.level]
+    ) {
       return;
     }
 
@@ -110,7 +113,10 @@ class Logger {
     }
 
     // イベント発行 (emitStandardized に統一)
-    if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+    if (
+      this.eventEmitter &&
+      typeof this.eventEmitter.emitStandardized === 'function'
+    ) {
       this.eventEmitter.emitStandardized('log', 'message_created', {
         ...entry,
         // emitStandardized 側で traceId/requestId が付与される想定だが、
@@ -179,7 +185,10 @@ class Logger {
   _sendAlert(entry) {
     // アラート送信ロジック（通知システムとの連携）
     // 実際の実装はプラグインや設定によって異なる
-    if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+    if (
+      this.eventEmitter &&
+      typeof this.eventEmitter.emitStandardized === 'function'
+    ) {
       // emitStandardized に統一
       this.eventEmitter.emitStandardized('log', 'alert_created', {
         ...entry,
@@ -196,12 +205,17 @@ class Logger {
    */
   addTransport(transport) {
     if (!transport || typeof transport.write !== 'function') {
-        this.error('Invalid transport object provided to addTransport.', { transport });
-        return;
+      this.error('Invalid transport object provided to addTransport.', {
+        transport,
+      });
+      return;
     }
     this.transports.push(transport);
 
-    if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+    if (
+      this.eventEmitter &&
+      typeof this.eventEmitter.emitStandardized === 'function'
+    ) {
       // ID生成はここで行う (Step 5 で見直し)
       const timestamp = new Date().toISOString();
       const traceId = this.traceIdGenerator();
@@ -223,13 +237,19 @@ class Logger {
    * @param {Function} provider - プロバイダ関数
    */
   addContextProvider(key, provider) {
-     if (!key || typeof provider !== 'function') {
-        this.error('Invalid arguments provided to addContextProvider.', { key, providerType: typeof provider });
-        return;
+    if (!key || typeof provider !== 'function') {
+      this.error('Invalid arguments provided to addContextProvider.', {
+        key,
+        providerType: typeof provider,
+      });
+      return;
     }
     this.contextProviders[key] = provider;
 
-    if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+    if (
+      this.eventEmitter &&
+      typeof this.eventEmitter.emitStandardized === 'function'
+    ) {
       // ID生成はここで行う (Step 5 で見直し)
       const timestamp = new Date().toISOString();
       const traceId = this.traceIdGenerator();

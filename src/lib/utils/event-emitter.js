@@ -90,7 +90,10 @@ class EventEmitter extends EnhancedEventEmitter {
     const result = await super.emitAsync(standardEvent, standardizedData);
 
     // グローバルイベントも発行 (type を含める)
-    await super.emitAsync('event', { type: standardEvent, ...standardizedData });
+    await super.emitAsync('event', {
+      type: standardEvent,
+      ...standardizedData,
+    });
 
     return result;
   }

@@ -125,7 +125,6 @@ describe('FeedbackManagerAdapter', () => {
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
       expect(mockLogger.error).toHaveBeenCalled();
-      expect(mockLogger.error).toHaveBeenCalled();
     });
 
     test('エラー時に適切に処理する', async () => {
@@ -144,7 +143,6 @@ describe('FeedbackManagerAdapter', () => {
       // タイムスタンプなどの動的な値が存在することを確認
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalled();
       expect(mockLogger.error).toHaveBeenCalled();
     });
   });
@@ -204,7 +202,6 @@ describe('FeedbackManagerAdapter', () => {
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
       expect(mockLogger.error).toHaveBeenCalled();
-      expect(mockLogger.error).toHaveBeenCalled();
     });
   });
 
@@ -259,7 +256,6 @@ describe('FeedbackManagerAdapter', () => {
       // タイムスタンプなどの動的な値が存在することを確認
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalled();
       expect(mockLogger.error).toHaveBeenCalled();
     });
   });
@@ -455,15 +451,19 @@ describe('FeedbackManagerAdapter', () => {
       // 両方のリスナーが呼び出されることを確認
       expect(oldEventListener).toHaveBeenCalled();
       expect(newEventListener).toHaveBeenCalled();
+    });
 
-      // 警告ログが出力されることを確認（開発環境の場合）
-      if (process.env.NODE_ENV === 'development') {
+    // 開発環境でのみ警告ログのテストを実行
+    if (process.env.NODE_ENV === 'development') {
+      test('開発環境では非推奨イベントの警告ログが出力される', async () => {
+        mockEventEmitter.on('feedback:created', jest.fn()); // リスナー登録が必要
+        await adapter.createNewFeedback('T001', 1);
         expect(mockLogger.warn).toHaveBeenCalledWith(
           expect.stringContaining('非推奨のイベント名'),
           expect.any(Object)
         );
-      }
-    });
+      });
+    }
   });
 
   // バリデーションのテスト
