@@ -26,7 +26,8 @@ module.exports = [
   // デフォルト設定 (Node.js + Jest + プラグイン)
   {
     files: ['**/*.js'],
-    plugins: { // プラグインを登録
+    plugins: {
+      // プラグインを登録
       node: nodePlugin,
       jest: jestPlugin,
       promise: promisePlugin,
@@ -58,8 +59,14 @@ module.exports = [
       // 必要に応じてプラグインのルールを個別に調整
       // 例: 'jest/no-disabled-tests': 'off',
       // 例: nodePlugin は sourceType: module を期待するルールがあるため commonjs では調整が必要な場合がある
-      'node/no-unsupported-features/es-syntax': ['error', { ignores: ['modules'] }], // CommonJSなのでES Modules構文はエラー
+      'node/no-unsupported-features/es-syntax': [
+        'error',
+        { ignores: ['modules'] },
+      ], // CommonJSなのでES Modules構文はエラー
       'node/no-missing-require': 'error', // require() のパスが存在しない場合にエラー
+      // --- 修正箇所 ---
+      'node/no-deprecated-api': 'off', // ESLint v9 との互換性問題のため一時的に無効化
+      // --- 修正箇所 ---
     },
   },
   // フロントエンド用設定
