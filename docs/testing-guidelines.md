@@ -186,3 +186,38 @@
 *   **目標:** コードベースの品質と信頼性を確保するため、テストカバレッジの目標を設定します。一般的には **Statement カバレッジで 80% 以上** を目指します。
 *   **測定:** `npm run test -- --coverage` コマンドを実行すると、カバレッジレポートが `coverage/lcov-report/index.html` に生成されます。
 *   **注意点:** カバレッジ率はあくまで指標の一つです。100% であってもテストの質が低い（アサーションが不十分など）可能性はあります。重要なロジックやエラーパスが適切にテストされているかを確認することが重要です。カバレッジが低い箇所は、テストケースを追加する候補となります。
+
+## 9. エディタ連携 (VS Code 推奨)
+
+開発効率とコード品質の一貫性を高めるために、エディタと ESLint/Prettier を連携させることを強く推奨します。以下は VS Code での設定例です。
+
+1.  **拡張機能のインストール:**
+    *   [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
+    *   [Prettier - Code formatter](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+
+2.  **VS Code 設定 (`settings.json`):**
+    *   ワークスペース設定 (`.vscode/settings.json`) またはユーザー設定に以下を追加します。
+
+    ```json
+    {
+      // ファイル保存時に Prettier でフォーマットする
+      "editor.formatOnSave": true,
+      // デフォルトフォーマッターとして Prettier を指定
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      // ファイル保存時に ESLint の自動修正を実行する
+      "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "explicit" // "explicit" または true
+      },
+      // JavaScript ファイルに対して上記設定を有効にする (任意)
+      "[javascript]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        }
+      }
+    }
+    ```
+
+これにより、ファイルを保存するたびに Prettier によるフォーマットと ESLint による自動修正が実行され、コーディング中に規約違反を即座に修正できます。
+
