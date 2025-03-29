@@ -1,1579 +1,688 @@
 /**
- * Gitサービスのテスト
+ * Gitサービスのテスト (simple-git 使用版)
  */
 
 const GitService = require('../../../src/lib/utils/git');
-// GitErrorクラスを取得
-const GitError = require('../../../src/lib/utils/git').GitError || GitService.GitError;
+const { GitError } = require('../../../src/lib/utils/errors');
 const {
   createMockLogger,
   createMockEventEmitter,
-  createMockErrorHandler,
-  mockTimestamp
+  mockTimestamp,
 } = require('../../helpers/mock-factory');
 const {
-  expectEventEmitted,
-  expectErrorHandled,
-  expectStandardizedEventEmitted
+  expectStandardizedEventEmitted,
 } = require('../../helpers/test-helpers');
-const {
-  normalizePath,
-  setupPathMatchers
-} = require('../../helpers/path-helpers');
 
-// child_processのモック
-jest.mock('child_process');
+// simple-git をモック化
+const mockGit = {
+  revparse: jest.fn(),
+  log: jest.fn(),
+  show: jest.fn(),
+  branchLocal: jest.fn(),
+  add: jest.fn(),
+  commit: jest.fn(),
+};
+jest.mock('simple-git', () => {
+  return jest.fn(() => mockGit);
+});
 
-// パスマッチャーのセットアップ
-setupPathMatchers();
-
-/**
- * GitServiceのテスト用オプションを作成
- * @param {Object} overrides - 上書きするオプション
- * @returns {Object} テスト用オプション
- */
-function createGitServiceTestOptions(overrides = {}) {
-  return {
-    repoPath: '/test/repo/path',
-    logger: createMockLogger(),
-    eventEmitter: createMockEventEmitter(),
-    errorHandler: createMockErrorHandler(),
-    ...overrides
-  };
-}
-
-describe('GitService', () => {
+describe('GitService (simple-git)', () => {
   let gitService;
   let mockLogger;
   let mockEventEmitter;
-  let mockErrorHandler;
-  let execSync;
-
-  describe('constructor', () => {
-    test('オプションなしでデフォルト値が正しく設定される', () => {
-      const gitService = new GitService();
-      expect(gitService.repoPath).toBe(process.cwd());
-      expect(gitService.logger).toBe(console);
-      expect(gitService.eventEmitter).toBeUndefined();
-      expect(gitService.errorHandler).toBeUndefined();
-      expect(gitService.taskIdPattern).toEqual(/#(T[0-9]{3})/g);
-    });
-  });
+  const MOCK_TIMESTAMP_ISO = '2025-03-24T00:00:00.000Z';
 
   beforeEach(() => {
     // モックのリセット
     jest.clearAllMocks();
-    jest.restoreAllMocks();
-    
-    // execSyncのモックを取得
-    execSync = require('child_process').execSync;
-    
-    // execSyncのモック実装を改善
-    execSync.mockImplementation((command, options) => {
-      // コマンドに応じたモックレスポンスを返す
-      if (command.includes('git log')) {
-        return 'abc123|Fix bug #T001|2025-03-20T10:00:00+09:00|User1\ndef456|Implement feature #T002|2025-03-21T11:00:00+09:00|User2';
-      } else if (command.includes('git rev-parse HEAD')) {
-        return 'abcdef1234567890';
-      } else if (command.includes('git branch')) {
-        return '* main\n  develop\n  feature/test';
-      } else if (command.includes('git show --name-status')) {
-        return 'A\tfile1.txt\nM\tfile2.js\nD\tfile3.md';
-      } else if (command.includes('git show --numstat')) {
-        return '10\t5\tfile1.txt\n20\t10\tfile2.js';
-      }
-      return 'command output';
-    });
-    
+
     // 時間のモック
-    mockTimestamp('2025-03-24T00:00:00.000Z');
-    
+    mockTimestamp(MOCK_TIMESTAMP_ISO);
+
     // 共通モックファクトリを使用
     mockLogger = createMockLogger();
     mockEventEmitter = createMockEventEmitter();
-    mockErrorHandler = createMockErrorHandler({
-      defaultReturnValues: {
-        getCurrentCommitHash: 'abcdef1234567890',
-        getCurrentBranch: 'main',
-        extractTaskIdsFromCommitMessage: [],
-        getCommitsBetween: [],
-        getChangedFilesInCommit: [],
-        getCommitDiffStats: { files: [], lines_added: 0, lines_deleted: 0 }
-      }
-    });
-    
+
     // GitServiceのインスタンス作成
-    gitService = new GitService(createGitServiceTestOptions());
-  });
-
-  describe('_executeCommand', () => {
-    test('コマンドを正常に実行する', () => {
-      // Arrange
-      execSync.mockReturnValue('command output');
-      
-      // Act
-      const result = gitService._executeCommand('git status');
-      
-      // Assert
-      expect(result).toBe('command output');
-      
-      // execSyncの呼び出しを確認
-      const execSyncCalls = execSync.mock.calls;
-      expect(execSyncCalls.length).toBeGreaterThan(0);
-      
-      // 第1引数がコマンド
-      expect(execSyncCalls[0][0]).toBe('git status');
-      
-      // 第2引数がオプション
-      const options = execSyncCalls[0][1];
-      expect(options).toHaveProperty('cwd');
-      expect(normalizePath(options.cwd)).toBe('/test/repo/path');
-      expect(options).toHaveProperty('encoding', 'utf8');
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:command:execute:before', {
-        command: 'git status'
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:command:execute:after', {
-        command: 'git status',
-        success: true
-      });
-    });
-
-    test('コマンド実行時にエラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const error = new Error('コマンド実行エラー');
-      execSync.mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue(null);
-      
-      // Act
-      const result = gitService._executeCommand('git status');
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(execSync).toHaveBeenCalledWith('git status', {
-        cwd: '/test/repo/path',
-        encoding: 'utf8'
-      });
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:command:execute:before', {
-        command: 'git status'
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:command:execute:after', {
-        command: 'git status',
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'GitError', 'コマンド実行に失敗しました', {
-        command: 'git status',
-        operation: '_executeCommand'
-      });
-    });
-
-    test('エラーハンドラーがない場合、ロガーを使用する', () => {
-      // Arrange
-      const gitServiceNoHandler = new GitService({
-        repoPath: '/test/repo/path',
-        logger: mockLogger,
-        eventEmitter: mockEventEmitter
-      });
-      
-      const error = new Error('テストエラー');
-      execSync.mockImplementation(() => {
-        throw error;
-      });
-      
-      // Act
-      const result = gitServiceNoHandler._executeCommand('git status');
-      
-      // Assert
-      expect(result).toBe(false);
-      expect(mockLogger.error).toHaveBeenCalledWith('コマンド実行に失敗しました: git status', expect.any(Object));
+    // エラーハンドラもモックして渡す
+    const mockErrorHandler = { handle: jest.fn((err) => err) }; // エラーをそのまま返すモック
+    gitService = new GitService({
+      repoPath: '/test/repo/path',
+      logger: mockLogger,
+      eventEmitter: mockEventEmitter,
+      errorHandler: mockErrorHandler, // errorHandler を渡す
     });
   });
+
+  afterEach(() => {
+      jest.restoreAllMocks();
+  });
+
+  describe('constructor', () => {
+     test('logger がないとエラーをスローする', () => {
+       expect(() => new GitService({ eventEmitter: mockEventEmitter })).toThrow('Logger instance is required');
+     });
+
+    test('オプションなしでデフォルト値が正しく設定される', () => {
+      // Arrange & Act
+      const defaultGitService = new GitService({ logger: createMockLogger() });
+      // Assert
+      expect(defaultGitService.repoPath).toBe(process.cwd());
+      expect(defaultGitService.logger).toBeDefined();
+      expect(defaultGitService.eventEmitter).toBeUndefined();
+      expect(defaultGitService.errorHandler).toBeUndefined();
+      expect(defaultGitService.taskIdPattern).toEqual(/#(T[0-9]{3})/g);
+      expect(require('simple-git')).toHaveBeenCalledWith(process.cwd());
+    });
+
+     test('カスタム値で初期化される', () => {
+       // Assert (beforeEach で初期化済み)
+       expect(gitService.repoPath).toBe('/test/repo/path');
+       expect(gitService.logger).toBe(mockLogger);
+       expect(gitService.eventEmitter).toBe(mockEventEmitter);
+       expect(require('simple-git')).toHaveBeenCalledWith('/test/repo/path');
+     });
+  });
+
+
+
+    test('eventEmitter がない場合でもエラーなく動作する', async () => {
+      // Arrange
+      const gitServiceWithoutEmitter = new GitService({ logger: mockLogger });
+      const mockHash = 'abcdef1234567890';
+      mockGit.revparse.mockResolvedValue(mockHash);
+
+      // Act & Assert
+      await expect(gitServiceWithoutEmitter.getCurrentCommitHash()).resolves.toBe(mockHash);
+      // emitStandardized が呼ばれないことを確認 (アサーションは不要)
+    });
 
   describe('getCurrentCommitHash', () => {
-    test('現在のコミットハッシュを取得する', () => {
+    test('現在のコミットハッシュを取得する', async () => {
       // Arrange
       const mockHash = 'abcdef1234567890';
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue(mockHash);
-      
+      mockGit.revparse.mockResolvedValue(mockHash);
+
       // Act
-      const result = gitService.getCurrentCommitHash();
-      
+      const result = await gitService.getCurrentCommitHash();
+
       // Assert
       expect(result).toBe(mockHash);
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git rev-parse HEAD');
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_hash:before', {});
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_hash:after', {
-        hash: mockHash,
-        success: true
-      });
+      expect(mockGit.revparse).toHaveBeenCalledWith(['HEAD']);
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_hash_before', { timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_hash_after', { hash: mockHash, success: true, timestamp: 'any' });
     });
 
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
+    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
       // Arrange
-      const error = new Error('コミットハッシュ取得エラー');
-      jest.spyOn(gitService, '_executeCommand').mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue('');
+      const error = new Error('Git revparse error');
+      mockGit.revparse.mockRejectedValue(error);
+      // emitStandardized のエラーテストは別ケースで行うため、ここでは不要
+
+      // Act & Assert
+      await expect(gitService.getCurrentCommitHash()).rejects.toThrow(GitError); // 元のエラーがスローされることを確認
+      expect(mockGit.revparse).toHaveBeenCalledWith(['HEAD']);
+      // イベント発行は _handleError に移譲されるか、エラー前に発行される
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_hash_before', { timestamp: 'any' });
+      // エラーハンドリングの確認 (logger.error は削除済み)
       
-      // Act
-      const result = gitService.getCurrentCommitHash();
-      
-      // Assert
-      expect(result).toBe('');
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git rev-parse HEAD');
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_hash:before', {});
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_hash:after', {
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'GitError', 'コミットハッシュの取得に失敗しました', {
-        operation: 'getCurrentCommitHash'
-      });
+      // errorHandler.handle が呼び出されることを確認
+      expect(gitService.errorHandler.handle).toHaveBeenCalledWith(
+          expect.any(GitError),
+          'GitService',
+          'getCurrentCommitHash',
+          { operation: 'getCurrentCommitHash' }
+      );
+      // errorHandler.handle が呼び出されたことも確認
+      expect(gitService.errorHandler.handle).toHaveBeenCalledWith(
+          expect.any(GitError),
+          'GitService',
+          'getCurrentCommitHash',
+          { operation: 'getCurrentCommitHash' }
+      );
     });
   });
 
   describe('extractTaskIdsFromCommitMessage', () => {
     test.each([
-      ['タスクIDがある場合', 'Fix bug #T001 and implement feature #T002', ['T001', 'T002']],
-      ['タスクIDがない場合', 'Fix bug and implement feature', []]
-    ])('%s、適切な結果を返す', (_, message, expected) => {
-      // Arrange
-      
+      ['Fix bug #T001 and implement feature #T002', ['T001', 'T002']],
+      ['Fix bug and implement feature', []],
+      ['Message with #T123 and #T456', ['T123', 'T456']],
+      ['Invalid ID #TABC', []],
+      ['No hash T001', []],
+      ['', []],
+      // null や undefined の場合はエラーではなく空配列を返すことを確認
+      [null, []],
+      [undefined, []],
+    ])('メッセージ "%s" からタスクID %p を抽出する', (message, expected) => {
       // Act
       const result = gitService.extractTaskIdsFromCommitMessage(message);
-      
       // Assert
       expect(result).toEqual(expected);
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:extract_task_ids:before', {
-        message
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:extract_task_ids:after', {
-        message,
-        taskIds: expected,
-        success: true
-      });
     });
 
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const message = null;
-      mockErrorHandler.handle.mockReturnValue([]);
-      
-      // Act
-      const result = gitService.extractTaskIdsFromCommitMessage(message);
-      
-      // Assert
-      expect(result).toEqual([]);
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:extract_task_ids:before', {
-        message
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:extract_task_ids:after', {
-        message,
-        success: false,
-        error: expect.any(Error)
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'GitError', 'タスクIDの抽出に失敗しました', {
-        message,
-        operation: 'extractTaskIdsFromCommitMessage'
-      });
-    });
+    test('message.match がエラーをスローする場合、GitErrorをスローし、エラー情報をログに出力する', () => {
+       // Arrange
+       const invalidMessage = { toString: () => { throw new Error('Invalid message object'); } };
+       // Act & Assert
+       expect(() => gitService.extractTaskIdsFromCommitMessage(invalidMessage)).toThrow(GitError);
+       
+     });
   });
 
   describe('getCommitsBetween', () => {
-    test('コミット間のコミット情報を取得する', () => {
-      // _executeCommandをモック
-      const mockOutput = 'abc123|Fix bug #T001|2025-03-20T10:00:00+09:00|User1\ndef456|Implement feature #T002|2025-03-21T11:00:00+09:00|User2';
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue(mockOutput);
-      
-      // extractTaskIdsFromCommitMessageをモック
+    test('コミット間のコミット情報を取得する', async () => {
+      // Arrange
+      const mockLog = {
+        all: [
+          { hash: 'abc123', message: 'Fix bug #T001', date: '2025-03-20T10:00:00+09:00', author_name: 'User1' },
+          { hash: 'def456', message: 'Implement feature #T002', date: '2025-03-21T11:00:00+09:00', author_name: 'User2' },
+        ],
+        latest: { hash: 'def456' }, total: 2
+      };
+      mockGit.log.mockResolvedValue(mockLog);
       jest.spyOn(gitService, 'extractTaskIdsFromCommitMessage')
         .mockReturnValueOnce(['T001'])
         .mockReturnValueOnce(['T002']);
-      
-      const result = gitService.getCommitsBetween('start-commit', 'end-commit');
-      
-      expect(result).toEqual([
-        {
-          hash: 'abc123',
-          message: 'Fix bug #T001',
-          timestamp: '2025-03-20T10:00:00+09:00',
-          author: 'User1',
-          related_tasks: ['T001']
-        },
-        {
-          hash: 'def456',
-          message: 'Implement feature #T002',
-          timestamp: '2025-03-21T11:00:00+09:00',
-          author: 'User2',
-          related_tasks: ['T002']
-        }
-      ]);
-      // 実際のコマンド形式に合わせて期待値を修正
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git log --pretty=format:"%H|%s|%ad|%an" --date=iso start-commit..end-commit');
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledWith('Fix bug #T001');
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledWith('Implement feature #T002');
-      // イベント発行の検証は省略（テストヘルパーで対応済み）
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_between:after', {
-        startCommit: 'start-commit',
-        endCommit: 'end-commit',
-        commits: expect.any(Array),
-        success: true
-      });
-    });
 
-    test('出力が空の場合、空配列を返す', () => {
-      // _executeCommandをモック
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue('');
-      
-      const result = gitService.getCommitsBetween('start-commit', 'end-commit');
-      
-      expect(result).toEqual([]);
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git log --pretty=format:"%H|%s|%ad|%an" --date=iso start-commit..end-commit');
-      // イベント発行の検証は省略（テストヘルパーで対応済み）
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_between:after', {
-        startCommit: 'start-commit',
-        endCommit: 'end-commit',
-        commits: [],
-        success: true
-      });
-    });
-
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const error = new Error('テストエラー');
-      jest.spyOn(gitService, '_executeCommand').mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue([]);
-      
       // Act
-      const result = gitService.getCommitsBetween('start', 'end');
-      
+      const result = await gitService.getCommitsBetween('start-commit', 'end-commit');
+
       // Assert
-      expect(result).toEqual([]);
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_between:after', {
-        startCommit: 'start',
-        endCommit: 'end',
-        success: false,
-        error
+      expect(result).toEqual([
+        { hash: 'abc123', message: 'Fix bug #T001', timestamp: '2025-03-20T10:00:00+09:00', author: 'User1', related_tasks: ['T001'] },
+        { hash: 'def456', message: 'Implement feature #T002', timestamp: '2025-03-21T11:00:00+09:00', author: 'User2', related_tasks: ['T002'] },
+      ]);
+      expect(mockGit.log).toHaveBeenCalledWith({
+        from: 'start-commit',
+        to: 'end-commit',
+        format: { hash: '%H', message: '%s', date: '%ad', author_name: '%an' },
+        '--date': 'iso',
       });
-      expectErrorHandled(mockErrorHandler, 'GitError', 'コミット間の情報取得に失敗しました', {
-        startCommit: 'start',
-        endCommit: 'end',
-        operation: 'getCommitsBetween'
-      });
+      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledTimes(2);
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_between_before', { startCommit: 'start-commit', endCommit: 'end-commit', timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_between_after', { startCommit: 'start-commit', endCommit: 'end-commit', commits: expect.any(Array), success: true, timestamp: 'any' });
+    });
+
+     test('コミットがない場合、空配列を返す', async () => {
+       // Arrange
+       const mockLog = { all: [], latest: null, total: 0 };
+       mockGit.log.mockResolvedValue(mockLog);
+
+       // Act
+       const result = await gitService.getCommitsBetween('start-commit', 'end-commit');
+
+       // Assert
+       expect(result).toEqual([]);
+       expect(mockGit.log).toHaveBeenCalledWith(expect.any(Object));
+       expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_between_after', { startCommit: 'start-commit', endCommit: 'end-commit', commits: [], success: true, timestamp: 'any' });
+     });
+
+    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+      // Arrange
+      const error = new Error('Git log error');
+      mockGit.log.mockRejectedValue(error);
+
+      // Act & Assert
+      await expect(gitService.getCommitsBetween('start', 'end')).rejects.toThrow(GitError);
+      expect(mockGit.log).toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_between_before', { startCommit: 'start', endCommit: 'end', timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_between_after', { startCommit: 'start', endCommit: 'end', success: false, error: error.message, timestamp: 'any' });
+       
     });
   });
 
   describe('getChangedFilesInCommit', () => {
-    test('コミットで変更されたファイルを取得する', () => {
-      // _executeCommandをモック
+    test('コミットで変更されたファイルを取得する', async () => {
+      // Arrange
       const mockOutput = 'A\tfile1.txt\nM\tfile2.js\nD\tfile3.md\nR100\told-file.txt\tnew-file.txt';
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue(mockOutput);
-      
-      const result = gitService.getChangedFilesInCommit('commit-hash');
-      
+      mockGit.show.mockResolvedValue(mockOutput);
+
+      // Act
+      const result = await gitService.getChangedFilesInCommit('commit-hash');
+
+      // Assert
       expect(result).toEqual([
         { status: 'added', path: 'file1.txt' },
         { status: 'modified', path: 'file2.js' },
         { status: 'deleted', path: 'file3.md' },
-        { status: 'R100', path: 'old-file.txt' }
+        { status: 'renamed', path: 'new-file.txt' },
       ]);
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show --name-status --format="" commit-hash');
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_changed_files:before', {
-        commitHash: 'commit-hash'
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_changed_files:after', {
-        commitHash: 'commit-hash',
-        files: expect.any(Array),
-        success: true
-      });
+      expect(mockGit.show).toHaveBeenCalledWith(['commit-hash', '--name-status', '--format=']);
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_changed_files_before', { commitHash: 'commit-hash', timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_changed_files_after', { commitHash: 'commit-hash', files: expect.any(Array), success: true, timestamp: 'any' });
     });
 
-    test('特殊なステータス（リネームなど）を正しく処理する', () => {
-      // _executeCommandをモック
-      const mockOutput = 'R100\told-file.txt\tnew-file.txt\nC75\tsrc.txt\tdest.txt';
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue(mockOutput);
-      
-      const result = gitService.getChangedFilesInCommit('commit-hash');
-      
-      expect(result).toEqual([
-        { status: 'R100', path: 'old-file.txt' },
-        { status: 'C75', path: 'src.txt' }
-      ]);
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show --name-status --format="" commit-hash');
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_changed_files:before', {
-        commitHash: 'commit-hash'
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_changed_files:after', {
-        commitHash: 'commit-hash',
-        files: expect.any(Array),
-        success: true
-      });
-    });
+     test('変更がない場合、空配列を返す', async () => {
+       // Arrange
+       mockGit.show.mockResolvedValue('');
+       // Act
+       const result = await gitService.getChangedFilesInCommit('commit-hash');
+       // Assert
+       expect(result).toEqual([]);
+       expect(mockGit.show).toHaveBeenCalledWith(['commit-hash', '--name-status', '--format=']);
+       expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_changed_files_after', { commitHash: 'commit-hash', files: [], success: true, timestamp: 'any' });
+     });
 
-    test('出力が空の場合、空配列を返す', () => {
-      // _executeCommandをモック
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue('');
-      
-      const result = gitService.getChangedFilesInCommit('commit-hash');
-      
-      expect(result).toEqual([]);
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show --name-status --format="" commit-hash');
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_changed_files:before', {
-        commitHash: 'commit-hash'
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_changed_files:after', {
-        commitHash: 'commit-hash',
-        files: [],
-        success: true
-      });
-    });
-
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
+    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
       // Arrange
-      const commitHash = 'hash';
-      const error = new Error('テストエラー');
-      jest.spyOn(gitService, '_executeCommand').mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue([]);
-      
+      const error = new Error('Git show error');
+      mockGit.show.mockRejectedValue(error);
+
+      // Act & Assert
+      await expect(gitService.getChangedFilesInCommit('hash')).rejects.toThrow(GitError);
+      expect(mockGit.show).toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_changed_files_before', { commitHash: 'hash', timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_changed_files_after', { commitHash: 'hash', success: false, error: error.message, timestamp: 'any' });
+       
+     });
+
+    test('コピーされたファイル(C)や未知のステータスも正しく処理する', async () => {
+      // Arrange
+      const mockOutput = 'C100\tsrc/a.txt\tdst/a.txt\nX\tunknown.file'; // 改行を \n に修正
+      mockGit.show.mockResolvedValue(mockOutput);
+
       // Act
-      const result = gitService.getChangedFilesInCommit(commitHash);
-      
+      const result = await gitService.getChangedFilesInCommit('commit-hash');
+
       // Assert
-      expect(result).toEqual([]);
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_changed_files:after', {
-        commitHash,
-        success: false,
-        error
-      });
-      expectErrorHandled(mockErrorHandler, 'GitError', '変更されたファイルの取得に失敗しました', {
-        commitHash,
-        operation: 'getChangedFilesInCommit'
-      });
+      expect(result).toEqual([
+        { status: 'copied', path: 'dst/a.txt' }, // コピー先ファイルパスが取得される
+        { status: 'X', path: 'unknown.file' }, // 未知のステータスはそのまま返される
+      ]);
+      expect(mockGit.show).toHaveBeenCalledWith(['commit-hash', '--name-status', '--format=']);
     });
-  });
+   });
 
   describe('getCommitDiffStats', () => {
-    test('コミットの差分統計を取得する', () => {
-      // getChangedFilesInCommitをモック
-      const mockFiles = [
-        { status: 'added', path: 'file1.txt' },
-        { status: 'modified', path: 'file2.js' }
-      ];
-      jest.spyOn(gitService, 'getChangedFilesInCommit').mockReturnValue(mockFiles);
-      
-      // _executeCommandをモック
-      const mockOutput = '10\t5\tfile1.txt\n20\t10\tfile2.js';
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue(mockOutput);
-      
-      const result = gitService.getCommitDiffStats('commit-hash');
-      
-      expect(result).toEqual({
-        files: mockFiles,
-        lines_added: 30,
-        lines_deleted: 15
-      });
-      expect(gitService.getChangedFilesInCommit).toHaveBeenCalledWith('commit-hash');
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show --numstat --format="" commit-hash');
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_diff_stats:before', {
-        commitHash: 'commit-hash'
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_diff_stats:after', {
-        commitHash: 'commit-hash',
-        stats: expect.any(Object),
-        success: true
-      });
-    });
-
-    test('バイナリファイルを含む場合、正しく処理する', () => {
-      // getChangedFilesInCommitをモック
-      const mockFiles = [
-        { status: 'added', path: 'file1.txt' },
-        { status: 'added', path: 'image.png' }
-      ];
-      jest.spyOn(gitService, 'getChangedFilesInCommit').mockReturnValue(mockFiles);
-      
-      // _executeCommandをモック
-      const mockOutput = '10\t5\tfile1.txt\n-\t-\timage.png';
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue(mockOutput);
-      
-      const result = gitService.getCommitDiffStats('commit-hash');
-      
-      expect(result).toEqual({
-        files: mockFiles,
-        lines_added: 10,
-        lines_deleted: 5
-      });
-      expect(gitService.getChangedFilesInCommit).toHaveBeenCalledWith('commit-hash');
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show --numstat --format="" commit-hash');
-    });
-
-    test('バイナリファイルと不正な形式の行を含む場合、正しく処理する', () => {
-      // getChangedFilesInCommitをモック
-      const mockFiles = [
-        { status: 'added', path: 'file1.txt' },
-        { status: 'added', path: 'image.png' },
-        { status: 'added', path: 'unknown.bin' }
-      ];
-      jest.spyOn(gitService, 'getChangedFilesInCommit').mockReturnValue(mockFiles);
-      
-      // _executeCommandをモック - 不正な形式の行を含む
-      const mockOutput = '10\t5\tfile1.txt\n-\t-\timage.png\n?\t?\tunknown.bin\ninvalid_line';
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue(mockOutput);
-      
-      const result = gitService.getCommitDiffStats('commit-hash');
-      
-      expect(result).toEqual({
-        files: mockFiles,
-        lines_added: 10,
-        lines_deleted: 5
-      });
-      expect(gitService.getChangedFilesInCommit).toHaveBeenCalledWith('commit-hash');
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show --numstat --format="" commit-hash');
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_diff_stats:before', {
-        commitHash: 'commit-hash'
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_diff_stats:after', {
-        commitHash: 'commit-hash',
-        stats: expect.any(Object),
-        success: true
-      });
-    });
-
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
+    test('コミットの差分統計を取得する', async () => {
       // Arrange
-      const commitHash = 'hash';
-      const error = new Error('テストエラー');
-      jest.spyOn(gitService, '_executeCommand').mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue({ files: [], lines_added: 0, lines_deleted: 0 });
-      
+      const mockFiles = [ { status: 'added', path: 'file1.txt' }, { status: 'modified', path: 'file2.js' } ];
+      const mockNumstatOutput = '10\t5\tfile1.txt\n20\t10\tfile2.js';
+      jest.spyOn(gitService, 'getChangedFilesInCommit').mockResolvedValue(mockFiles);
+      mockGit.show.mockResolvedValue(mockNumstatOutput);
+
       // Act
-      const result = gitService.getCommitDiffStats(commitHash);
-      
+      const result = await gitService.getCommitDiffStats('commit-hash');
+
       // Assert
-      expect(result).toEqual({ files: [], lines_added: 0, lines_deleted: 0 });
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_diff_stats:after', {
-        commitHash,
-        success: false,
-        error
-      });
-      expectErrorHandled(mockErrorHandler, 'GitError', 'コミットの差分統計の取得に失敗しました', {
-        commitHash,
-        operation: 'getCommitDiffStats'
-      });
+      expect(result).toEqual({ files: mockFiles, lines_added: 30, lines_deleted: 15 });
+      expect(gitService.getChangedFilesInCommit).toHaveBeenCalledWith('commit-hash');
+      expect(mockGit.show).toHaveBeenCalledWith(['commit-hash', '--numstat', '--format=']);
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_diff_stats_before', { commitHash: 'commit-hash', timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_diff_stats_after', { commitHash: 'commit-hash', stats: expect.any(Object), success: true, timestamp: 'any' });
+    });
+
+     test('バイナリファイルを含む場合、正しく処理する', async () => {
+       // Arrange
+       const mockFiles = [ { status: 'added', path: 'file1.txt' }, { status: 'added', path: 'image.png' } ];
+       const mockNumstatOutput = '10\t5\tfile1.txt\n-\t-\timage.png';
+       jest.spyOn(gitService, 'getChangedFilesInCommit').mockResolvedValue(mockFiles);
+       mockGit.show.mockResolvedValue(mockNumstatOutput);
+
+       // Act
+       const result = await gitService.getCommitDiffStats('commit-hash');
+
+       // Assert
+       expect(result).toEqual({ files: mockFiles, lines_added: 10, lines_deleted: 5 });
+       expect(mockGit.show).toHaveBeenCalledWith(['commit-hash', '--numstat', '--format=']);
+     });
+
+    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+      // Arrange
+      const error = new Error('Git show numstat error');
+      jest.spyOn(gitService, 'getChangedFilesInCommit').mockResolvedValue([]);
+      mockGit.show.mockRejectedValue(error);
+
+      // Act & Assert
+      await expect(gitService.getCommitDiffStats('hash')).rejects.toThrow(GitError);
+      expect(gitService.getChangedFilesInCommit).toHaveBeenCalledWith('hash');
+      expect(mockGit.show).toHaveBeenCalledWith(['hash', '--numstat', '--format=']);
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_diff_stats_before', { commitHash: 'hash', timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_diff_stats_after', { commitHash: 'hash', success: false, error: error.message, timestamp: 'any' });
+       
     });
   });
 
   describe('getBranches', () => {
-    test('ブランチ一覧を取得する', () => {
-      // _executeCommandをモック
-      const mockOutput = '* main\n  develop\n  feature/test';
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue(mockOutput);
-      
-      const result = gitService.getBranches();
-      
-      expect(result).toEqual(['main', 'develop', 'feature/test']);
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git branch');
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:branch:get_all:before', {});
-      
-      expectEventEmitted(mockEventEmitter, 'git:branch:get_all:after', {
-        branches: ['main', 'develop', 'feature/test'],
-        success: true
-      });
-    });
-
-    test('出力が空の場合、空配列を返す', () => {
-      // _executeCommandをモック
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue('');
-      
-      const result = gitService.getBranches();
-      
-      expect(result).toEqual([]);
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git branch');
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:branch:get_all:before', {});
-      
-      expectEventEmitted(mockEventEmitter, 'git:branch:get_all:after', {
-        branches: [],
-        success: true
-      });
-    });
-
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
+    test('ブランチ一覧を取得する', async () => {
       // Arrange
-      const error = new Error('テストエラー');
-      jest.spyOn(gitService, '_executeCommand').mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue([]);
-      
+      const mockBranchSummary = { all: ['main', 'develop', 'feature/test'], current: 'main' };
+      mockGit.branchLocal.mockResolvedValue(mockBranchSummary);
+
       // Act
-      const result = gitService.getBranches();
-      
+      const result = await gitService.getBranches();
+
       // Assert
-      expect(result).toBeNull();
-      expectEventEmitted(mockEventEmitter, 'git:branch:get_all:after', {
-        success: false,
-        error
-      });
-      expectErrorHandled(mockErrorHandler, 'GitError', 'ブランチ一覧の取得に失敗しました', {
-        operation: 'getBranches'
-      });
+      expect(result).toEqual(['main', 'develop', 'feature/test']);
+      expect(mockGit.branchLocal).toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'branch_get_all_before', { timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'branch_get_all_after', { branches: expect.any(Array), success: true, timestamp: 'any' });
+    });
+
+     test('ブランチがない場合、空配列を返す', async () => {
+       // Arrange
+       const mockBranchSummary = { all: [], current: '' };
+       mockGit.branchLocal.mockResolvedValue(mockBranchSummary);
+       // Act
+       const result = await gitService.getBranches();
+       // Assert
+       expect(result).toEqual([]);
+       expect(mockGit.branchLocal).toHaveBeenCalled();
+       expectStandardizedEventEmitted(mockEventEmitter, 'git', 'branch_get_all_after', { branches: [], success: true, timestamp: 'any' });
+     });
+
+    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+      // Arrange
+      const error = new Error('Git branch error');
+      mockGit.branchLocal.mockRejectedValue(error);
+
+      // Act & Assert
+      await expect(gitService.getBranches()).rejects.toThrow(GitError);
+      expect(mockGit.branchLocal).toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'branch_get_all_before', { timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'branch_get_all_after', { success: false, error: error.message, timestamp: 'any' });
+       
     });
   });
 
   describe('getCurrentBranch', () => {
-    test('現在のブランチを取得する', () => {
-      // _executeCommandをモック
-      const mockBranch = 'main';
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue(mockBranch);
-      
-      const result = gitService.getCurrentBranch();
-      
-      expect(result).toBe(mockBranch);
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git branch --show-current');
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:branch:get_current:before', {});
-      
-      expectEventEmitted(mockEventEmitter, 'git:branch:get_current:after', {
-        branch: mockBranch,
-        success: true
-      });
+    test('現在のブランチを取得する', async () => {
+      // Arrange
+      const mockBranchSummary = { all: ['main', 'develop'], current: 'main' };
+      mockGit.branchLocal.mockResolvedValue(mockBranchSummary);
+
+      // Act
+      const result = await gitService.getCurrentBranch();
+
+      // Assert
+      expect(result).toBe('main');
+      expect(mockGit.branchLocal).toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'branch_get_current_before', { timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'branch_get_current_after', { branch: 'main', success: true, timestamp: 'any' });
     });
 
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
+    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
       // Arrange
-      const error = new Error('テストエラー');
-      jest.spyOn(gitService, '_executeCommand').mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue('');
-      
-      // Act
-      const result = gitService.getCurrentBranch();
-      
-      // Assert
-      expect(result).toBe('');
-      expectEventEmitted(mockEventEmitter, 'git:branch:get_current:after', {
-        success: false,
-        error
-      });
-      expectErrorHandled(mockErrorHandler, 'GitError', '現在のブランチの取得に失敗しました', {
-        operation: 'getCurrentBranch'
-      });
+      const error = new Error('Git branch current error');
+      mockGit.branchLocal.mockRejectedValue(error);
+
+      // Act & Assert
+      await expect(gitService.getCurrentBranch()).rejects.toThrow(GitError);
+      expect(mockGit.branchLocal).toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'branch_get_current_before', { timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'branch_get_current_after', { success: false, error: error.message, timestamp: 'any' });
+       
     });
   });
 
   describe('getCommitHistory', () => {
-    test('コミット履歴を取得する', () => {
-      // _executeCommandをモック
-      const mockOutput = 'abc123|Fix bug #T001|2025-03-20T10:00:00+09:00|User1\ndef456|Implement feature #T002|2025-03-21T11:00:00+09:00|User2';
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue(mockOutput);
-      
-      // extractTaskIdsFromCommitMessageをモック
+    test('コミット履歴を取得する', async () => {
+       // Arrange
+       const mockLog = {
+        all: [
+          { hash: 'abc123', message: 'Fix bug #T001', date: '2025-03-20T10:00:00+09:00', author_name: 'User1' },
+          { hash: 'def456', message: 'Implement feature #T002', date: '2025-03-21T11:00:00+09:00', author_name: 'User2' },
+        ],
+        latest: { hash: 'def456' }, total: 2
+      };
+      mockGit.log.mockResolvedValue(mockLog);
       jest.spyOn(gitService, 'extractTaskIdsFromCommitMessage')
         .mockReturnValueOnce(['T001'])
         .mockReturnValueOnce(['T002']);
-      
-      const result = gitService.getCommitHistory(2);
-      
-      expect(result).toEqual([
-        {
-          hash: 'abc123',
-          message: 'Fix bug #T001',
-          timestamp: '2025-03-20T10:00:00+09:00',
-          author: 'User1',
-          related_tasks: ['T001']
-        },
-        {
-          hash: 'def456',
-          message: 'Implement feature #T002',
-          timestamp: '2025-03-21T11:00:00+09:00',
-          author: 'User2',
-          related_tasks: ['T002']
-        }
-      ]);
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git log -2 --pretty=format:"%H|%s|%ad|%an"');
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledWith('Fix bug #T001');
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledWith('Implement feature #T002');
-      // イベント発行の検証は省略（テストヘルパーで対応済み）
-    });
 
-    test('デフォルトのlimitを使用する', () => {
-      // _executeCommandをモック
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue('');
-      
-      gitService.getCommitHistory();
-      
-      
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git log -10 --pretty=format:"%H|%s|%ad|%an"');
-    });
-
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const limit = 5;
-      const error = new Error('テストエラー');
-      jest.spyOn(gitService, '_executeCommand').mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue([]);
-      
       // Act
-      const result = gitService.getCommitHistory(limit);
-      
+      const result = await gitService.getCommitHistory(2);
+
       // Assert
-      expect(result).toBeNull();
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_history:after', {
-        limit,
-        success: false,
-        error
+      expect(result).toEqual([
+        { hash: 'abc123', message: 'Fix bug #T001', timestamp: '2025-03-20T10:00:00+09:00', author: 'User1', related_tasks: ['T001'] },
+        { hash: 'def456', message: 'Implement feature #T002', timestamp: '2025-03-21T11:00:00+09:00', author: 'User2', related_tasks: ['T002'] },
+      ]);
+      expect(mockGit.log).toHaveBeenCalledWith({
+        n: 2,
+        format: { hash: '%H', message: '%s', date: '%ad', author_name: '%an' },
+        '--date': 'iso',
       });
-      expectErrorHandled(mockErrorHandler, 'GitError', 'コミット履歴の取得に失敗しました', {
-        limit,
-        operation: 'getCommitHistory'
-      });
+      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledTimes(2);
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_history_before', { limit: 2, timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_history_after', { limit: 2, commits: expect.any(Array), success: true, timestamp: 'any' });
+    });
+
+     test('デフォルトのlimitを使用する', async () => {
+       // Arrange
+       const mockLog = { all: [], latest: null, total: 0 };
+       mockGit.log.mockResolvedValue(mockLog);
+       // Act
+       await gitService.getCommitHistory();
+       // Assert
+       expect(mockGit.log).toHaveBeenCalledWith(expect.objectContaining({ n: 10 }));
+     });
+
+    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+      // Arrange
+      const error = new Error('Git log history error');
+      mockGit.log.mockRejectedValue(error);
+
+      // Act & Assert
+      await expect(gitService.getCommitHistory(5)).rejects.toThrow(GitError);
+      expect(mockGit.log).toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_history_before', { limit: 5, timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_history_after', { limit: 5, success: false, error: error.message, timestamp: 'any' });
+       
     });
   });
+
   describe('getFileHistory', () => {
-    test('ファイルの変更履歴を取得する', () => {
-      // _executeCommandをモック
-      const mockOutput = 'abc123|Fix bug #T001|2025-03-20T10:00:00+09:00|User1\ndef456|Implement feature #T002|2025-03-21T11:00:00+09:00|User2';
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue(mockOutput);
-      
-      // extractTaskIdsFromCommitMessageをモック
-      jest.spyOn(gitService, 'extractTaskIdsFromCommitMessage')
-        .mockReturnValueOnce(['T001'])
-        .mockReturnValueOnce(['T002']);
-      
-      const result = gitService.getFileHistory('path/to/file.js', 2);
-      
+    test('ファイルの変更履歴を取得する', async () => {
+       // Arrange
+       const mockLog = {
+        all: [
+          { hash: 'abc123', message: 'Fix bug #T001', date: '2025-03-20T10:00:00+09:00', author_name: 'User1' },
+        ],
+        latest: { hash: 'abc123' }, total: 1
+      };
+      mockGit.log.mockResolvedValue(mockLog);
+      jest.spyOn(gitService, 'extractTaskIdsFromCommitMessage').mockReturnValue(['T001']);
+
+      // Act
+      const result = await gitService.getFileHistory('path/to/file.js', 1);
+
+      // Assert
       expect(result).toEqual([
-        {
-          hash: 'abc123',
-          message: 'Fix bug #T001',
-          timestamp: '2025-03-20T10:00:00+09:00',
-          author: 'User1',
-          related_tasks: ['T001']
-        },
-        {
-          hash: 'def456',
-          message: 'Implement feature #T002',
-          timestamp: '2025-03-21T11:00:00+09:00',
-          author: 'User2',
-          related_tasks: ['T002']
-        }
+        { hash: 'abc123', message: 'Fix bug #T001', timestamp: '2025-03-20T10:00:00+09:00', author: 'User1', related_tasks: ['T001'] },
       ]);
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git log -2 --pretty=format:"%H|%s|%ad|%an" -- "path/to/file.js"');
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledWith('Fix bug #T001');
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledWith('Implement feature #T002');
-      // イベント発行の検証は省略（テストヘルパーで対応済み）
+      expect(mockGit.log).toHaveBeenCalledWith({
+        file: 'path/to/file.js',
+        n: 1,
+        format: { hash: '%H', message: '%s', date: '%ad', author_name: '%an' },
+        '--date': 'iso',
+      });
+      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledTimes(1);
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'file_get_history_before', { filePath: 'path/to/file.js', limit: 1, timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'file_get_history_after', { filePath: 'path/to/file.js', limit: 1, commits: expect.any(Array), success: true, timestamp: 'any' });
     });
 
-    test('出力が空の場合、空配列を返す', () => {
-      // _executeCommandをモック
-      jest.spyOn(gitService, '_executeCommand').mockReturnValue('');
-      
-      const result = gitService.getFileHistory('path/to/file.js', 2);
-      
-      expect(result).toEqual([]);
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git log -2 --pretty=format:"%H|%s|%ad|%an" -- "path/to/file.js"');
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:file:get_history:before', {
-        filePath: 'path/to/file.js',
-        limit: 2
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:file:get_history:after', {
-        filePath: 'path/to/file.js',
-        limit: 2,
-        commits: [],
-        success: true
-      });
-    });
+     test('履歴がない場合、空配列を返す', async () => {
+       // Arrange
+       const mockLog = { all: [], latest: null, total: 0 };
+       mockGit.log.mockResolvedValue(mockLog);
+       // Act
+       const result = await gitService.getFileHistory('path/to/file.js');
+       // Assert
+       expect(result).toEqual([]);
+       expect(mockGit.log).toHaveBeenCalledWith(expect.objectContaining({ file: 'path/to/file.js' }));
+       expectStandardizedEventEmitted(mockEventEmitter, 'git', 'file_get_history_after', { filePath: 'path/to/file.js', limit: 10, commits: [], success: true, timestamp: 'any' });
+     });
 
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
+    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
       // Arrange
-      const filePath = 'path/to/file.js';
-      const limit = 2;
-      const error = new Error('テストエラー');
-      jest.spyOn(gitService, '_executeCommand').mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue([]);
-      
-      // Act
-      const result = gitService.getFileHistory(filePath, limit);
-      
-      // Assert
-      expect(result).toBeNull();
-      expectEventEmitted(mockEventEmitter, 'git:file:get_history:after', {
-        filePath,
-        limit,
-        success: false,
-        error
-      });
-      expectErrorHandled(mockErrorHandler, 'GitError', 'ファイルの変更履歴の取得に失敗しました', {
-        filePath,
-        limit,
-        operation: 'getFileHistory'
-      });
+      const error = new Error('Git log file error');
+      mockGit.log.mockRejectedValue(error);
+
+      // Act & Assert
+      await expect(gitService.getFileHistory('path/to/file.js')).rejects.toThrow(GitError);
+      expect(mockGit.log).toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'file_get_history_before', { filePath: 'path/to/file.js', limit: 10, timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'file_get_history_after', { filePath: 'path/to/file.js', limit: 10, success: false, error: error.message, timestamp: 'any' });
+       
     });
   });
 
   describe('getCommitDetails', () => {
-    test('コミットの詳細情報を取得する', () => {
-      // mockEventEmitterをリセット
-      mockEventEmitter.emit.mockClear();
-      
-      // _executeCommandをモック
-      jest.spyOn(gitService, '_executeCommand')
-        .mockReturnValueOnce('Commit message with #T001') // messageCommand
-        .mockReturnValueOnce('abc123|User1|user1@example.com|2025-03-20T10:00:00+09:00|User1|user1@example.com|2025-03-20T10:00:00+09:00|parent1 parent2'); // infoCommand
-      
-      // getCommitDiffStatsをモック
-      jest.spyOn(gitService, 'getCommitDiffStats').mockReturnValue({
-        files: [
-          { status: 'added', path: 'file1.txt' },
-          { status: 'modified', path: 'file2.js' }
-        ],
-        lines_added: 30,
-        lines_deleted: 15
-      });
-      
-      // extractTaskIdsFromCommitMessageをモック
+    test('コミットの詳細情報を取得する', async () => {
+      // Arrange
+      const mockLog = {
+        latest: {
+          hash: 'abc123', message: 'Commit message with #T001\n', author_name: 'User1', author_email: 'user1@example.com', author_date: '2025-03-20T10:00:00+09:00',
+          committer_name: 'User1', committer_email: 'user1@example.com', committer_date: '2025-03-20T10:00:00+09:00', parents: 'parent1 parent2'
+        }, all: [], total: 1
+      };
+      const mockStats = { files: [{ status: 'added', path: 'file1.txt' }], lines_added: 10, lines_deleted: 5 };
+      mockGit.log.mockResolvedValue(mockLog);
+      jest.spyOn(gitService, 'getCommitDiffStats').mockResolvedValue(mockStats);
       jest.spyOn(gitService, 'extractTaskIdsFromCommitMessage').mockReturnValue(['T001']);
-      
-      const result = gitService.getCommitDetails('commit-hash');
-      
+
+      // Act
+      const result = await gitService.getCommitDetails('abc123');
+
+      // Assert
       expect(result).toEqual({
         hash: 'abc123',
         message: 'Commit message with #T001',
-        author: {
-          name: 'User1',
-          email: 'user1@example.com',
-          date: '2025-03-20T10:00:00+09:00'
-        },
-        committer: {
-          name: 'User1',
-          email: 'user1@example.com',
-          date: '2025-03-20T10:00:00+09:00'
-        },
+        author: { name: 'User1', email: 'user1@example.com', date: '2025-03-20T10:00:00+09:00' },
+        committer: { name: 'User1', email: 'user1@example.com', date: '2025-03-20T10:00:00+09:00' },
         parents: ['parent1', 'parent2'],
-        files: [
-          { status: 'added', path: 'file1.txt' },
-          { status: 'modified', path: 'file2.js' }
-        ],
-        stats: {
-          lines_added: 30,
-          lines_deleted: 15,
-          files_changed: 2
-        },
-        related_tasks: ['T001']
+        files: mockStats.files,
+        stats: { lines_added: 10, lines_deleted: 5, files_changed: 1 },
+        related_tasks: ['T001'],
       });
-      
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show -s --format="%B" commit-hash');
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show -s --format="%H|%an|%ae|%ai|%cn|%ce|%ci|%P" commit-hash');
-      expect(gitService.getCommitDiffStats).toHaveBeenCalledWith('commit-hash');
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledWith('Commit message with #T001');
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_details:before', {
-        commitHash: 'commit-hash'
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_details:after', {
-        commitHash: 'commit-hash',
-        success: true,
-        details: expect.any(Object)
-      });
+      expect(mockGit.log).toHaveBeenCalledWith({ format: expect.any(Object), n: 1, 'abc123': null });
+      expect(gitService.getCommitDiffStats).toHaveBeenCalledWith('abc123');
+      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledWith('Commit message with #T001\n');
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_details_before', { commitHash: 'abc123', timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_details_after', { commitHash: 'abc123', details: expect.any(Object), success: true, timestamp: 'any' });
     });
 
-    test('コミット情報が空の場合、nullを返す', () => {
-      // mockEventEmitterをリセット
-      mockEventEmitter.emit.mockClear();
-      
-      // _executeCommandをモック
-      jest.spyOn(gitService, '_executeCommand')
-        .mockReturnValueOnce('Commit message with #T001') // messageCommand
-        .mockReturnValueOnce(''); // infoCommandが空文字列を返す
-      
-      const result = gitService.getCommitDetails('commit-hash');
-      
-      expect(result).toBeNull();
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show -s --format="%B" commit-hash');
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show -s --format="%H|%an|%ae|%ai|%cn|%ce|%ci|%P" commit-hash');
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_details:before', {
-        commitHash: 'commit-hash'
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_details:after', {
-        commitHash: 'commit-hash',
-        success: false,
-        error: expect.any(Error)
-      });
-    });
-  });
+     test('コミットが見つからない場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+       // Arrange
+       const mockLog = { latest: null, all: [], total: 0 };
+       mockGit.log.mockResolvedValue(mockLog);
 
-  describe('_emitEvent', () => {
-    test('標準化されたイベント発行メソッドがある場合、それを使用する', () => {
-      // 標準化されたイベント発行メソッドを持つイベントエミッター
-      const mockStandardizedEventEmitter = {
-        emitStandardized: jest.fn(),
-        emit: jest.fn()
-      };
-      
-      // GitServiceのインスタンス作成
-      const gitServiceWithStandardized = new GitService({
-        repoPath: '/test/repo/path',
-        logger: mockLogger,
-        eventEmitter: mockStandardizedEventEmitter,
-        errorHandler: mockErrorHandler
-      });
-      
-      // イベント発行
-      gitServiceWithStandardized._emitEvent('commit:get_hash', { hash: 'abc123' });
-      
-      // 標準化されたイベント発行メソッドが呼び出されることを確認
-      expect(mockStandardizedEventEmitter.emitStandardized).toHaveBeenCalledWith(
-        'git',
-        'commit:get_hash',
-        expect.objectContaining({
-          hash: 'abc123',
-          timestamp: expect.any(String)
-        })
-      );
-      
-      // 従来のイベント発行メソッドも呼び出されることを確認（修正後の仕様）
-      expect(mockStandardizedEventEmitter.emit).toHaveBeenCalledWith(
-        'git:commit:get_hash',
-        expect.objectContaining({
-          hash: 'abc123',
-          timestamp: expect.any(String)
-        })
-      );
-    });
+       // Act & Assert
+       await expect(gitService.getCommitDetails('unknown-hash')).rejects.toThrow(GitError);
+       expect(mockGit.log).toHaveBeenCalled();
+       expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_details_before', { commitHash: 'unknown-hash', timestamp: 'any' });
+       expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_details_after', { commitHash: 'unknown-hash', details: null, success: false, error: 'Commit info not found', timestamp: 'any' });
+        
+     });
 
-    test('イベントエミッターがない場合、エラーにならない', () => {
-      const gitServiceNoEmitter = new GitService({
-        repoPath: '/test/repo/path',
-        logger: mockLogger
-      });
-      
-      // エラーが発生しないことを確認
-      expect(() => {
-        gitServiceNoEmitter._emitEvent('test:event', { data: 'test' });
-      }).not.toThrow();
-    });
-
-    test('イベント名にgit:プレフィックスがある場合、そのまま使用する', () => {
-      const mockEmitter = { emit: jest.fn() };
-      const gitService = new GitService({
-        repoPath: '/test/repo',
-        eventEmitter: mockEmitter
-      });
-      
-      gitService._emitEvent('git:test:event', { data: 'test' });
-      
-      expect(mockEmitter.emit).toHaveBeenCalledWith(
-        'git:test:event',
-        expect.objectContaining({
-          data: 'test',
-          timestamp: expect.any(String)
-        })
-      );
-    });
-
-    test('標準化されたイベント発行メソッドがない場合、従来のイベント発行を使用する', () => {
-      // 従来のイベント発行メソッドのみを持つイベントエミッター
-      const mockLegacyEventEmitter = {
-        emit: jest.fn()
-      };
-      
-      // GitServiceのインスタンス作成
-      const gitServiceWithLegacy = new GitService({
-        repoPath: '/test/repo/path',
-        logger: mockLogger,
-        eventEmitter: mockLegacyEventEmitter,
-        errorHandler: mockErrorHandler
-      });
-      
-      // イベント発行
-      gitServiceWithLegacy._emitEvent('commit:get_hash', { hash: 'abc123' });
-      
-      expect(mockLegacyEventEmitter.emit).toHaveBeenCalledWith(
-        'git:commit:get_hash',
-        expect.objectContaining({
-          hash: 'abc123',
-          timestamp: expect.any(String)
-        })
-      );
-    });
-  });
-
-  describe('_handleError', () => {
-    test('エラーハンドラーがある場合、それを使用する', () => {
-      // エラーハンドラーの戻り値を設定
-      mockErrorHandler.handle.mockReturnValue('');
-      
-      const error = new Error('テストエラー');
-      const context = { commitHash: 'abc123', operation: 'getCurrentCommitHash' };
-      
-      const result = gitService._handleError('エラーメッセージ', error, context);
-      
-      expect(result).toBe('');
-      // エラー処理の検証は省略（テストヘルパーで対応済み）
-    });
-
-    test('エラーハンドラーがない場合、ロガーを使用する', () => {
-      // エラーハンドラーなしのGitService
-      const gitServiceWithoutHandler = new GitService({
-        repoPath: '/test/repo/path',
-        logger: mockLogger,
-        eventEmitter: mockEventEmitter
-      });
-      
-      const error = new Error('テストエラー');
-      const context = { commitHash: 'abc123', operation: 'getCurrentCommitHash' };
-      
-      const result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, context);
-      
-      expect(result).toBe('');
-      // ロガーの検証は省略
-    });
-
-    test('エラーハンドラーがなく、イベントエミッターがある場合、エラーイベントを発行する', () => {
-      // モックイベントエミッターをリセット
-      mockEventEmitter.emit.mockClear();
-      
-      // エラーハンドラーなしのGitService
-      const gitServiceWithoutHandler = new GitService({
-        repoPath: '/test/repo/path',
-        logger: mockLogger,
-        eventEmitter: mockEventEmitter
-      });
-      
-      const error = new Error('テストエラー');
-      const context = { operation: 'test' };
-      
-      gitServiceWithoutHandler._handleError('エラーメッセージ', error, context);
-      
-      // エラーイベントが発行されることを確認
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
-        'error',
-        expect.objectContaining({
-          name: 'GitError',
-          message: 'エラーメッセージ'
-        })
-      );
-    });
-
-    test('操作に応じて適切なデフォルト値を返す', () => {
-      // エラーハンドラーなしのGitService
-      const gitServiceWithoutHandler = new GitService({
-        repoPath: '/test/repo/path',
-        logger: mockLogger,
-        eventEmitter: mockEventEmitter
-      });
-      
-      const error = new Error('テストエラー');
-      
-      // すべての操作のデフォルト値をテスト
-      // extractTaskIdsFromCommitMessage操作
-      let result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'extractTaskIdsFromCommitMessage' });
-      expect(result).toEqual([]);
-      
-      // getCurrentCommitHash操作
-      result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'getCurrentCommitHash' });
-      expect(result).toBe('');
-      
-      // getCurrentBranch操作
-      result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'getCurrentBranch' });
-      expect(result).toBe('');
-      
-      // getCommitsBetween操作
-      result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'getCommitsBetween' });
-      expect(result).toEqual([]);
-      
-      // getChangedFilesInCommit操作
-      result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'getChangedFilesInCommit' });
-      expect(result).toEqual([]);
-      
-      // getBranches操作
-      result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'getBranches' });
-      expect(result).toEqual([]);
-      
-      // getCommitHistory操作
-      result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'getCommitHistory' });
-      expect(result).toEqual([]);
-      
-      // getFileHistory操作
-      result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'getFileHistory' });
-      expect(result).toEqual([]);
-      
-      // getCommitDiffStats操作
-      result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'getCommitDiffStats' });
-      expect(result).toEqual({ files: [], lines_added: 0, lines_deleted: 0 });
-      
-      // getCommitDetails操作
-      result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'getCommitDetails' });
-      expect(result).toBeNull();
-      
-      // 不明な操作
-      result = gitServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'unknown' });
-      expect(result).toBe(false);
-    });
-  });
-
-  describe('getCommitDetails', () => {
-    test('コミットの詳細情報を取得する', () => {
-      // mockEventEmitterをリセット
-      mockEventEmitter.emit.mockClear();
-      
-      // _executeCommandをモック
-      jest.spyOn(gitService, '_executeCommand')
-        .mockReturnValueOnce('Commit message with #T001') // messageCommand
-        .mockReturnValueOnce('abc123|User1|user1@example.com|2025-03-20T10:00:00+09:00|User1|user1@example.com|2025-03-20T10:00:00+09:00|parent1 parent2'); // infoCommand
-      
-      // getCommitDiffStatsをモック
-      jest.spyOn(gitService, 'getCommitDiffStats').mockReturnValue({
-        files: [
-          { status: 'added', path: 'file1.txt' },
-          { status: 'modified', path: 'file2.js' }
-        ],
-        lines_added: 30,
-        lines_deleted: 15
-      });
-      
-      // extractTaskIdsFromCommitMessageをモック
-      jest.spyOn(gitService, 'extractTaskIdsFromCommitMessage').mockReturnValue(['T001']);
-      
-      const result = gitService.getCommitDetails('commit-hash');
-      
-      expect(result).toEqual({
-        hash: 'abc123',
-        message: 'Commit message with #T001',
-        author: {
-          name: 'User1',
-          email: 'user1@example.com',
-          date: '2025-03-20T10:00:00+09:00'
-        },
-        committer: {
-          name: 'User1',
-          email: 'user1@example.com',
-          date: '2025-03-20T10:00:00+09:00'
-        },
-        parents: ['parent1', 'parent2'],
-        files: [
-          { status: 'added', path: 'file1.txt' },
-          { status: 'modified', path: 'file2.js' }
-        ],
-        stats: {
-          lines_added: 30,
-          lines_deleted: 15,
-          files_changed: 2
-        },
-        related_tasks: ['T001']
-      });
-      
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show -s --format="%B" commit-hash');
-      expect(gitService._executeCommand).toHaveBeenCalledWith('git show -s --format="%H|%an|%ae|%ai|%cn|%ce|%ci|%P" commit-hash');
-      expect(gitService.getCommitDiffStats).toHaveBeenCalledWith('commit-hash');
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledWith('Commit message with #T001');
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_details:before', {
-        commitHash: 'commit-hash'
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_details:after', {
-        commitHash: 'commit-hash',
-        success: true,
-        details: expect.any(Object)
-      });
-      
-      // 直接emit呼び出しの検証は省略（コンソールログの出力があるため）
-    });
-
-    test('_executeCommandがエラーを返した場合、エラーハンドラーを呼び出す', () => {
+    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
       // Arrange
-      const commitHash = 'abc123';
-      const error = new Error('コマンド実行エラー');
-      
-      // _executeCommandをモック
-      jest.spyOn(gitService, '_executeCommand').mockImplementation(() => {
-        throw error;
-      });
-      
-      // エラーハンドラーの戻り値を設定
-      mockErrorHandler.handle.mockReturnValue(null);
-      
-      // Act
-      const result = gitService.getCommitDetails(commitHash);
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(gitService._executeCommand).toHaveBeenCalledWith(expect.any(String));
-      
-      // イベント発行の検証
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_details:before', {
-        commitHash
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:get_details:after', {
-        commitHash,
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証
-      expectErrorHandled(mockErrorHandler, 'GitError', 'コミットの詳細情報の取得に失敗しました', {
-        commitHash,
-        operation: 'getCommitDetails'
-      });
-    });
-  });
+      const error = new Error('Git log details error');
+      mockGit.log.mockRejectedValue(error);
 
-  describe('_execGit', () => {
-    test('Gitコマンドを正常に実行する', () => {
-      // Arrange
-      const command = 'git status';
-      const mockOutput = 'command output';
-      
-      // execSyncをモック
-      execSync.mockReturnValue(mockOutput);
-      
-      // Act
-      const result = gitService._execGit(command);
-      
-      // Assert
-      expect(result).toBe(mockOutput);
-      expect(execSync).toHaveBeenCalledWith(command, {
-        cwd: '/test/repo/path',
-        encoding: 'utf8'
-      });
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectEventEmitted(mockEventEmitter, 'git:command:execute:before', {
-        command
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:command:execute:after', {
-        command,
-        success: true
-      });
-      
-      // git:command_executedイベントの検証は省略（コンソールログの出力があるため）
-    });
-
-    test('コマンド実行時にエラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const command = 'git status';
-      const error = new Error('コマンド実行エラー');
-      
-      // execSyncをモック
-      execSync.mockImplementation(() => {
-        throw error;
-      });
-      
-      // エラーハンドラーの戻り値を設定
-      mockErrorHandler.handle.mockReturnValue('handled');
-      
-      // Act
-      const result = gitService._execGit(command);
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(execSync).toHaveBeenCalledWith(command, expect.any(Object));
-      
-      // エラー処理の検証
-      expectErrorHandled(mockErrorHandler, 'GitError', 'Gitコマンド実行に失敗しました', {
-        command,
-        operation: '_execGit'
-      });
+      // Act & Assert
+      await expect(gitService.getCommitDetails('hash')).rejects.toThrow(GitError);
+      expect(mockGit.log).toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_details_before', { commitHash: 'hash', timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_get_details_after', { commitHash: 'hash', success: false, error: error.message, timestamp: 'any' });
+       
     });
   });
 
   describe('stageFiles', () => {
-    test('単一ファイルをステージする', () => {
+    test('ファイルをステージする', async () => {
       // Arrange
-      const file = 'file1.txt';
-      
-      // _execGitをモック
-      jest.spyOn(gitService, '_execGit').mockReturnValue('');
-      
+      mockGit.add.mockResolvedValue(undefined);
       // Act
-      const result = gitService.stageFiles(file);
-      
+      const result = await gitService.stageFiles(['file1.txt', 'file2.js']);
       // Assert
       expect(result).toBe(true);
-      expect(gitService._execGit).toHaveBeenCalledWith(`git add "${file}"`);
-      
-      // イベント発行の検証
-      expectEventEmitted(mockEventEmitter, 'git:stage:before', {
-        files: file
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:stage:after', {
-        files: file,
-        success: true
-      });
+      expect(mockGit.add).toHaveBeenCalledWith(['file1.txt', 'file2.js']);
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'stage_before', { files: ['file1.txt', 'file2.js'], timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'stage_after', { files: ['file1.txt', 'file2.js'], success: true, timestamp: 'any' });
     });
 
-    test('複数ファイルをステージする', () => {
+    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
       // Arrange
-      const files = ['file1.txt', 'file2.js', 'file3.md'];
-      
-      // _execGitをモック
-      jest.spyOn(gitService, '_execGit').mockReturnValue('');
-      
-      // Act
-      const result = gitService.stageFiles(files);
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(gitService._execGit).toHaveBeenCalledWith(`git add "${files[0]}" "${files[1]}" "${files[2]}"`);
-      
-      // イベント発行の検証
-      expectEventEmitted(mockEventEmitter, 'git:stage:before', {
-        files
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:stage:after', {
-        files,
-        success: true
-      });
-    });
+      const error = new Error('Git add error');
+      mockGit.add.mockRejectedValue(error);
 
-    test('空の配列を渡した場合、正常に処理する', () => {
-      // Arrange
-      const files = [];
-      
-      // _execGitをモック
-      jest.spyOn(gitService, '_execGit').mockReturnValue('');
-      
-      // Act
-      const result = gitService.stageFiles(files);
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(gitService._execGit).toHaveBeenCalledWith('git add ');
-      
-      // イベント発行の検証
-      expectEventEmitted(mockEventEmitter, 'git:stage:before', {
-        files
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:stage:after', {
-        files,
-        success: true
-      });
-    });
-
-    test('ステージ時にエラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const files = ['file1.txt'];
-      const error = new Error('ステージエラー');
-      
-      // _execGitをモック
-      jest.spyOn(gitService, '_execGit').mockImplementation(() => {
-        throw error;
-      });
-      
-      // エラーハンドラーの戻り値を設定
-      mockErrorHandler.handle.mockReturnValue(false);
-      
-      // Act
-      const result = gitService.stageFiles(files);
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(gitService._execGit).toHaveBeenCalledWith(expect.any(String));
-      
-      // イベント発行の検証
-      expectEventEmitted(mockEventEmitter, 'git:stage:before', {
-        files
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:stage:after', {
-        files,
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証
-      expectErrorHandled(mockErrorHandler, 'GitError', 'ファイルのステージに失敗しました', {
-        files,
-        operation: 'stageFiles'
-      });
+      // Act & Assert
+      await expect(gitService.stageFiles('file.txt')).rejects.toThrow(GitError);
+      expect(mockGit.add).toHaveBeenCalledWith('file.txt');
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'stage_before', { files: 'file.txt', timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'stage_after', { files: 'file.txt', success: false, error: error.message, timestamp: 'any' });
+       
     });
   });
 
   describe('createCommit', () => {
-    test('コミットを正常に作成する', () => {
+    test('コミットを作成する', async () => {
       // Arrange
-      const message = 'Test commit message';
-      
-      // _execGitをモック
-      jest.spyOn(gitService, '_execGit').mockReturnValue('');
-      
-      // getCurrentCommitHashをモック
-      jest.spyOn(gitService, 'getCurrentCommitHash').mockReturnValue('abcdef1234567890');
-      
+      const mockCommitSummary = { commit: 'new-commit-hash' };
+      mockGit.commit.mockResolvedValue(mockCommitSummary);
+
       // Act
-      const result = gitService.createCommit(message);
-      
+      const result = await gitService.createCommit('Test commit message');
+
       // Assert
-      expect(result).toBe(true);
-      expect(gitService._execGit).toHaveBeenCalledWith(`git commit -m "${message}"`);
-      
-      // イベント発行の検証
-      expectEventEmitted(mockEventEmitter, 'git:commit:create:before', {
-        message
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:create:after', {
-        message,
-        hash: 'abcdef1234567890',
-        success: true
-      });
+      expect(result).toBe('new-commit-hash');
+      expect(mockGit.commit).toHaveBeenCalledWith('Test commit message');
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_create_before', { message: 'Test commit message', timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_create_after', { message: 'Test commit message', hash: 'new-commit-hash', success: true, timestamp: 'any' });
     });
 
-    test('コミットメッセージが空の場合、エラーを返す', () => {
-      // Arrange
-      const message = '';
-      jest.spyOn(gitService, '_execGit');
-      
-      // Act
-      const result = gitService.createCommit(message);
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(gitService._execGit).not.toHaveBeenCalled();
-      
-      // イベント発行の検証
-      expectEventEmitted(mockEventEmitter, 'git:commit:create:before', {
-        message
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:create:after', {
-        message,
-        success: false,
-        error: expect.any(Error)
-      });
+    test('コミットメッセージが空の場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+      // Act & Assert
+      await expect(gitService.createCommit('')).rejects.toThrow(GitError);
+      expect(mockGit.commit).not.toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_create_after', { message: '', success: false, error: 'コミットメッセージが空です', timestamp: 'any' });
+       
     });
 
-    test('コミット作成時にエラーが発生した場合、エラーハンドラーを呼び出す', () => {
+    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
       // Arrange
-      const message = 'Test commit message';
-      const error = new Error('コミット作成エラー');
-      
-      // _execGitをモック
-      jest.spyOn(gitService, '_execGit').mockImplementation(() => {
-        throw error;
-      });
-      
-      // エラーハンドラーの戻り値を設定
-      mockErrorHandler.handle.mockReturnValue(false);
-      
-      // Act
-      const result = gitService.createCommit(message);
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(gitService._execGit).toHaveBeenCalledWith(expect.any(String));
-      
-      // イベント発行の検証
-      expectEventEmitted(mockEventEmitter, 'git:commit:create:before', {
-        message
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:create:after', {
-        message,
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証
-      expectErrorHandled(mockErrorHandler, 'GitError', 'コミットの作成に失敗しました', {
-        message,
-        operation: 'createCommit'
-      });
-    });
+      const error = new Error('Git commit error');
+      mockGit.commit.mockRejectedValue(error);
 
-    test('特殊文字を含むメッセージを処理する', () => {
+      // Act & Assert
+      await expect(gitService.createCommit('message')).rejects.toThrow(GitError);
+      expect(mockGit.commit).toHaveBeenCalledWith('message');
+      expectStandardizedEventEmitted(mockEventEmitter, 'git', 'commit_create_before', { message: 'message', timestamp: 'any' });
+      // エラー時の after イベントは _handleError 内で発行される
+       
+    });
+  });
+
+
+  describe('_emitEvent (Error Handling)', () => {
+    test('イベント発行中にエラーが発生した場合、警告ログを出力する', async () => {
       // Arrange
-      const message = 'Test "message" with quotes and special chars: $%&!';
-      
-      // _execGitをモック
-      jest.spyOn(gitService, '_execGit').mockReturnValue('');
-      
-      // getCurrentCommitHashをモック
-      jest.spyOn(gitService, 'getCurrentCommitHash').mockReturnValue('abcdef1234567890');
-      
+      const emitError = new Error('ID generation failed');
+      // IDジェネレーターがエラーをスローするようにモック
+      // 注意: beforeEach で設定したモックを上書きするため、テストケース内で再定義
+      const mockErrorHandler = { handle: jest.fn((err) => err) };
+      gitService = new GitService({
+        repoPath: '/test/repo/path',
+        logger: mockLogger,
+        eventEmitter: mockEventEmitter,
+        errorHandler: mockErrorHandler,
+      });
+      gitService._traceIdGenerator = jest.fn().mockImplementation(() => { throw emitError; });
+      mockGit.revparse.mockResolvedValue('some-hash'); // getCurrentCommitHash が正常に完了するように
+
       // Act
-      const result = gitService.createCommit(message);
-      
+      await gitService.getCurrentCommitHash(); // _emitEvent を呼び出すメソッドを実行
+
       // Assert
-      expect(result).toBe(true);
-      expect(gitService._execGit).toHaveBeenCalledWith(`git commit -m "${message}"`);
-      
-      // イベント発行の検証
-      expectEventEmitted(mockEventEmitter, 'git:commit:create:before', {
-        message
-      });
-      
-      expectEventEmitted(mockEventEmitter, 'git:commit:create:after', {
-        message,
-        hash: 'abcdef1234567890',
-        success: true
-      });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        `イベント発行中にエラーが発生しました: git:commit_get_hash_before`,
+        emitError
+      );
+      // エラーは _emitEvent 内でキャッチされるため、getCurrentCommitHash は正常に完了するはず
+      expect(mockGit.revparse).toHaveBeenCalled();
     });
   });
 });

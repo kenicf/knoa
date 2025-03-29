@@ -1,6 +1,6 @@
 /**
  * サービス定義
- * 
+ *
  * システム全体で使用されるサービスの定義を一元管理します。
  * ServiceContainerに登録するサービスとファクトリー関数を定義します。
  */
@@ -53,37 +53,37 @@ function registerServices(container, config = {}) {
   container.register('execSync', execSync);
   container.register('handlebars', Handlebars);
   container.register('config', config);
-  
+
   // コアコンポーネント
   // 一時的なロガーを作成（eventEmitter なし）
   container.registerFactory('tempLogger', (c) => {
     const loggerConfig = c.get('config').logger || {};
     return new Logger(loggerConfig);
   });
-  
+
   container.registerFactory('eventEmitter', (c) => {
     const eventEmitterConfig = c.get('config').eventEmitter || {};
     return new EventEmitter({
       logger: c.get('tempLogger'),
       debugMode: eventEmitterConfig.debugMode || false,
       keepHistory: eventEmitterConfig.keepHistory || false,
-      historyLimit: eventEmitterConfig.historyLimit || 100
+      historyLimit: eventEmitterConfig.historyLimit || 100,
     });
   });
-  
+
   // 実際のロガーを登録（eventEmitter あり）
   container.registerFactory('logger', (c) => {
     const loggerConfig = c.get('config').logger || {};
     return new Logger({
       ...loggerConfig,
-      eventEmitter: c.get('eventEmitter')
+      eventEmitter: c.get('eventEmitter'),
     });
   });
-  
+
   container.registerFactory('eventCatalog', (c) => {
     return new EventCatalog();
   });
-  
+
   container.registerFactory('errorHandler', (c) => {
     const errorHandlerConfig = c.get('config').errorHandler || {};
     return new ErrorHandler(
@@ -92,11 +92,14 @@ function registerServices(container, config = {}) {
       errorHandlerConfig
     );
   });
-  
+
   container.registerFactory('eventMigrationHelper', (c) => {
-    return new EventMigrationHelper(c.get('eventEmitter'), c.get('eventCatalog'));
+    return new EventMigrationHelper(
+      c.get('eventEmitter'),
+      c.get('eventCatalog')
+    );
   });
-  
+
   // ユーティリティ
   container.registerFactory('storageService', (c) => {
     const storageConfig = c.get('config').storage || {};
@@ -104,56 +107,56 @@ function registerServices(container, config = {}) {
       basePath: storageConfig.basePath || process.cwd(),
       logger: c.get('logger'),
       eventEmitter: c.get('eventEmitter'),
-      errorHandler: c.get('errorHandler')
+      errorHandler: c.get('errorHandler'),
     });
   });
-  
+
   container.registerFactory('gitService', (c) => {
     const gitConfig = c.get('config').git || {};
     return new GitService({
       repoPath: gitConfig.repoPath || process.cwd(),
       logger: c.get('logger'),
       eventEmitter: c.get('eventEmitter'),
-      errorHandler: c.get('errorHandler')
+      errorHandler: c.get('errorHandler'),
     });
   });
-  
+
   container.registerFactory('stateManager', (c) => {
     return new StateManager({
       logger: c.get('logger'),
       eventEmitter: c.get('eventEmitter'),
       errorHandler: c.get('errorHandler'),
-      config: c.get('config').state || {}
+      config: c.get('config').state || {},
     });
   });
-  
+
   container.registerFactory('cacheManager', (c) => {
     const cacheConfig = c.get('config').cache || {};
     return new CacheManager({
       ...cacheConfig,
       logger: c.get('logger'),
-      eventEmitter: c.get('eventEmitter')
+      eventEmitter: c.get('eventEmitter'),
     });
   });
-  
+
   container.registerFactory('lockManager', (c) => {
     const lockConfig = c.get('config').lock || {};
     return new LockManager(lockConfig);
   });
-  
+
   container.registerFactory('pluginManager', (c) => {
     return new PluginManager({
       logger: c.get('logger'),
-      eventEmitter: c.get('eventEmitter')
+      eventEmitter: c.get('eventEmitter'),
     });
   });
-  
+
   container.registerFactory('validator', (c) => {
     return new Validator({
-      logger: c.get('logger')
+      logger: c.get('logger'),
     });
   });
-  
+
   // マネージャークラス
   // 新しいオプションオブジェクトパターンを使用
   container.registerFactory('sessionManager', (c) => {
@@ -166,11 +169,11 @@ function registerServices(container, config = {}) {
       errorHandler: c.get('errorHandler'),
       config: {
         sessionsDir: sessionConfig.sessionsDir,
-        templateDir: sessionConfig.templateDir
-      }
+        templateDir: sessionConfig.templateDir,
+      },
     });
   });
-  
+
   // 新しいオプションオブジェクトパターンを使用
   container.registerFactory('feedbackManager', (c) => {
     const feedbackConfig = c.get('config').feedback || {};
@@ -183,11 +186,11 @@ function registerServices(container, config = {}) {
       handlebars: c.get('handlebars'),
       config: {
         feedbackDir: feedbackConfig.feedbackDir,
-        templateDir: feedbackConfig.templateDir
-      }
+        templateDir: feedbackConfig.templateDir,
+      },
     });
   });
-  
+
   // 新しいオプションオブジェクトパターンを使用
   container.registerFactory('taskManager', (c) => {
     const taskConfig = c.get('config').task || {};
@@ -199,52 +202,43 @@ function registerServices(container, config = {}) {
       errorHandler: c.get('errorHandler'),
       config: {
         tasksDir: taskConfig.tasksDir,
-        currentTasksFile: taskConfig.currentTasksFile
-      }
+        currentTasksFile: taskConfig.currentTasksFile,
+      },
     });
   });
-  
+
   // アダプター
   // 新しいオプションを追加
   container.registerFactory('taskManagerAdapter', (c) => {
-    return new TaskManagerAdapter(
-      c.get('taskManager'),
-      {
-        logger: c.get('logger'),
-        errorHandler: c.get('errorHandler')
-      }
-    );
+    return new TaskManagerAdapter(c.get('taskManager'), {
+      logger: c.get('logger'),
+      errorHandler: c.get('errorHandler'),
+    });
   });
-  
+
   // 新しいオプションを追加
   container.registerFactory('sessionManagerAdapter', (c) => {
-    return new SessionManagerAdapter(
-      c.get('sessionManager'),
-      {
-        logger: c.get('logger'),
-        errorHandler: c.get('errorHandler')
-      }
-    );
+    return new SessionManagerAdapter(c.get('sessionManager'), {
+      logger: c.get('logger'),
+      errorHandler: c.get('errorHandler'),
+    });
   });
-  
+
   // 新しいオプションを追加
   container.registerFactory('feedbackManagerAdapter', (c) => {
-    return new FeedbackManagerAdapter(
-      c.get('feedbackManager'),
-      {
-        logger: c.get('logger'),
-        errorHandler: c.get('errorHandler')
-      }
-    );
+    return new FeedbackManagerAdapter(c.get('feedbackManager'), {
+      logger: c.get('logger'),
+      errorHandler: c.get('errorHandler'),
+    });
   });
-  
+
   // 統合マネージャー
   // 新しいオプションオブジェクトパターンを使用
   container.registerFactory('integrationManager', (c) => {
     const integrationConfig = c.get('config').integration || {};
     // 環境変数でテストモードを判定
     const isTestMode = process.env.NODE_ENV === 'test';
-    
+
     return new IntegrationManager({
       taskManager: c.get('taskManagerAdapter'),
       sessionManager: c.get('sessionManagerAdapter'),
@@ -259,36 +253,32 @@ function registerServices(container, config = {}) {
       errorHandler: c.get('errorHandler'),
       config: {
         syncInterval: integrationConfig.syncInterval,
-        enablePeriodicSync: isTestMode ? false : (integrationConfig.enablePeriodicSync !== false)
-      }
+        enablePeriodicSync: isTestMode
+          ? false
+          : integrationConfig.enablePeriodicSync !== false,
+      },
     });
   });
-  
+
   // 状態管理アダプター
   container.registerFactory('stateManagerAdapter', (c) => {
-    return new StateManagerAdapter(
-      c.get('stateManager'),
-      {
-        logger: c.get('logger'),
-        errorHandler: c.get('errorHandler'),
-        eventEmitter: c.get('eventEmitter')
-      }
-    );
+    return new StateManagerAdapter(c.get('stateManager'), {
+      logger: c.get('logger'),
+      errorHandler: c.get('errorHandler'),
+      eventEmitter: c.get('eventEmitter'),
+    });
   });
-  
+
   // 統合マネージャーアダプター
   container.registerFactory('integrationManagerAdapter', (c) => {
-    return new IntegrationManagerAdapter(
-      c.get('integrationManager'),
-      {
-        logger: c.get('logger'),
-        errorHandler: c.get('errorHandler'),
-        eventEmitter: c.get('eventEmitter')
-      }
-    );
+    return new IntegrationManagerAdapter(c.get('integrationManager'), {
+      logger: c.get('logger'),
+      errorHandler: c.get('errorHandler'),
+      eventEmitter: c.get('eventEmitter'),
+    });
   });
 }
 
 module.exports = {
-  registerServices
+  registerServices,
 };

@@ -1,6 +1,6 @@
 /**
  * エラー処理フレームワーク
- * 
+ *
  * アプリケーション全体で一貫したエラー処理を提供するためのフレームワーク。
  * エラーの階層構造、コンテキスト情報、回復メカニズムを提供します。
  */
@@ -25,7 +25,8 @@ class ApplicationError extends Error {
     this.code = options.code || 'ERR_APPLICATION';
     this.context = options.context || {};
     this.cause = options.cause;
-    this.recoverable = options.recoverable !== undefined ? options.recoverable : true;
+    this.recoverable =
+      options.recoverable !== undefined ? options.recoverable : true;
     this.timestamp = new Date().toISOString();
   }
 
@@ -39,9 +40,13 @@ class ApplicationError extends Error {
       message: this.message,
       code: this.code,
       context: this.context,
-      cause: this.cause ? (this.cause.toJSON ? this.cause.toJSON() : this.cause.message) : undefined,
+      cause: this.cause
+        ? this.cause.toJSON
+          ? this.cause.toJSON()
+          : this.cause.message
+        : undefined,
       recoverable: this.recoverable,
-      timestamp: this.timestamp
+      timestamp: this.timestamp,
     };
   }
 
@@ -65,10 +70,11 @@ class ValidationError extends ApplicationError {
    * @param {Object} options - オプション
    */
   constructor(message, options = {}) {
-    super(message, { 
-      ...options, 
+    super(message, {
+      ...options,
       code: options.code || 'ERR_VALIDATION',
-      recoverable: options.recoverable !== undefined ? options.recoverable : true
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : true,
     });
   }
 }
@@ -84,10 +90,11 @@ class StateError extends ApplicationError {
    * @param {Object} options - オプション
    */
   constructor(message, options = {}) {
-    super(message, { 
-      ...options, 
+    super(message, {
+      ...options,
       code: options.code || 'ERR_STATE',
-      recoverable: options.recoverable !== undefined ? options.recoverable : false
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : false,
     });
   }
 }
@@ -103,10 +110,11 @@ class DataConsistencyError extends ApplicationError {
    * @param {Object} options - オプション
    */
   constructor(message, options = {}) {
-    super(message, { 
-      ...options, 
+    super(message, {
+      ...options,
       code: options.code || 'ERR_DATA_CONSISTENCY',
-      recoverable: options.recoverable !== undefined ? options.recoverable : false
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : false,
     });
   }
 }
@@ -122,10 +130,11 @@ class StorageError extends ApplicationError {
    * @param {Object} options - オプション
    */
   constructor(message, options = {}) {
-    super(message, { 
-      ...options, 
+    super(message, {
+      ...options,
       code: options.code || 'ERR_STORAGE',
-      recoverable: options.recoverable !== undefined ? options.recoverable : true
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : true,
     });
   }
 }
@@ -141,10 +150,11 @@ class GitError extends ApplicationError {
    * @param {Object} options - オプション
    */
   constructor(message, options = {}) {
-    super(message, { 
-      ...options, 
+    super(message, {
+      ...options,
       code: options.code || 'ERR_GIT',
-      recoverable: options.recoverable !== undefined ? options.recoverable : true
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : true,
     });
   }
 }
@@ -160,10 +170,11 @@ class LockError extends ApplicationError {
    * @param {Object} options - オプション
    */
   constructor(message, options = {}) {
-    super(message, { 
-      ...options, 
+    super(message, {
+      ...options,
       code: options.code || 'ERR_LOCK',
-      recoverable: options.recoverable !== undefined ? options.recoverable : true
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : true,
     });
   }
 }
@@ -179,10 +190,11 @@ class TimeoutError extends ApplicationError {
    * @param {Object} options - オプション
    */
   constructor(message, options = {}) {
-    super(message, { 
-      ...options, 
+    super(message, {
+      ...options,
       code: options.code || 'ERR_TIMEOUT',
-      recoverable: options.recoverable !== undefined ? options.recoverable : true
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : true,
     });
   }
 }
@@ -198,13 +210,75 @@ class ConfigurationError extends ApplicationError {
    * @param {Object} options - オプション
    */
   constructor(message, options = {}) {
-    super(message, { 
-      ...options, 
+    super(message, {
+      ...options,
       code: options.code || 'ERR_CONFIGURATION',
-      recoverable: options.recoverable !== undefined ? options.recoverable : false
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : false,
     });
   }
 }
+
+/**
+ * 認可エラー
+ * 必要な権限がない場合に使用
+ */
+class AuthorizationError extends ApplicationError {
+  /**
+   * コンストラクタ
+   * @param {string} message - エラーメッセージ
+   * @param {Object} options - オプション
+   */
+  constructor(message, options = {}) {
+    super(message, {
+      ...options,
+      code: options.code || 'ERR_AUTHORIZATION',
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : false, // 通常は回復不能
+    });
+  }
+}
+
+/**
+ * Not Foundエラー
+ * リソースが見つからない場合に使用
+ */
+class NotFoundError extends ApplicationError {
+  /**
+   * コンストラクタ
+   * @param {string} message - エラーメッセージ
+   * @param {Object} options - オプション
+   */
+  constructor(message, options = {}) {
+    super(message, {
+      ...options,
+      code: options.code || 'ERR_NOT_FOUND',
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : true, // 場合によっては回復可能
+    });
+  }
+}
+
+/**
+ * 外部サービスエラー
+ * 外部APIなどの呼び出しに失敗した場合に使用
+ */
+class ExternalServiceError extends ApplicationError {
+  /**
+   * コンストラクタ
+   * @param {string} message - エラーメッセージ
+   * @param {Object} options - オプション
+   */
+  constructor(message, options = {}) {
+    super(message, {
+      ...options,
+      code: options.code || 'ERR_EXTERNAL_SERVICE',
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : true, // リトライで回復可能な場合あり
+    });
+  }
+}
+
 
 /**
  * 依存関係エラー
@@ -220,7 +294,8 @@ class DependencyError extends ApplicationError {
     super(message, {
       ...options,
       code: options.code || 'ERR_DEPENDENCY',
-      recoverable: options.recoverable !== undefined ? options.recoverable : false
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : false,
     });
   }
 }
@@ -239,7 +314,8 @@ class NetworkError extends ApplicationError {
     super(message, {
       ...options,
       code: options.code || 'ERR_NETWORK',
-      recoverable: options.recoverable !== undefined ? options.recoverable : true
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : true,
     });
   }
 }
@@ -272,7 +348,7 @@ class ErrorHandler {
     if (!(error instanceof ApplicationError)) {
       error = new ApplicationError(error.message, {
         cause: error,
-        context: { component, operation }
+        context: { component, operation },
       });
     }
 
@@ -282,7 +358,7 @@ class ErrorHandler {
       error_message: error.message,
       error_code: error.code,
       stack: error.stack,
-      context: error.context
+      context: error.context,
     });
 
     // 標準化されたエラーイベントを発行
@@ -295,7 +371,7 @@ class ErrorHandler {
           operation,
           errorCode: error.code,
           recoverable: error.recoverable,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
       } else {
         // 後方互換性のために従来のイベント発行も維持
@@ -303,7 +379,7 @@ class ErrorHandler {
           error,
           component,
           operation,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
       }
     }
@@ -311,7 +387,11 @@ class ErrorHandler {
     // 回復可能なエラーの場合は回復を試みる
     if (error.recoverable && this.recoveryStrategies.has(error.code)) {
       try {
-        return this.recoveryStrategies.get(error.code)(error, component, operation);
+        return this.recoveryStrategies.get(error.code)(
+          error,
+          component,
+          operation
+        );
       } catch (recoveryError) {
         this.logger.error(`Recovery failed for ${error.code}:`, recoveryError);
       }
@@ -326,49 +406,54 @@ class ErrorHandler {
    * @param {Function} strategy - 回復戦略関数
    */
   registerRecoveryStrategy(errorCode, strategy) {
-    this.recoveryStrategies.set(errorCode, async (error, component, operation) => {
-      try {
-        // 回復処理の開始をイベントで通知
-        if (this.eventEmitter) {
-          this.eventEmitter.emit('error:recovery_started', {
-            error,
-            component,
-            operation,
-            errorCode
-          });
+    this.recoveryStrategies.set(
+      errorCode,
+      async (error, component, operation) => {
+        try {
+          // 回復処理の開始をイベントで通知
+          if (this.eventEmitter) {
+            this.eventEmitter.emit('error:recovery_started', {
+              error,
+              component,
+              operation,
+              errorCode,
+            });
+          }
+
+          // 回復戦略を実行
+          const result = await Promise.resolve(
+            strategy(error, component, operation)
+          );
+
+          // 回復成功をイベントで通知
+          if (this.eventEmitter) {
+            this.eventEmitter.emit('error:recovery_succeeded', {
+              error,
+              component,
+              operation,
+              errorCode,
+              result,
+            });
+          }
+
+          return result;
+        } catch (recoveryError) {
+          // 回復失敗をイベントで通知
+          if (this.eventEmitter) {
+            this.eventEmitter.emit('error:recovery_failed', {
+              error,
+              recoveryError,
+              component,
+              operation,
+              errorCode,
+            });
+          }
+
+          this.logger.error(`Recovery failed for ${errorCode}:`, recoveryError);
+          throw recoveryError;
         }
-        
-        // 回復戦略を実行
-        const result = await Promise.resolve(strategy(error, component, operation));
-        
-        // 回復成功をイベントで通知
-        if (this.eventEmitter) {
-          this.eventEmitter.emit('error:recovery_succeeded', {
-            error,
-            component,
-            operation,
-            errorCode,
-            result
-          });
-        }
-        
-        return result;
-      } catch (recoveryError) {
-        // 回復失敗をイベントで通知
-        if (this.eventEmitter) {
-          this.eventEmitter.emit('error:recovery_failed', {
-            error,
-            recoveryError,
-            component,
-            operation,
-            errorCode
-          });
-        }
-        
-        this.logger.error(`Recovery failed for ${errorCode}:`, recoveryError);
-        throw recoveryError;
       }
-    });
+    );
   }
 
   /**
@@ -390,7 +475,10 @@ module.exports = {
   LockError,
   TimeoutError,
   ConfigurationError,
+  AuthorizationError, // 追加
+  NotFoundError, // 追加
+  ExternalServiceError, // 追加
   DependencyError,
   NetworkError,
-  ErrorHandler
+  ErrorHandler,
 };

@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/147</span>
+                <span class='fraction'>0/149</span>
             </div>
         
             
@@ -411,7 +411,23 @@
 <a name='L346'></a><a href='#L346'>346</a>
 <a name='L347'></a><a href='#L347'>347</a>
 <a name='L348'></a><a href='#L348'>348</a>
-<a name='L349'></a><a href='#L349'>349</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L349'></a><a href='#L349'>349</a>
+<a name='L350'></a><a href='#L350'>350</a>
+<a name='L351'></a><a href='#L351'>351</a>
+<a name='L352'></a><a href='#L352'>352</a>
+<a name='L353'></a><a href='#L353'>353</a>
+<a name='L354'></a><a href='#L354'>354</a>
+<a name='L355'></a><a href='#L355'>355</a>
+<a name='L356'></a><a href='#L356'>356</a>
+<a name='L357'></a><a href='#L357'>357</a>
+<a name='L358'></a><a href='#L358'>358</a>
+<a name='L359'></a><a href='#L359'>359</a>
+<a name='L360'></a><a href='#L360'>360</a>
+<a name='L361'></a><a href='#L361'>361</a>
+<a name='L362'></a><a href='#L362'>362</a>
+<a name='L363'></a><a href='#L363'>363</a>
+<a name='L364'></a><a href='#L364'>364</a>
+<a name='L365'></a><a href='#L365'>365</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -473,6 +489,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -529,12 +548,19 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -617,8 +643,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -682,6 +712,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -758,10 +789,11 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
  * イベント駆動アーキテクチャへの移行ヘルパー
- * 
+ *
  * 直接メソッド呼び出しからイベントベースの連携に移行するための
  * 支援機能を提供します。移行期間中の両方式の並行動作を管理し、
  * 移行の進捗を追跡します。
@@ -789,7 +821,7 @@ class EventMigrationHelper {
 <span class="cstat-no" title="statement not covered" >    this.logger = options.logger || console;</span>
 <span class="cstat-no" title="statement not covered" >    this.startTime = new Date();</span>
   }
-  
+&nbsp;
   /**
    * 直接メソッド呼び出しをログに記録
    * @param {string} component - コンポーネント名
@@ -799,40 +831,43 @@ class EventMigrationHelper {
 <span class="fstat-no" title="function not covered" >  lo</span>gDirectCall(component, method, args) {
     const key = <span class="cstat-no" title="statement not covered" >`${component}.${method}`;</span>
 <span class="cstat-no" title="statement not covered" >    this.directCallCount.set(key, (this.directCallCount.get(key) || 0) + 1);</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    if (this.debugMode) {</span>
 <span class="cstat-no" title="statement not covered" >      this.migrationLog.push({</span>
         type: 'direct',
         component,
         method,
         args,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      this.logger.debug(`[DIRECT CALL] ${key}`, { args });</span>
     }
   }
-  
+&nbsp;
   /**
    * イベントベースの呼び出しをログに記録
    * @param {string} eventName - イベント名
    * @param {Object} data - イベントデータ
    */
 <span class="fstat-no" title="function not covered" >  lo</span>gEventCall(eventName, data) {
-<span class="cstat-no" title="statement not covered" >    this.eventCallCount.set(eventName, (this.eventCallCount.get(eventName) || 0) + 1);</span>
-    
+<span class="cstat-no" title="statement not covered" >    this.eventCallCount.set(</span>
+      eventName,
+      (this.eventCallCount.get(eventName) || 0) + 1
+    );
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    if (this.debugMode) {</span>
 <span class="cstat-no" title="statement not covered" >      this.migrationLog.push({</span>
         type: 'event',
         eventName,
         data,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      this.logger.debug(`[EVENT CALL] ${eventName}`, { data });</span>
     }
   }
-  
+&nbsp;
   /**
    * 移行状況レポートを生成
    * @returns {Object} 移行状況レポート
@@ -841,11 +876,11 @@ class EventMigrationHelper {
     const directMethods = <span class="cstat-no" title="statement not covered" >Array.from(this.directCallCount.entries())</span>
       .map(<span class="fstat-no" title="function not covered" >([</span>key, count]) =&gt; (<span class="cstat-no" title="statement not covered" >{ key, count })</span>)
       .sort(<span class="fstat-no" title="function not covered" >(a</span>, b) =&gt; <span class="cstat-no" title="statement not covered" >b.count - a.count)</span>;
-    
+&nbsp;
     const eventMethods = <span class="cstat-no" title="statement not covered" >Array.from(this.eventCallCount.entries())</span>
       .map(<span class="fstat-no" title="function not covered" >([</span>key, count]) =&gt; (<span class="cstat-no" title="statement not covered" >{ key, count })</span>)
       .sort(<span class="fstat-no" title="function not covered" >(a</span>, b) =&gt; <span class="cstat-no" title="statement not covered" >b.count - a.count)</span>;
-    
+&nbsp;
     // 直接呼び出しとイベントの対応関係を推測
     const mappings = <span class="cstat-no" title="statement not covered" >[];</span>
 <span class="cstat-no" title="statement not covered" >    for (const { key: directKey } of directMethods) {</span>
@@ -853,38 +888,45 @@ class EventMigrationHelper {
       const possibleEventNames = <span class="cstat-no" title="statement not covered" >[</span>
         `${component}:${method}`,
         `${component}:${method}ed`,
-        `${component}:${method}d`
+        `${component}:${method}d`,
       ];
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      for (const eventName of possibleEventNames) {</span>
 <span class="cstat-no" title="statement not covered" >        if (this.eventCallCount.has(eventName)) {</span>
 <span class="cstat-no" title="statement not covered" >          mappings.push({</span>
             directMethod: directKey,
             eventName,
             directCount: this.directCallCount.get(directKey),
-            eventCount: this.eventCallCount.get(eventName)
+            eventCount: this.eventCallCount.get(eventName),
           });
 <span class="cstat-no" title="statement not covered" >          break;</span>
         }
       }
     }
-    
+&nbsp;
     // 未マッピングの直接メソッド呼び出し
     const unmappedDirectMethods = <span class="cstat-no" title="statement not covered" >directMethods.filter(<span class="fstat-no" title="function not covered" >({</span> key }) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      return !mappings.some(<span class="fstat-no" title="function not covered" >ma</span>pping =&gt; <span class="cstat-no" title="statement not covered" >mapping.directMethod === key)</span>;</span>
+<span class="cstat-no" title="statement not covered" >      return !mappings.some(<span class="fstat-no" title="function not covered" >(m</span>apping) =&gt; <span class="cstat-no" title="statement not covered" >mapping.directMethod === key)</span>;</span>
     });
-    
+&nbsp;
     // 未マッピングのイベント
     const unmappedEvents = <span class="cstat-no" title="statement not covered" >eventMethods.filter(<span class="fstat-no" title="function not covered" >({</span> key }) =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >      return !mappings.some(<span class="fstat-no" title="function not covered" >ma</span>pping =&gt; <span class="cstat-no" title="statement not covered" >mapping.eventName === key)</span>;</span>
+<span class="cstat-no" title="statement not covered" >      return !mappings.some(<span class="fstat-no" title="function not covered" >(m</span>apping) =&gt; <span class="cstat-no" title="statement not covered" >mapping.eventName === key)</span>;</span>
     });
-    
+&nbsp;
     // 移行進捗の計算
-    const totalDirectCalls = <span class="cstat-no" title="statement not covered" >Array.from(this.directCallCount.values()).reduce(<span class="fstat-no" title="function not covered" >(s</span>um, count) =&gt; <span class="cstat-no" title="statement not covered" >sum + count,</span> 0);</span>
-    const totalEventCalls = <span class="cstat-no" title="statement not covered" >Array.from(this.eventCallCount.values()).reduce(<span class="fstat-no" title="function not covered" >(s</span>um, count) =&gt; <span class="cstat-no" title="statement not covered" >sum + count,</span> 0);</span>
+    const totalDirectCalls = <span class="cstat-no" title="statement not covered" >Array.from(this.directCallCount.values()).reduce(</span>
+<span class="fstat-no" title="function not covered" >      (s</span>um, count) =&gt; <span class="cstat-no" title="statement not covered" >sum + count,</span>
+      0
+    );
+    const totalEventCalls = <span class="cstat-no" title="statement not covered" >Array.from(this.eventCallCount.values()).reduce(</span>
+<span class="fstat-no" title="function not covered" >      (s</span>um, count) =&gt; <span class="cstat-no" title="statement not covered" >sum + count,</span>
+      0
+    );
     const totalCalls = <span class="cstat-no" title="statement not covered" >totalDirectCalls + totalEventCalls;</span>
-    const migrationPercentage = <span class="cstat-no" title="statement not covered" >totalCalls &gt; 0 ? (totalEventCalls / totalCalls) * 100 : 0;</span>
-    
+    const migrationPercentage =
+<span class="cstat-no" title="statement not covered" >      totalCalls &gt; 0 ? (totalEventCalls / totalCalls) * 100 : 0;</span>
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    return {</span>
       timestamp: new Date().toISOString(),
       runningTime: (new Date() - this.startTime) / 1000, // 秒単位
@@ -900,12 +942,12 @@ class EventMigrationHelper {
         migrationPercentage: Math.round(migrationPercentage * 100) / 100, // 小数点2桁まで
         mappedMethods: mappings.length,
         unmappedDirectMethods: unmappedDirectMethods.length,
-        unmappedEvents: unmappedEvents.length
+        unmappedEvents: unmappedEvents.length,
       },
-      recentLogs: this.migrationLog.slice(-100)
+      recentLogs: this.migrationLog.slice(-100),
     };
   }
-  
+&nbsp;
   /**
    * 移行ラッパーを作成
    * @param {Object} originalObject - 元のオブジェクト
@@ -916,7 +958,7 @@ class EventMigrationHelper {
 <span class="fstat-no" title="function not covered" >  cr</span>eateMigrationWrapper(originalObject, component, methodToEventMap) {
     const wrapper = <span class="cstat-no" title="statement not covered" >Object.create(Object.getPrototypeOf(originalObject));</span>
     const self = <span class="cstat-no" title="statement not covered" >this;</span>
-    
+&nbsp;
     // 元のオブジェクトのすべてのプロパティをコピー
 <span class="cstat-no" title="statement not covered" >    for (const prop of Object.getOwnPropertyNames(originalObject)) {</span>
       const descriptor = <span class="cstat-no" title="statement not covered" >Object.getOwnPropertyDescriptor(originalObject, prop);</span>
@@ -924,25 +966,25 @@ class EventMigrationHelper {
 <span class="cstat-no" title="statement not covered" >        Object.defineProperty(wrapper, prop, descriptor);</span>
       }
     }
-    
+&nbsp;
     // メソッドをラップ
 <span class="cstat-no" title="statement not covered" >    for (const methodName of Object.keys(methodToEventMap)) {</span>
       const originalMethod = <span class="cstat-no" title="statement not covered" >originalObject[methodName];</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      if (typeof originalMethod === 'function') {</span>
-<span class="cstat-no" title="statement not covered" >        wrapper[methodName] = <span class="fstat-no" title="function not covered" >fu</span>nction(...args) {</span>
+<span class="cstat-no" title="statement not covered" >        wrapper[methodName] = <span class="fstat-no" title="function not covered" >fu</span>nction (...args) {</span>
           // 直接メソッド呼び出しをログ
 <span class="cstat-no" title="statement not covered" >          self.logDirectCall(component, methodName, args);</span>
-          
+&nbsp;
           // 元のメソッドを呼び出し
           const result = <span class="cstat-no" title="statement not covered" >originalMethod.apply(originalObject, args);</span>
-          
+&nbsp;
           // 対応するイベントがあれば発行
           const eventName = <span class="cstat-no" title="statement not covered" >methodToEventMap[methodName];</span>
 <span class="cstat-no" title="statement not covered" >          if (eventName &amp;&amp; self.eventEmitter) {</span>
             // メソッド名からイベントデータを生成
             const eventData = <span class="cstat-no" title="statement not covered" >{};</span>
-            
+&nbsp;
             // 引数からイベントデータを推測
 <span class="cstat-no" title="statement not covered" >            if (args.length === 1 &amp;&amp; typeof args[0] === 'object') {</span>
               // 最初の引数がオブジェクトの場合はそのまま使用
@@ -956,28 +998,32 @@ class EventMigrationHelper {
                 }
               });
             }
-            
+&nbsp;
             // 結果がオブジェクトの場合は結果も含める
 <span class="cstat-no" title="statement not covered" >            if (result &amp;&amp; typeof result === 'object') {</span>
 <span class="cstat-no" title="statement not covered" >              eventData.result = result;</span>
             }
-            
+&nbsp;
             // イベントを発行
             const [eventComponent, eventAction] = <span class="cstat-no" title="statement not covered" >eventName.split(':');</span>
-<span class="cstat-no" title="statement not covered" >            self.eventEmitter.emitStandardized(eventComponent, eventAction, eventData);</span>
-            
+<span class="cstat-no" title="statement not covered" >            self.eventEmitter.emitStandardized(</span>
+              eventComponent,
+              eventAction,
+              eventData
+            );
+&nbsp;
             // イベント呼び出しをログ
 <span class="cstat-no" title="statement not covered" >            self.logEventCall(eventName, eventData);</span>
           }
-          
+&nbsp;
 <span class="cstat-no" title="statement not covered" >          return result;</span>
         };
       }
     }
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    return wrapper;</span>
   }
-  
+&nbsp;
   /**
    * パラメータ名を推測
    * @private
@@ -988,35 +1034,35 @@ class EventMigrationHelper {
 <span class="fstat-no" title="function not covered" >  _g</span>uessParamNames(methodName, args) {
     // メソッド名から推測されるパラメータ名のマッピング
     const commonPatterns = <span class="cstat-no" title="statement not covered" >{</span>
-      'get': ['id', 'options'],
-      'find': ['query', 'options'],
-      'create': ['data', 'options'],
-      'update': ['id', 'data', 'options'],
-      'delete': ['id', 'options'],
-      'add': ['item', 'options'],
-      'remove': ['id', 'options'],
-      'save': ['data', 'options'],
-      'load': ['id', 'options']
+      get: ['id', 'options'],
+      find: ['query', 'options'],
+      create: ['data', 'options'],
+      update: ['id', 'data', 'options'],
+      delete: ['id', 'options'],
+      add: ['item', 'options'],
+      remove: ['id', 'options'],
+      save: ['data', 'options'],
+      load: ['id', 'options'],
     };
-    
+&nbsp;
     // メソッド名からパターンを検索
 <span class="cstat-no" title="statement not covered" >    for (const [pattern, paramNames] of Object.entries(commonPatterns)) {</span>
 <span class="cstat-no" title="statement not covered" >      if (methodName.startsWith(pattern) || methodName.includes(pattern)) {</span>
 <span class="cstat-no" title="statement not covered" >        return paramNames;</span>
       }
     }
-    
+&nbsp;
     // デフォルトのパラメータ名
 <span class="cstat-no" title="statement not covered" >    return args.map(<span class="fstat-no" title="function not covered" >(_</span>, index) =&gt; <span class="cstat-no" title="statement not covered" >`param${index + 1}`)</span>;</span>
   }
-  
+&nbsp;
   /**
    * 移行ガイドを生成
    * @returns {string} 移行ガイド（マークダウン形式）
    */
 <span class="fstat-no" title="function not covered" >  ge</span>nerateMigrationGuide() {
     const report = <span class="cstat-no" title="statement not covered" >this.generateMigrationReport();</span>
-    
+&nbsp;
     let guide = <span class="cstat-no" title="statement not covered" >`# イベント駆動アーキテクチャへの移行ガイド\n\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `## 現在の移行状況\n\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `- 移行率: ${report.migrationProgress.migrationPercentage}%\n`;</span>
@@ -1024,42 +1070,43 @@ class EventMigrationHelper {
 <span class="cstat-no" title="statement not covered" >    guide += `- イベントベース呼び出し: ${report.migrationProgress.totalEventCalls}回\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `- マッピング済みメソッド: ${report.migrationProgress.mappedMethods}個\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `- 未マッピングメソッド: ${report.migrationProgress.unmappedDirectMethods}個\n\n`;</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    guide += `## 推奨される移行マッピング\n\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `| 直接メソッド | イベント名 | 呼び出し回数比率 |\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `|------------|----------|----------------|\n`;</span>
-    
-<span class="cstat-no" title="statement not covered" >    report.mappings.forEach(<span class="fstat-no" title="function not covered" >ma</span>pping =&gt; {</span>
-      const ratio = <span class="cstat-no" title="statement not covered" >mapping.directCount &gt; 0 ? </span>
-        `${mapping.eventCount} / ${mapping.directCount} (${Math.round(mapping.eventCount / mapping.directCount * 100)}%)` : 
-        'N/A';
+&nbsp;
+<span class="cstat-no" title="statement not covered" >    report.mappings.forEach(<span class="fstat-no" title="function not covered" >(m</span>apping) =&gt; {</span>
+      const ratio =
+<span class="cstat-no" title="statement not covered" >        mapping.directCount &gt; 0</span>
+          ? `${mapping.eventCount} / ${mapping.directCount} (${Math.round((mapping.eventCount / mapping.directCount) * 100)}%)`
+          : 'N/A';
 <span class="cstat-no" title="statement not covered" >      guide += `| \`${mapping.directMethod}\` | \`${mapping.eventName}\` | ${ratio} |\n`;</span>
     });
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    guide += `\n## 未マッピングの直接メソッド\n\n`;</span>
 <span class="cstat-no" title="statement not covered" >    if (report.unmappedDirectMethods.length &gt; 0) {</span>
 <span class="cstat-no" title="statement not covered" >      guide += `以下のメソッドはまだイベントにマッピングされていません：\n\n`;</span>
-<span class="cstat-no" title="statement not covered" >      report.unmappedDirectMethods.forEach(<span class="fstat-no" title="function not covered" >me</span>thod =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      report.unmappedDirectMethods.forEach(<span class="fstat-no" title="function not covered" >(m</span>ethod) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >        guide += `- \`${method.key}\` (${method.count}回呼び出し)\n`;</span>
       });
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      guide += `\n推奨されるイベント名：\n\n`;</span>
-<span class="cstat-no" title="statement not covered" >      report.unmappedDirectMethods.forEach(<span class="fstat-no" title="function not covered" >me</span>thod =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      report.unmappedDirectMethods.forEach(<span class="fstat-no" title="function not covered" >(m</span>ethod) =&gt; {</span>
         const [component, methodName] = <span class="cstat-no" title="statement not covered" >method.key.split('.');</span>
 <span class="cstat-no" title="statement not covered" >        guide += `- \`${method.key}\` → \`${component}:${methodName}\`\n`;</span>
       });
     } else {
 <span class="cstat-no" title="statement not covered" >      guide += `すべての直接メソッド呼び出しがイベントにマッピングされています。\n`;</span>
     }
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    guide += `\n## 移行手順\n\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `1. 未マッピングのメソッドに対応するイベントを定義する\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `2. 移行ラッパーを使用して両方式を並行実行する\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `3. イベントリスナーを実装して機能を検証する\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `4. 十分なテスト後、直接メソッド呼び出しを廃止する\n\n`;</span>
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    guide += `## 移行ラッパーの使用例\n\n`;</span>
-<span class="cstat-no" title="statement not covered" >    guide += "```javascript\n";</span>
+<span class="cstat-no" title="statement not covered" >    guide += '```javascript\n';</span>
 <span class="cstat-no" title="statement not covered" >    guide += `const { EventMigrationHelper } = require('./event-migration-helper');\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `const { EnhancedEventEmitter } = require('./event-system');\n\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `// イベントエミッターの作成\n`;</span>
@@ -1099,22 +1146,23 @@ class EventMigrationHelper {
 <span class="cstat-no" title="statement not covered" >    guide += `// 移行レポートの生成\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `const report = migrationHelper.generateMigrationReport();\n`;</span>
 <span class="cstat-no" title="statement not covered" >    guide += `console.log('移行レポート:', report);\n`;</span>
-<span class="cstat-no" title="statement not covered" >    guide += "```\n";</span>
-    
+<span class="cstat-no" title="statement not covered" >    guide += '```\n';</span>
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    return guide;</span>
   }
 }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >module.exports = {</span>
-  EventMigrationHelper
-};</pre></td></tr></table></pre>
+  EventMigrationHelper,
+};
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-03-26T22:38:58.263Z
+                at 2025-03-29T11:46:38.498Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

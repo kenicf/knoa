@@ -1,6 +1,6 @@
 /**
  * セッション管理アダプター
- * 
+ *
  * セッション管理コンポーネントをラップし、統合マネージャーとのインターフェースを提供します。
  */
 
@@ -21,7 +21,7 @@ class SessionManagerAdapter extends BaseAdapter {
   constructor(sessionManager, options = {}) {
     super(sessionManager, options);
   }
-  
+
   /**
    * セッションを検証
    * @param {Object} session - 検証するセッション
@@ -30,14 +30,14 @@ class SessionManagerAdapter extends BaseAdapter {
   validateSession(session) {
     try {
       this._validateParams({ session }, ['session']);
-      
+
       const isValid = this.manager.validateSession(session);
       return { isValid, errors: [], warnings: [] };
     } catch (error) {
       return this._handleError(error, 'validateSession', { session });
     }
   }
-  
+
   /**
    * 最新のセッションを取得
    * @returns {Promise<Object|null>} 最新のセッション
@@ -49,7 +49,7 @@ class SessionManagerAdapter extends BaseAdapter {
       return this._handleError(error, 'getLatestSession');
     }
   }
-  
+
   /**
    * セッションIDでセッションを取得
    * @param {string} sessionId - セッションID
@@ -58,13 +58,13 @@ class SessionManagerAdapter extends BaseAdapter {
   async getSessionById(sessionId) {
     try {
       this._validateParams({ sessionId }, ['sessionId']);
-      
+
       return await this.manager.getSessionById(sessionId);
     } catch (error) {
       return this._handleError(error, 'getSessionById', { sessionId });
     }
   }
-  
+
   /**
    * 新しいセッションを作成
    * @param {OperationContext} context - 操作コンテキスト（オプション）
@@ -74,23 +74,32 @@ class SessionManagerAdapter extends BaseAdapter {
   async createNewSession(context = null, previousSessionId) {
     try {
       // コンテキストがない場合は作成
-      const operationContext = context || this._createContext('createNewSession', { previousSessionId });
-      
+      const operationContext =
+        context ||
+        this._createContext('createNewSession', { previousSessionId });
+
       const session = await this.manager.createNewSession(previousSessionId);
-      
+
       // イベント発行
-      this._emitEvent('session', 'session_created', {
-        id: session.session_handover.session_id,
-        previousSessionId,
-        timestamp: new Date().toISOString()
-      }, operationContext);
-      
+      this._emitEvent(
+        'session',
+        'session_created',
+        {
+          id: session.session_handover.session_id,
+          previousSessionId,
+          timestamp: new Date().toISOString(),
+        },
+        operationContext
+      );
+
       return session;
     } catch (error) {
-      return this._handleError(error, 'createNewSession', context, { previousSessionId });
+      return this._handleError(error, 'createNewSession', context, {
+        previousSessionId,
+      });
     }
   }
-  
+
   /**
    * セッションを更新
    * @param {string} sessionId - セッションID
@@ -101,28 +110,41 @@ class SessionManagerAdapter extends BaseAdapter {
   async updateSession(sessionId, updateData, context = null) {
     try {
       // コンテキストがない場合は作成
-      const operationContext = context || this._createContext('updateSession', {
-        sessionId,
-        updateData
-      });
-      
-      this._validateParams({ sessionId, updateData }, ['sessionId', 'updateData']);
-      
+      const operationContext =
+        context ||
+        this._createContext('updateSession', {
+          sessionId,
+          updateData,
+        });
+
+      this._validateParams({ sessionId, updateData }, [
+        'sessionId',
+        'updateData',
+      ]);
+
       const session = await this.manager.updateSession(sessionId, updateData);
-      
+
       // イベント発行
-      this._emitEvent('session', 'session_updated', {
-        id: sessionId,
-        updates: updateData,
-        timestamp: new Date().toISOString()
-      }, operationContext);
-      
+      this._emitEvent(
+        'session',
+        'session_updated',
+        {
+          id: sessionId,
+          updates: updateData,
+          timestamp: new Date().toISOString(),
+        },
+        operationContext
+      );
+
       return session;
     } catch (error) {
-      return this._handleError(error, 'updateSession', context, { sessionId, updateData });
+      return this._handleError(error, 'updateSession', context, {
+        sessionId,
+        updateData,
+      });
     }
   }
-  
+
   /**
    * セッションを終了
    * @param {string} sessionId - セッションID
@@ -132,25 +154,31 @@ class SessionManagerAdapter extends BaseAdapter {
   async endSession(sessionId, context = null) {
     try {
       // コンテキストがない場合は作成
-      const operationContext = context || this._createContext('endSession', { sessionId });
-      
+      const operationContext =
+        context || this._createContext('endSession', { sessionId });
+
       this._validateParams({ sessionId }, ['sessionId']);
-      
+
       const session = await this.manager.endSession(sessionId);
-      
+
       // イベント発行
-      this._emitEvent('session', 'session_ended', {
-        id: sessionId,
-        endTime: new Date().toISOString(),
-        duration: session.duration || 0
-      }, operationContext);
-      
+      this._emitEvent(
+        'session',
+        'session_ended',
+        {
+          id: sessionId,
+          endTime: new Date().toISOString(),
+          duration: session.duration || 0,
+        },
+        operationContext
+      );
+
       return session;
     } catch (error) {
       return this._handleError(error, 'endSession', context, { sessionId });
     }
   }
-  
+
   /**
    * セッションにタスクを関連付け
    * @param {string} sessionId - セッションID
@@ -161,29 +189,39 @@ class SessionManagerAdapter extends BaseAdapter {
   async addTaskToSession(sessionId, taskId, context = null) {
     try {
       // コンテキストがない場合は作成
-      const operationContext = context || this._createContext('addTaskToSession', { sessionId, taskId });
-      
+      const operationContext =
+        context ||
+        this._createContext('addTaskToSession', { sessionId, taskId });
+
       this._validateParams({ sessionId, taskId }, ['sessionId', 'taskId']);
-      
+
       if (!taskId.match(/^T[0-9]{3}$/)) {
         throw new ValidationError('タスクIDはT000形式である必要があります');
       }
-      
+
       const session = await this.manager.addTaskToSession(sessionId, taskId);
-      
+
       // イベント発行
-      this._emitEvent('session', 'task_added', {
-        sessionId,
-        taskId,
-        timestamp: new Date().toISOString()
-      }, operationContext);
-      
+      this._emitEvent(
+        'session',
+        'task_added',
+        {
+          sessionId,
+          taskId,
+          timestamp: new Date().toISOString(),
+        },
+        operationContext
+      );
+
       return session;
     } catch (error) {
-      return this._handleError(error, 'addTaskToSession', context, { sessionId, taskId });
+      return this._handleError(error, 'addTaskToSession', context, {
+        sessionId,
+        taskId,
+      });
     }
   }
-  
+
   /**
    * セッションからタスクを削除
    * @param {string} sessionId - セッションID
@@ -194,32 +232,45 @@ class SessionManagerAdapter extends BaseAdapter {
   async removeTaskFromSession(sessionId, taskId, context = null) {
     try {
       // コンテキストがない場合は作成
-      const operationContext = context || this._createContext('removeTaskFromSession', {
-        sessionId,
-        taskId
-      });
-      
+      const operationContext =
+        context ||
+        this._createContext('removeTaskFromSession', {
+          sessionId,
+          taskId,
+        });
+
       this._validateParams({ sessionId, taskId }, ['sessionId', 'taskId']);
-      
+
       if (!taskId.match(/^T[0-9]{3}$/)) {
         throw new ValidationError('タスクIDはT000形式である必要があります');
       }
-      
-      const session = await this.manager.removeTaskFromSession(sessionId, taskId);
-      
-      // イベント発行
-      this._emitEvent('session', 'task_removed', {
+
+      const session = await this.manager.removeTaskFromSession(
         sessionId,
-        taskId,
-        timestamp: new Date().toISOString()
-      }, operationContext);
-      
+        taskId
+      );
+
+      // イベント発行
+      this._emitEvent(
+        'session',
+        'task_removed',
+        {
+          sessionId,
+          taskId,
+          timestamp: new Date().toISOString(),
+        },
+        operationContext
+      );
+
       return session;
     } catch (error) {
-      return this._handleError(error, 'removeTaskFromSession', context, { sessionId, taskId });
+      return this._handleError(error, 'removeTaskFromSession', context, {
+        sessionId,
+        taskId,
+      });
     }
   }
-  
+
   /**
    * セッションにGitコミットを関連付け
    * @param {string} sessionId - セッションID
@@ -230,28 +281,44 @@ class SessionManagerAdapter extends BaseAdapter {
   async addGitCommitToSession(sessionId, commitHash, context = null) {
     try {
       // コンテキストがない場合は作成
-      const operationContext = context || this._createContext('addGitCommitToSession', {
+      const operationContext =
+        context ||
+        this._createContext('addGitCommitToSession', {
+          sessionId,
+          commitHash,
+        });
+
+      this._validateParams({ sessionId, commitHash }, [
+        'sessionId',
+        'commitHash',
+      ]);
+
+      const session = await this.manager.addGitCommitToSession(
         sessionId,
         commitHash
-      });
-      
-      this._validateParams({ sessionId, commitHash }, ['sessionId', 'commitHash']);
-      
-      const session = await this.manager.addGitCommitToSession(sessionId, commitHash);
-      
+      );
+
       // イベント発行
-      this._emitEvent('session', 'git_commit_added', {
-        sessionId,
-        commitHash,
-        timestamp: new Date().toISOString()
-      }, operationContext);
-      
+      this._emitEvent(
+        'session',
+        'git_commit_added',
+        {
+          sessionId,
+          commitHash,
+          timestamp: new Date().toISOString(),
+        },
+        operationContext
+      );
+
       return session;
     } catch (error) {
-      return this._handleError(error, 'addGitCommitToSession', context, { sessionId, commitHash });
+      return this._handleError(error, 'addGitCommitToSession', context, {
+        sessionId,
+        commitHash,
+      });
     }
   }
-  
+
   /**
    * セッションマークダウンを生成
    * @param {string} sessionId - セッションID
@@ -261,24 +328,33 @@ class SessionManagerAdapter extends BaseAdapter {
   async generateSessionMarkdown(sessionId, context = null) {
     try {
       // コンテキストがない場合は作成
-      const operationContext = context || this._createContext('generateSessionMarkdown', { sessionId });
-      
+      const operationContext =
+        context ||
+        this._createContext('generateSessionMarkdown', { sessionId });
+
       this._validateParams({ sessionId }, ['sessionId']);
-      
+
       const markdown = await this.manager.generateSessionMarkdown(sessionId);
-      
+
       // イベント発行（オプション）
       if (markdown) {
-        this._emitEvent('session', 'markdown_generated', {
-          sessionId,
-          contentLength: markdown.length,
-          timestamp: new Date().toISOString()
-        }, operationContext);
+        this._emitEvent(
+          'session',
+          'markdown_generated',
+          {
+            sessionId,
+            contentLength: markdown.length,
+            timestamp: new Date().toISOString(),
+          },
+          operationContext
+        );
       }
-      
+
       return markdown;
     } catch (error) {
-      return this._handleError(error, 'generateSessionMarkdown', context, { sessionId });
+      return this._handleError(error, 'generateSessionMarkdown', context, {
+        sessionId,
+      });
     }
   }
 }

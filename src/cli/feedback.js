@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * フィードバック管理CLI
- * 
+ *
  * フィードバック管理ユーティリティを使用するためのコマンドラインインターフェース
  */
 
@@ -63,34 +63,45 @@ async function main() {
     case 'collect': {
       const taskId = args[1];
       const testCommand = args[2] || 'npm test';
-      
+
       if (!taskId) {
         console.error('タスクIDを指定してください');
-        console.log('使用方法: node feedback.js collect <taskId> [testCommand]');
+        console.log(
+          '使用方法: node feedback.js collect <taskId> [testCommand]'
+        );
         return;
       }
-      
+
       console.log(`タスク ${taskId} のフィードバックを収集します...`);
       console.log(`テストコマンド: ${testCommand}`);
-      
+
       try {
-        const feedback = await feedbackManager.collectTestResults(taskId, testCommand);
+        const feedback = await feedbackManager.collectTestResults(
+          taskId,
+          testCommand
+        );
         if (feedback) {
           console.log('テスト結果を収集しました');
-          
-          const summary = feedback.feedback_loop.verification_results.test_summary;
-          console.log(`テスト結果: ${feedback.feedback_loop.verification_results.passes_tests ? '成功' : '失敗'}`);
-          console.log(`合計: ${summary.total}, 成功: ${summary.passed}, 失敗: ${summary.failed}, スキップ: ${summary.skipped}`);
-          
+
+          const summary =
+            feedback.feedback_loop.verification_results.test_summary;
+          console.log(
+            `テスト結果: ${feedback.feedback_loop.verification_results.passes_tests ? '成功' : '失敗'}`
+          );
+          console.log(
+            `合計: ${summary.total}, 成功: ${summary.passed}, 失敗: ${summary.failed}, スキップ: ${summary.skipped}`
+          );
+
           // 失敗したテストがある場合は表示
-          const failedTests = feedback.feedback_loop.verification_results.failed_tests;
+          const failedTests =
+            feedback.feedback_loop.verification_results.failed_tests;
           if (failedTests && failedTests.length > 0) {
             console.log('\n失敗したテスト:');
             for (const test of failedTests) {
               console.log(`- ${test.test_name}: ${test.error}`);
             }
           }
-          
+
           console.log('\nフィードバックを保存しました');
         } else {
           console.error('テスト結果の収集に失敗しました');
@@ -100,31 +111,42 @@ async function main() {
       }
       break;
     }
-    
+
     case 'status': {
       const taskId = args[1];
-      
+
       if (!taskId) {
         console.error('タスクIDを指定してください');
         console.log('使用方法: node feedback.js status <taskId>');
         return;
       }
-      
+
       console.log(`タスク ${taskId} のフィードバック状態を表示します...`);
-      
+
       try {
         const feedback = feedbackManager.getFeedbackByTaskId(taskId);
         if (feedback) {
-          console.log(`ステータス: ${feedback.feedback_loop.feedback_status || 'open'}`);
-          console.log(`実装試行回数: ${feedback.feedback_loop.implementation_attempt}`);
-          console.log(`テスト結果: ${feedback.feedback_loop.verification_results.passes_tests ? '成功' : '失敗'}`);
-          
-          const summary = feedback.feedback_loop.verification_results.test_summary;
+          console.log(
+            `ステータス: ${feedback.feedback_loop.feedback_status || 'open'}`
+          );
+          console.log(
+            `実装試行回数: ${feedback.feedback_loop.implementation_attempt}`
+          );
+          console.log(
+            `テスト結果: ${feedback.feedback_loop.verification_results.passes_tests ? '成功' : '失敗'}`
+          );
+
+          const summary =
+            feedback.feedback_loop.verification_results.test_summary;
           if (summary) {
-            console.log(`テスト合計: ${summary.total}, 成功: ${summary.passed}, 失敗: ${summary.failed}, スキップ: ${summary.skipped}`);
+            console.log(
+              `テスト合計: ${summary.total}, 成功: ${summary.passed}, 失敗: ${summary.failed}, スキップ: ${summary.skipped}`
+            );
           }
-          
-          console.log(`関連コミット: ${feedback.feedback_loop.git_commit || 'なし'}`);
+
+          console.log(
+            `関連コミット: ${feedback.feedback_loop.git_commit || 'なし'}`
+          );
           console.log(`作成日時: ${feedback.feedback_loop.created_at}`);
           console.log(`更新日時: ${feedback.feedback_loop.updated_at}`);
         } else {
@@ -135,24 +157,31 @@ async function main() {
       }
       break;
     }
-    
+
     case 'resolve': {
       const taskId = args[1];
-      
+
       if (!taskId) {
         console.error('タスクIDを指定してください');
         console.log('使用方法: node feedback.js resolve <taskId>');
         return;
       }
-      
-      console.log(`タスク ${taskId} のフィードバックを解決済みとしてマークします...`);
-      
+
+      console.log(
+        `タスク ${taskId} のフィードバックを解決済みとしてマークします...`
+      );
+
       try {
         const feedback = feedbackManager.getFeedbackByTaskId(taskId);
         if (feedback) {
-          const updatedFeedback = feedbackManager.updateFeedbackStatus(feedback, 'resolved');
+          const updatedFeedback = feedbackManager.updateFeedbackStatus(
+            feedback,
+            'resolved'
+          );
           console.log('フィードバックを解決済みとしてマークしました');
-          console.log(`新しいステータス: ${updatedFeedback.feedback_loop.feedback_status}`);
+          console.log(
+            `新しいステータス: ${updatedFeedback.feedback_loop.feedback_status}`
+          );
         } else {
           console.error(`タスク ${taskId} のフィードバックが見つかりません`);
         }
@@ -161,24 +190,29 @@ async function main() {
       }
       break;
     }
-    
+
     case 'reopen': {
       const taskId = args[1];
-      
+
       if (!taskId) {
         console.error('タスクIDを指定してください');
         console.log('使用方法: node feedback.js reopen <taskId>');
         return;
       }
-      
+
       console.log(`タスク ${taskId} のフィードバックを再オープンします...`);
-      
+
       try {
         const feedback = feedbackManager.getFeedbackByTaskId(taskId);
         if (feedback) {
-          const updatedFeedback = feedbackManager.updateFeedbackStatus(feedback, 'open');
+          const updatedFeedback = feedbackManager.updateFeedbackStatus(
+            feedback,
+            'open'
+          );
           console.log('フィードバックを再オープンしました');
-          console.log(`新しいステータス: ${updatedFeedback.feedback_loop.feedback_status}`);
+          console.log(
+            `新しいステータス: ${updatedFeedback.feedback_loop.feedback_status}`
+          );
         } else {
           console.error(`タスク ${taskId} のフィードバックが見つかりません`);
         }
@@ -187,19 +221,19 @@ async function main() {
       }
       break;
     }
-    
+
     case 'report': {
       const taskId = args[1];
       const outputPath = args[2];
-      
+
       if (!taskId) {
         console.error('タスクIDを指定してください');
         console.log('使用方法: node feedback.js report <taskId> [outputPath]');
         return;
       }
-      
+
       console.log(`タスク ${taskId} のフィードバックレポートを生成します...`);
-      
+
       try {
         const report = feedbackManager.generateFeedbackMarkdown(taskId);
         if (report) {
@@ -217,33 +251,38 @@ async function main() {
       }
       break;
     }
-    
+
     case 'prioritize': {
       const taskId = args[1];
-      
+
       if (!taskId) {
         console.error('タスクIDを指定してください');
         console.log('使用方法: node feedback.js prioritize <taskId>');
         return;
       }
-      
-      console.log(`タスク ${taskId} のフィードバックの優先順位付けを行います...`);
-      
+
+      console.log(
+        `タスク ${taskId} のフィードバックの優先順位付けを行います...`
+      );
+
       try {
         const feedback = feedbackManager.getFeedbackByTaskId(taskId);
         if (feedback) {
           const updatedFeedback = feedbackManager.prioritizeFeedback(feedback);
           console.log('フィードバックの優先順位付けを行いました');
-          
+
           // 提案の表示
-          const suggestions = updatedFeedback.feedback_loop.verification_results.suggestions;
+          const suggestions =
+            updatedFeedback.feedback_loop.verification_results.suggestions;
           if (suggestions && suggestions.length > 0) {
             console.log('\n優先順位付けされた提案:');
             for (const suggestion of suggestions) {
               if (typeof suggestion === 'string') {
                 console.log(`- [P3] ${suggestion}`);
               } else {
-                console.log(`- [P${suggestion.priority || 3}] [${suggestion.type || 'その他'}] ${suggestion.content}`);
+                console.log(
+                  `- [P${suggestion.priority || 3}] [${suggestion.type || 'その他'}] ${suggestion.content}`
+                );
               }
             }
           }
@@ -255,24 +294,33 @@ async function main() {
       }
       break;
     }
-    
+
     case 'link-git': {
       const taskId = args[1];
       const commitHash = args[2];
-      
+
       if (!taskId || !commitHash) {
         console.error('タスクIDとコミットハッシュを指定してください');
-        console.log('使用方法: node feedback.js link-git <taskId> <commitHash>');
+        console.log(
+          '使用方法: node feedback.js link-git <taskId> <commitHash>'
+        );
         return;
       }
-      
-      console.log(`タスク ${taskId} のフィードバックにコミット ${commitHash} を関連付けます...`);
-      
+
+      console.log(
+        `タスク ${taskId} のフィードバックにコミット ${commitHash} を関連付けます...`
+      );
+
       try {
         const feedback = feedbackManager.getFeedbackByTaskId(taskId);
         if (feedback) {
-          const updatedFeedback = feedbackManager.linkFeedbackToGitCommit(feedback, commitHash);
-          console.log(`フィードバックにコミット ${commitHash} を関連付けました`);
+          const updatedFeedback = feedbackManager.linkFeedbackToGitCommit(
+            feedback,
+            commitHash
+          );
+          console.log(
+            `フィードバックにコミット ${commitHash} を関連付けました`
+          );
         } else {
           console.error(`タスク ${taskId} のフィードバックが見つかりません`);
         }
@@ -281,24 +329,33 @@ async function main() {
       }
       break;
     }
-    
+
     case 'link-session': {
       const taskId = args[1];
       const sessionId = args[2];
-      
+
       if (!taskId || !sessionId) {
         console.error('タスクIDとセッションIDを指定してください');
-        console.log('使用方法: node feedback.js link-session <taskId> <sessionId>');
+        console.log(
+          '使用方法: node feedback.js link-session <taskId> <sessionId>'
+        );
         return;
       }
-      
-      console.log(`タスク ${taskId} のフィードバックにセッション ${sessionId} を関連付けます...`);
-      
+
+      console.log(
+        `タスク ${taskId} のフィードバックにセッション ${sessionId} を関連付けます...`
+      );
+
       try {
         const feedback = feedbackManager.getFeedbackByTaskId(taskId);
         if (feedback) {
-          const updatedFeedback = feedbackManager.linkFeedbackToSession(feedback, sessionId);
-          console.log(`フィードバックにセッション ${sessionId} を関連付けました`);
+          const updatedFeedback = feedbackManager.linkFeedbackToSession(
+            feedback,
+            sessionId
+          );
+          console.log(
+            `フィードバックにセッション ${sessionId} を関連付けました`
+          );
         } else {
           console.error(`タスク ${taskId} のフィードバックが見つかりません`);
         }
@@ -307,20 +364,23 @@ async function main() {
       }
       break;
     }
-    
+
     case 'integrate-task': {
       const taskId = args[1];
-      
+
       if (!taskId) {
         console.error('タスクIDを指定してください');
         console.log('使用方法: node feedback.js integrate-task <taskId>');
         return;
       }
-      
+
       console.log(`タスク ${taskId} のフィードバックをタスクに統合します...`);
-      
+
       try {
-        const result = await feedbackManager.integrateFeedbackWithTask(taskId, taskId);
+        const result = await feedbackManager.integrateFeedbackWithTask(
+          taskId,
+          taskId
+        );
         if (result) {
           console.log('フィードバックをタスクに統合しました');
         } else {
@@ -331,21 +391,28 @@ async function main() {
       }
       break;
     }
-    
+
     case 'integrate-session': {
       const taskId = args[1];
       const sessionId = args[2];
-      
+
       if (!taskId || !sessionId) {
         console.error('タスクIDとセッションIDを指定してください');
-        console.log('使用方法: node feedback.js integrate-session <taskId> <sessionId>');
+        console.log(
+          '使用方法: node feedback.js integrate-session <taskId> <sessionId>'
+        );
         return;
       }
-      
-      console.log(`タスク ${taskId} のフィードバックをセッション ${sessionId} に統合します...`);
-      
+
+      console.log(
+        `タスク ${taskId} のフィードバックをセッション ${sessionId} に統合します...`
+      );
+
       try {
-        const result = await feedbackManager.integrateFeedbackWithSession(taskId, sessionId);
+        const result = await feedbackManager.integrateFeedbackWithSession(
+          taskId,
+          sessionId
+        );
         if (result) {
           console.log('フィードバックをセッションに統合しました');
         } else {
@@ -356,7 +423,7 @@ async function main() {
       }
       break;
     }
-    
+
     default:
       console.error(`不明なコマンド: ${command}`);
       console.log(helpMessage);

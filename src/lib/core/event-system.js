@@ -22,10 +22,11 @@ class EventError extends ApplicationError {
    * @param {Object} options - オプション
    */
   constructor(message, options = {}) {
-    super(message, { 
-      ...options, 
+    super(message, {
+      ...options,
       code: options.code || 'ERR_EVENT',
-      recoverable: options.recoverable !== undefined ? options.recoverable : true
+      recoverable:
+        options.recoverable !== undefined ? options.recoverable : true,
     });
   }
 }
@@ -45,12 +46,16 @@ class EnhancedEventEmitter {
   constructor(loggerOrOptions, options = {}) {
     this.listeners = new Map();
     this.wildcardListeners = [];
-    
+
     // 引数の処理
     let logger;
     let opts;
-    
-    if (loggerOrOptions && typeof loggerOrOptions === 'object' && loggerOrOptions.logger) {
+
+    if (
+      loggerOrOptions &&
+      typeof loggerOrOptions === 'object' &&
+      loggerOrOptions.logger
+    ) {
       // 最初の引数がオプションオブジェクトの場合
       logger = loggerOrOptions.logger;
       opts = loggerOrOptions;
@@ -59,21 +64,21 @@ class EnhancedEventEmitter {
       logger = loggerOrOptions;
       opts = options;
     }
-    
+
     this.debugMode = opts.debugMode || false;
-    
+
     // ロガーの設定（デフォルトのロガーを提供）
     this.logger = logger || {
       debug: console.debug.bind(console),
       info: console.info.bind(console),
       warn: console.warn.bind(console),
-      error: console.error.bind(console)
+      error: console.error.bind(console),
     };
-    
+
     // イベント履歴の設定（デフォルトで有効）
     this.eventHistory = opts.keepHistory !== false ? [] : null;
     this.historyLimit = opts.historyLimit || 100;
-    
+
     // エラー状態の初期化
     this.errorOccurred = false;
   }
@@ -90,26 +95,28 @@ class EnhancedEventEmitter {
       const pattern = new RegExp('^' + event.replace(/\*/g, '.*') + '$');
       const wildcardListener = { pattern, callback };
       this.wildcardListeners.push(wildcardListener);
-      
+
       if (this.debugMode) {
-        this.logger.debug(`ワイルドカードリスナーを登録: ${event}`, { pattern: pattern.toString() });
+        this.logger.debug(`ワイルドカードリスナーを登録: ${event}`, {
+          pattern: pattern.toString(),
+        });
       }
-      
+
       return () => this.offWildcard(wildcardListener);
     } else {
       // 通常のリスナーとして登録
       if (!this.listeners.has(event)) {
         this.listeners.set(event, []);
       }
-      
+
       this.listeners.get(event).push(callback);
-      
+
       if (this.debugMode) {
-        this.logger.debug(`リスナーを登録: ${event}`, { 
-          listenerCount: this.listeners.get(event).length 
+        this.logger.debug(`リスナーを登録: ${event}`, {
+          listenerCount: this.listeners.get(event).length,
         });
       }
-      
+
       return () => this.off(event, callback);
     }
   }
@@ -125,7 +132,7 @@ class EnhancedEventEmitter {
       this.off(event, onceWrapper);
       callback(data);
     };
-    
+
     return this.on(event, onceWrapper);
   }
 
@@ -138,23 +145,25 @@ class EnhancedEventEmitter {
     if (!this.listeners.has(event)) {
       return;
     }
-    
+
     const eventListeners = this.listeners.get(event);
-    const filteredListeners = eventListeners.filter(listener => listener !== callback);
-    
+    const filteredListeners = eventListeners.filter(
+      (listener) => listener !== callback
+    );
+
     if (filteredListeners.length === 0) {
       this.listeners.delete(event);
-      
+
       if (this.debugMode) {
         this.logger.debug(`すべてのリスナーを削除: ${event}`);
       }
     } else {
       this.listeners.set(event, filteredListeners);
-      
+
       if (this.debugMode) {
-        this.logger.debug(`リスナーを削除: ${event}`, { 
+        this.logger.debug(`リスナーを削除: ${event}`, {
           removedCount: eventListeners.length - filteredListeners.length,
-          remainingCount: filteredListeners.length 
+          remainingCount: filteredListeners.length,
         });
       }
     }
@@ -168,10 +177,10 @@ class EnhancedEventEmitter {
     const index = this.wildcardListeners.indexOf(wildcardListener);
     if (index !== -1) {
       this.wildcardListeners.splice(index, 1);
-      
+
       if (this.debugMode) {
-        this.logger.debug(`ワイルドカードリスナーを削除`, { 
-          pattern: wildcardListener.pattern.toString() 
+        this.logger.debug(`ワイルドカードリスナーを削除`, {
+          pattern: wildcardListener.pattern.toString(),
         });
       }
     }
@@ -188,19 +197,19 @@ class EnhancedEventEmitter {
       this.eventHistory.push({
         event,
         data,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
-      
+
       // 履歴の上限を超えた場合、古いものから削除
       if (this.eventHistory.length > this.historyLimit) {
         this.eventHistory.shift();
       }
     }
-    
+
     if (this.debugMode) {
       this.logger.debug(`イベント発行: ${event}`, { data });
     }
-    
+
     // 通常のリスナーを呼び出し
     if (this.listeners.has(event)) {
       for (const listener of this.listeners.get(event)) {
@@ -209,36 +218,57 @@ class EnhancedEventEmitter {
         } catch (error) {
           // ロガーが存在する場合のみログ出力
           if (this.logger && typeof this.logger.error === 'function') {
-            this.logger.error(`イベントリスナー(${event})でエラーが発生しました:`, error);
+            this.logger.error(
+              `イベントリスナー(${event})でエラーが発生しました:`,
+              error
+            );
           } else {
-            console.error(`イベントリスナー(${event})でエラーが発生しました:`, error);
+            console.error(
+              `イベントリスナー(${event})でエラーが発生しました:`,
+              error
+            );
           }
-          
+
           // エラーイベントを発行
           if (event !== 'error') {
-            this.emit('error', new EventError(`イベントリスナーでエラーが発生しました: ${event}`, {
-              cause: error,
-              context: { event, data }
-            }));
+            this.emit(
+              'error',
+              new EventError(
+                `イベントリスナーでエラーが発生しました: ${event}`,
+                {
+                  cause: error,
+                  context: { event, data },
+                }
+              )
+            );
           }
         }
       }
     }
-    
+
     // ワイルドカードリスナーを呼び出し
     for (const { pattern, callback } of this.wildcardListeners) {
       if (pattern.test(event)) {
         try {
           callback(data, event);
         } catch (error) {
-          this.logger.error(`ワイルドカードリスナー(${pattern})でエラーが発生しました:`, error);
-          
+          this.logger.error(
+            `ワイルドカードリスナー(${pattern})でエラーが発生しました:`,
+            error
+          );
+
           // エラーイベントを発行
           if (event !== 'error') {
-            this.emit('error', new EventError(`ワイルドカードリスナーでエラーが発生しました: ${pattern}`, {
-              cause: error,
-              context: { event, data, pattern: pattern.toString() }
-            }));
+            this.emit(
+              'error',
+              new EventError(
+                `ワイルドカードリスナーでエラーが発生しました: ${pattern}`,
+                {
+                  cause: error,
+                  context: { event, data, pattern: pattern.toString() },
+                }
+              )
+            );
           }
         }
       }
@@ -258,73 +288,101 @@ class EnhancedEventEmitter {
         event,
         data,
         timestamp: new Date().toISOString(),
-        async: true
+        async: true,
       });
-      
+
       // 履歴の上限を超えた場合、古いものから削除
       if (this.eventHistory.length > this.historyLimit) {
         this.eventHistory.shift();
       }
     }
-    
+
     if (this.debugMode) {
       this.logger.debug(`非同期イベント発行: ${event}`, { data });
     }
-    
+
     const promises = [];
-    
+
     // 通常のリスナーを非同期で呼び出し
     if (this.listeners.has(event)) {
       for (const listener of this.listeners.get(event)) {
-        promises.push((async () => {
-          try {
-            await Promise.resolve(listener(data));
-          } catch (error) {
-            // ロガーが存在する場合のみログ出力
-            if (this.logger && typeof this.logger.error === 'function') {
-              this.logger.error(`非同期イベントリスナー(${event})でエラーが発生しました:`, error);
-            } else {
-              console.error(`非同期イベントリスナー(${event})でエラーが発生しました:`, error);
+        promises.push(
+          (async () => {
+            try {
+              await Promise.resolve(listener(data));
+            } catch (error) {
+              // ロガーが存在する場合のみログ出力
+              if (this.logger && typeof this.logger.error === 'function') {
+                this.logger.error(
+                  `非同期イベントリスナー(${event})でエラーが発生しました:`,
+                  error
+                );
+              } else {
+                console.error(
+                  `非同期イベントリスナー(${event})でエラーが発生しました:`,
+                  error
+                );
+              }
+
+              // エラーイベントを発行
+              if (event !== 'error') {
+                this.emit(
+                  'error',
+                  new EventError(
+                    `非同期イベントリスナーでエラーが発生しました: ${event}`,
+                    {
+                      cause: error,
+                      context: { event, data },
+                    }
+                  )
+                );
+              }
             }
-            
-            // エラーイベントを発行
-            if (event !== 'error') {
-              this.emit('error', new EventError(`非同期イベントリスナーでエラーが発生しました: ${event}`, {
-                cause: error,
-                context: { event, data }
-              }));
-            }
-          }
-        })());
+          })()
+        );
       }
     }
-    
+
     // ワイルドカードリスナーを非同期で呼び出し
     for (const { pattern, callback } of this.wildcardListeners) {
       if (pattern.test(event)) {
-        promises.push((async () => {
-          try {
-            await Promise.resolve(callback(data, event));
-          } catch (error) {
-            // ロガーが存在する場合のみログ出力
-            if (this.logger && typeof this.logger.error === 'function') {
-              this.logger.error(`非同期ワイルドカードリスナー(${pattern})でエラーが発生しました:`, error);
-            } else {
-              console.error(`非同期ワイルドカードリスナー(${pattern})でエラーが発生しました:`, error);
+        promises.push(
+          (async () => {
+            try {
+              await Promise.resolve(callback(data, event));
+            } catch (error) {
+              // ロガーが存在する場合のみログ出力
+              if (this.logger && typeof this.logger.error === 'function') {
+                this.logger.error(
+                  `非同期ワイルドカードリスナー(${pattern})でエラーが発生しました:`,
+                  error
+                );
+              } else {
+                console.error(
+                  `非同期ワイルドカードリスナー(${pattern})でエラーが発生しました:`,
+                  error
+                );
+              }
+
+              // エラーイベントを発行
+              if (event !== 'error') {
+                this.emit(
+                  'error',
+                  new EventError(
+                    `非同期ワイルドカードリスナーでエラーが発生しました: ${pattern}`,
+                    {
+                      cause: error,
+                      context: { event, data, pattern: pattern.toString() },
+                    }
+                  )
+                );
+              }
             }
-            
-            // エラーイベントを発行
-            if (event !== 'error') {
-              this.emit('error', new EventError(`非同期ワイルドカードリスナーでエラーが発生しました: ${pattern}`, {
-                cause: error,
-                context: { event, data, pattern: pattern.toString() }
-              }));
-            }
-          }
-        })());
+          })()
+        );
       }
     }
-    
+
     await Promise.all(promises);
   }
 
@@ -338,7 +396,7 @@ class EnhancedEventEmitter {
     if (eventName === 'event' || eventName === 'error') {
       return true;
     }
-    
+
     // 標準形式のパターン：
     // - component:action
     // - component:entity_action
@@ -346,7 +404,7 @@ class EnhancedEventEmitter {
     const pattern = /^[a-z][a-z0-9]*:[a-z][a-z0-9_]*$/;
     return pattern.test(eventName);
   }
-  
+
   /**
    * 標準化されたイベント名を生成
    * @param {string} component - コンポーネント名
@@ -368,7 +426,7 @@ class EnhancedEventEmitter {
   emitStandardized(component, action, data = {}, options = {}) {
     // 標準化されたイベント名を生成
     const standardEvent = `${component}:${action}`;
-    
+
     // イベント名の検証（オプション）
     if (options.validateName !== false) {
       const isValid = this.validateEventName(standardEvent);
@@ -376,24 +434,24 @@ class EnhancedEventEmitter {
         this.logger.warn(`非標準のイベント名: ${standardEvent}`);
       }
     }
-    
+
     const timestamp = new Date().toISOString();
     const standardizedData = {
       ...data,
       timestamp,
       component,
-      action
+      action,
     };
-    
+
     // コンポーネント固有のイベントを発行
     this.emit(standardEvent, standardizedData);
-    
+
     // グローバルイベントも発行
     this.emit('event', {
       type: standardEvent,
-      ...standardizedData
+      ...standardizedData,
     });
-    
+
     if (this.debugMode) {
       this.logger.debug(`[EVENT] ${standardEvent}`, standardizedData);
     }
@@ -411,30 +469,34 @@ class EnhancedEventEmitter {
   async emitStandardizedAsync(component, action, data = {}, options = {}) {
     // 標準化されたイベント名を生成
     const standardEvent = `${component}:${action}`;
-    
+
     // イベント名の検証（オプション）
-    if (options.validateName !== false && !this.validateEventName(standardEvent) && 
-        this.logger && typeof this.logger.warn === 'function') {
+    if (
+      options.validateName !== false &&
+      !this.validateEventName(standardEvent) &&
+      this.logger &&
+      typeof this.logger.warn === 'function'
+    ) {
       this.logger.warn(`非標準のイベント名: ${standardEvent}`);
     }
-    
+
     const timestamp = new Date().toISOString();
     const standardizedData = {
       ...data,
       timestamp,
       component,
-      action
+      action,
     };
-    
+
     // コンポーネント固有のイベントを発行
     await this.emitAsync(standardEvent, standardizedData);
-    
+
     // グローバルイベントも発行
     await this.emitAsync('event', {
       type: standardEvent,
-      ...standardizedData
+      ...standardizedData,
     });
-    
+
     if (this.debugMode) {
       this.logger.debug(`[ASYNC EVENT] ${standardEvent}`, standardizedData);
     }
@@ -462,15 +524,17 @@ class EnhancedEventEmitter {
    * @returns {number} リスナー数
    */
   listenerCount(event) {
-    let count = this.listeners.has(event) ? this.listeners.get(event).length : 0;
-    
+    let count = this.listeners.has(event)
+      ? this.listeners.get(event).length
+      : 0;
+
     // ワイルドカードリスナーもカウント
     for (const { pattern } of this.wildcardListeners) {
       if (pattern.test(event)) {
         count++;
       }
     }
-    
+
     return count;
   }
 
@@ -486,7 +550,7 @@ class EnhancedEventEmitter {
       }
       return [];
     }
-    
+
     return this.eventHistory.slice(-limit);
   }
 
@@ -497,7 +561,9 @@ class EnhancedEventEmitter {
   setDebugMode(enabled) {
     this.debugMode = enabled;
     if (this.logger && typeof this.logger.debug === 'function') {
-      this.logger.debug(`デバッグモードを${enabled ? '有効' : '無効'}にしました`);
+      this.logger.debug(
+        `デバッグモードを${enabled ? '有効' : '無効'}にしました`
+      );
     }
   }
 
@@ -521,7 +587,7 @@ class EnhancedEventEmitter {
     return new OperationContext({
       logger: this.logger,
       metadata,
-      parentContext
+      parentContext,
     });
   }
 
@@ -535,17 +601,19 @@ class EnhancedEventEmitter {
     // コンテキストにエラーがある場合はイベント発行をスキップ
     if (context && context.hasError()) {
       if (this.debugMode) {
-        this.logger.debug(`イベント ${event} はコンテキスト ${context.id} でエラーが発生しているためスキップされました`);
+        this.logger.debug(
+          `イベント ${event} はコンテキスト ${context.id} でエラーが発生しているためスキップされました`
+        );
       }
       return;
     }
-    
+
     // コンテキスト情報をデータに追加
     const enhancedData = {
       ...data,
-      _context: context ? context.id : null
+      _context: context ? context.id : null,
     };
-    
+
     // 通常のイベント発行
     this.emit(event, enhancedData);
   }
@@ -558,21 +626,29 @@ class EnhancedEventEmitter {
    * @param {OperationContext} context - 操作コンテキスト
    * @param {Object} options - オプション
    */
-  emitStandardizedWithContext(component, action, data = {}, context, options = {}) {
+  emitStandardizedWithContext(
+    component,
+    action,
+    data = {},
+    context,
+    options = {}
+  ) {
     // コンテキストにエラーがある場合はイベント発行をスキップ
     if (context && context.hasError()) {
       if (this.debugMode) {
-        this.logger.debug(`イベント ${component}:${action} はコンテキスト ${context.id} でエラーが発生しているためスキップされました`);
+        this.logger.debug(
+          `イベント ${component}:${action} はコンテキスト ${context.id} でエラーが発生しているためスキップされました`
+        );
       }
       return;
     }
-    
+
     // コンテキスト情報をデータに追加
     const enhancedData = {
       ...data,
-      _context: context ? context.id : null
+      _context: context ? context.id : null,
     };
-    
+
     // 標準化されたイベント発行
     this.emitStandardized(component, action, enhancedData, options);
   }
@@ -588,7 +664,7 @@ class EnhancedEventEmitter {
   emitError(error, component, operation, context, details = {}) {
     // エラー状態を設定
     this.errorOccurred = true;
-    
+
     // コンテキストにエラー状態を設定
     if (context && typeof context.setError === 'function') {
       try {
@@ -596,16 +672,18 @@ class EnhancedEventEmitter {
       } catch (err) {
         // コンテキストのエラー設定に失敗した場合はログに出力
         if (this.logger && typeof this.logger.warn === 'function') {
-          this.logger.warn(`コンテキストのエラー設定に失敗しました: ${err.message}`);
+          this.logger.warn(
+            `コンテキストのエラー設定に失敗しました: ${err.message}`
+          );
         }
       }
     }
-    
+
     // エラーログを出力
     if (this.logger && typeof this.logger.error === 'function') {
       this.logger.error(`Error in ${component}.${operation}:`, error, details);
     }
-    
+
     // エラーイベントを発行
     const errorData = {
       component,
@@ -617,21 +695,21 @@ class EnhancedEventEmitter {
       recoverable: error.recoverable !== undefined ? error.recoverable : true,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       details,
-      _context: context && context.id ? context.id : null
+      _context: context && context.id ? context.id : null,
     };
-    
+
     // 標準化されたイベント名でエラーイベントを発行
     this.emit('app:error', errorData);
-    
+
     // 後方互換性のために古いイベント名でも発行
     if (component) {
       this.emit(`${component}:error`, errorData);
     }
-    
+
     // グローバルエラーイベントも発行
     this.emit('error', {
       type: 'app:error',
-      ...errorData
+      ...errorData,
     });
   }
 
@@ -641,8 +719,12 @@ class EnhancedEventEmitter {
   removeAllListeners() {
     this.listeners.clear();
     this.wildcardListeners = [];
-    
-    if (this.debugMode && this.logger && typeof this.logger.debug === 'function') {
+
+    if (
+      this.debugMode &&
+      this.logger &&
+      typeof this.logger.debug === 'function'
+    ) {
       this.logger.debug('すべてのリスナーを削除しました');
     }
   }
@@ -654,7 +736,7 @@ class EnhancedEventEmitter {
   setCatalog(catalog) {
     this.catalog = catalog;
   }
-  
+
   /**
    * イベントカタログからイベント定義を取得
    * @param {string} eventName - イベント名
@@ -663,7 +745,7 @@ class EnhancedEventEmitter {
   getEventDefinition(eventName) {
     return this.catalog ? this.catalog.getEventDefinition(eventName) : null;
   }
-  
+
   /**
    * カタログに登録されたイベントを発行
    * @param {string} eventName - イベント名
@@ -677,7 +759,7 @@ class EnhancedEventEmitter {
       }
       return false;
     }
-    
+
     const eventDef = this.catalog.getEventDefinition(eventName);
     if (!eventDef) {
       if (this.logger && typeof this.logger.warn === 'function') {
@@ -685,10 +767,10 @@ class EnhancedEventEmitter {
       }
       return false;
     }
-    
+
     const [component, action] = eventName.split(':');
     this.emitStandardized(component, action, data);
-    
+
     return true;
   }
 }
@@ -705,7 +787,7 @@ class EventCatalog {
     this.events = new Map();
     this.categories = new Map();
   }
-  
+
   /**
    * イベントを登録
    * @param {string} eventName - イベント名（component:action形式）
@@ -716,18 +798,18 @@ class EventCatalog {
     if (!eventName.includes(':')) {
       return false;
     }
-    
+
     const [category] = eventName.split(':');
     this.events.set(eventName, definition);
-    
+
     if (!this.categories.has(category)) {
       this.categories.set(category, []);
     }
-    
+
     this.categories.get(category).push(eventName);
     return true;
   }
-  
+
   /**
    * イベント定義を取得
    * @param {string} eventName - イベント名
@@ -736,7 +818,7 @@ class EventCatalog {
   getEventDefinition(eventName) {
     return this.events.get(eventName) || null;
   }
-  
+
   /**
    * カテゴリに属するイベント一覧を取得
    * @param {string} category - カテゴリ名
@@ -746,21 +828,24 @@ class EventCatalog {
     if (!this.categories.has(category)) {
       return [];
     }
-    
-    return this.categories.get(category).map(eventName => ({
+
+    return this.categories.get(category).map((eventName) => ({
       name: eventName,
-      definition: this.events.get(eventName)
+      definition: this.events.get(eventName),
     }));
   }
-  
+
   /**
    * すべてのイベントを取得
    * @returns {Array<Object>} イベント一覧
    */
   getAllEvents() {
-    return Array.from(this.events.entries()).map(([name, definition]) => ({ name, definition }));
+    return Array.from(this.events.entries()).map(([name, definition]) => ({
+      name,
+      definition,
+    }));
   }
-  
+
   /**
    * すべてのカテゴリを取得
    * @returns {Array<string>} カテゴリ名の配列
@@ -773,5 +858,5 @@ class EventCatalog {
 module.exports = {
   EventError,
   EnhancedEventEmitter,
-  EventCatalog
+  EventCatalog,
 };

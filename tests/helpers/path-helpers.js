@@ -19,24 +19,24 @@ function setupPathMatchers() {
     toMatchPath(received, expected) {
       const normalizedReceived = normalizePath(received);
       const normalizedExpected = normalizePath(expected);
-      
+
       const pass = normalizedReceived === normalizedExpected;
-      
+
       return {
         pass,
-        message: () => 
+        message: () =>
           `Expected path ${this.utils.printReceived(received)} ${
             pass ? 'not to match' : 'to match'
           } ${this.utils.printExpected(expected)}\n` +
-          `Normalized: ${this.utils.printReceived(normalizedReceived)} vs ${
-            this.utils.printExpected(normalizedExpected)
-          }`
+          `Normalized: ${this.utils.printReceived(normalizedReceived)} vs ${this.utils.printExpected(
+            normalizedExpected
+          )}`,
       };
-    }
+    },
   });
 }
 
 module.exports = {
   normalizePath,
-  setupPathMatchers
+  setupPathMatchers,
 };

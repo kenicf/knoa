@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * セッション管理CLI
- * 
+ *
  * セッション管理ユーティリティを使用するためのコマンドラインインターフェース
  */
 
@@ -61,20 +61,24 @@ async function main() {
   switch (command) {
     case 'start': {
       const previousSessionId = args[1];
-      
+
       console.log(colors.cyan('新しいセッションを開始します...'));
       if (previousSessionId) {
         console.log(colors.cyan(`前回のセッションID: ${previousSessionId}`));
       }
-      
+
       try {
-        const session = await sessionManager.createNewSession(previousSessionId);
+        const session =
+          await sessionManager.createNewSession(previousSessionId);
         console.log(colors.green('セッションを開始しました:'));
         console.log(colors.yellow('セッションID:'), session.session_id);
         console.log(colors.yellow('作成日時:'), session.created_at);
-        
+
         if (session.previous_session_id) {
-          console.log(colors.yellow('前回のセッションID:'), session.previous_session_id);
+          console.log(
+            colors.yellow('前回のセッションID:'),
+            session.previous_session_id
+          );
         }
       } catch (error) {
         console.error(colors.red('セッション開始エラー:'), error.message);
@@ -82,12 +86,12 @@ async function main() {
       }
       break;
     }
-    
+
     case 'end': {
       const sessionId = args[1];
-      
+
       console.log(colors.cyan('セッションを終了します...'));
-      
+
       try {
         // セッションIDが指定されていない場合は最新のセッションを取得
         let targetSessionId = sessionId;
@@ -100,17 +104,25 @@ async function main() {
             return;
           }
         }
-        
+
         const session = await sessionManager.endSession(targetSessionId);
         console.log(colors.green('セッションを終了しました:'));
         console.log(colors.yellow('セッションID:'), session.session_id);
         console.log(colors.yellow('終了日時:'), session.ended_at);
-        
+
         // 引継ぎドキュメントを保存
         if (session.handover_document) {
-          const handoverPath = path.join(process.cwd(), 'ai-context', 'sessions', 'session-handover.md');
+          const handoverPath = path.join(
+            process.cwd(),
+            'ai-context',
+            'sessions',
+            'session-handover.md'
+          );
           fs.writeFileSync(handoverPath, session.handover_document, 'utf8');
-          console.log(colors.green('引継ぎドキュメントを保存しました:'), handoverPath);
+          console.log(
+            colors.green('引継ぎドキュメントを保存しました:'),
+            handoverPath
+          );
         }
       } catch (error) {
         console.error(colors.red('セッション終了エラー:'), error.message);
@@ -118,26 +130,34 @@ async function main() {
       }
       break;
     }
-    
+
     case 'list': {
       console.log(colors.cyan('セッション一覧を表示します...'));
-      
+
       try {
         const sessions = await sessionManager.getAllSessions();
-        
+
         if (!sessions || sessions.length === 0) {
           console.log(colors.yellow('セッションが見つかりません'));
           return;
         }
-        
-        console.log(colors.green(`${sessions.length}件のセッションが見つかりました:`));
-        
+
+        console.log(
+          colors.green(`${sessions.length}件のセッションが見つかりました:`)
+        );
+
         // セッションを日付順にソート
-        sessions.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        
+        sessions.sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        );
+
         sessions.forEach((session, index) => {
-          const status = session.ended_at ? colors.red('終了') : colors.green('アクティブ');
-          console.log(`${index + 1}. ${colors.yellow(session.session_id)} [${status}]`);
+          const status = session.ended_at
+            ? colors.red('終了')
+            : colors.green('アクティブ');
+          console.log(
+            `${index + 1}. ${colors.yellow(session.session_id)} [${status}]`
+          );
           console.log(`   作成: ${session.created_at}`);
           if (session.ended_at) {
             console.log(`   終了: ${session.ended_at}`);
@@ -153,26 +173,29 @@ async function main() {
       }
       break;
     }
-    
+
     case 'current': {
       console.log(colors.cyan('現在のセッションを表示します...'));
-      
+
       try {
         const session = await sessionManager.getLatestSession();
-        
+
         if (!session) {
           console.log(colors.yellow('アクティブなセッションが見つかりません'));
           return;
         }
-        
+
         console.log(colors.green('現在のセッション:'));
         console.log(colors.yellow('セッションID:'), session.session_id);
         console.log(colors.yellow('作成日時:'), session.created_at);
-        
+
         if (session.previous_session_id) {
-          console.log(colors.yellow('前回のセッションID:'), session.previous_session_id);
+          console.log(
+            colors.yellow('前回のセッションID:'),
+            session.previous_session_id
+          );
         }
-        
+
         if (session.tasks && session.tasks.length > 0) {
           console.log(colors.yellow('\n関連タスク:'));
           session.tasks.forEach((task, index) => {
@@ -185,53 +208,58 @@ async function main() {
       }
       break;
     }
-    
+
     case 'info': {
       const sessionId = args[1];
-      
+
       if (!sessionId) {
         console.error(colors.red('セッションIDを指定してください'));
         console.log('使用方法: node session.js info <session-id>');
         return;
       }
-      
+
       console.log(colors.cyan(`セッション情報を表示します: ${sessionId}`));
-      
+
       try {
         const session = await sessionManager.getSession(sessionId);
-        
+
         if (!session) {
           console.error(colors.red(`セッション ${sessionId} が見つかりません`));
           return;
         }
-        
+
         console.log(colors.green('セッション情報:'));
         console.log(colors.yellow('セッションID:'), session.session_id);
         console.log(colors.yellow('作成日時:'), session.created_at);
-        
+
         if (session.ended_at) {
           console.log(colors.yellow('終了日時:'), session.ended_at);
         }
-        
+
         if (session.previous_session_id) {
-          console.log(colors.yellow('前回のセッションID:'), session.previous_session_id);
+          console.log(
+            colors.yellow('前回のセッションID:'),
+            session.previous_session_id
+          );
         }
-        
+
         if (session.description) {
           console.log(colors.yellow('説明:'), session.description);
         }
-        
+
         if (session.tasks && session.tasks.length > 0) {
           console.log(colors.yellow('\n関連タスク:'));
           session.tasks.forEach((task, index) => {
             console.log(`${index + 1}. ${task.id}: ${task.title}`);
           });
         }
-        
+
         if (session.feedback && session.feedback.length > 0) {
           console.log(colors.yellow('\n関連フィードバック:'));
           session.feedback.forEach((feedback, index) => {
-            console.log(`${index + 1}. ${feedback.id}: ${feedback.title || 'フィードバック'}`);
+            console.log(
+              `${index + 1}. ${feedback.id}: ${feedback.title || 'フィードバック'}`
+            );
           });
         }
       } catch (error) {
@@ -240,56 +268,67 @@ async function main() {
       }
       break;
     }
-    
+
     case 'export': {
       const sessionId = args[1];
       const outputPath = args[2] || `session-${sessionId}-export.json`;
-      
+
       if (!sessionId) {
         console.error(colors.red('セッションIDを指定してください'));
-        console.log('使用方法: node session.js export <session-id> [output-path]');
+        console.log(
+          '使用方法: node session.js export <session-id> [output-path]'
+        );
         return;
       }
-      
-      console.log(colors.cyan(`セッション情報をエクスポートします: ${sessionId}`));
-      
+
+      console.log(
+        colors.cyan(`セッション情報をエクスポートします: ${sessionId}`)
+      );
+
       try {
         const session = await sessionManager.getSession(sessionId);
-        
+
         if (!session) {
           console.error(colors.red(`セッション ${sessionId} が見つかりません`));
           return;
         }
-        
+
         fs.writeFileSync(outputPath, JSON.stringify(session, null, 2), 'utf8');
-        console.log(colors.green(`セッション情報を ${outputPath} にエクスポートしました`));
+        console.log(
+          colors.green(`セッション情報を ${outputPath} にエクスポートしました`)
+        );
       } catch (error) {
-        console.error(colors.red('セッションエクスポートエラー:'), error.message);
+        console.error(
+          colors.red('セッションエクスポートエラー:'),
+          error.message
+        );
         process.exit(1);
       }
       break;
     }
-    
+
     case 'import': {
       const inputPath = args[1];
-      
+
       if (!inputPath) {
         console.error(colors.red('入力ファイルパスを指定してください'));
         console.log('使用方法: node session.js import <input-path>');
         return;
       }
-      
-      console.log(colors.cyan(`セッション情報をインポートします: ${inputPath}`));
-      
+
+      console.log(
+        colors.cyan(`セッション情報をインポートします: ${inputPath}`)
+      );
+
       try {
         if (!fs.existsSync(inputPath)) {
           console.error(colors.red(`ファイル ${inputPath} が見つかりません`));
           return;
         }
-        
+
         const sessionData = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
         const session = await sessionManager.importSession(sessionData);
-        
+
         console.log(colors.green('セッション情報をインポートしました:'));
         console.log(colors.yellow('セッションID:'), session.session_id);
         console.log(colors.yellow('作成日時:'), session.created_at);
@@ -299,7 +338,7 @@ async function main() {
       }
       break;
     }
-    
+
     default:
       console.error(colors.red(`不明なコマンド: ${command}`));
       console.log(helpMessage);

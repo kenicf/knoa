@@ -1,6 +1,6 @@
 /**
  * 状態管理アダプター
- * 
+ *
  * 状態管理コンポーネントをラップし、統一されたインターフェースを提供します。
  */
 
@@ -23,7 +23,7 @@ class StateManagerAdapter extends BaseAdapter {
   constructor(stateManager, options = {}) {
     super(stateManager, options);
   }
-  
+
   /**
    * 現在の状態を取得
    * @param {OperationContext} context - 操作コンテキスト（オプション）
@@ -31,16 +31,17 @@ class StateManagerAdapter extends BaseAdapter {
    */
   getCurrentState(context = null) {
     try {
-      const operationContext = context || this._createContext('getCurrentState');
-      
+      const operationContext =
+        context || this._createContext('getCurrentState');
+
       const state = this.manager.getCurrentState();
-      
+
       return state;
     } catch (error) {
       return this._handleError(error, 'getCurrentState', context);
     }
   }
-  
+
   /**
    * 状態を設定
    * @param {string} state - 設定する状態
@@ -50,30 +51,36 @@ class StateManagerAdapter extends BaseAdapter {
    */
   setState(state, data = {}, context = null) {
     try {
-      const operationContext = context || this._createContext('setState', { state });
-      
+      const operationContext =
+        context || this._createContext('setState', { state });
+
       this._validateParams({ state }, ['state']);
-      
+
       // 現在の状態を取得（previousStateとして使用）
       const previousState = this.manager.getCurrentState();
-      
+
       const result = this.manager.setState(state, data);
-      
+
       // イベント発行
-      this._emitEvent('state', 'state_changed', {
-        state,
-        previousState,
-        timestamp: new Date().toISOString(),
-        sessionId: data.sessionId || null,
-        ...data // データオブジェクトの内容をイベントデータに含める
-      }, operationContext);
-      
+      this._emitEvent(
+        'state',
+        'state_changed',
+        {
+          state,
+          previousState,
+          timestamp: new Date().toISOString(),
+          sessionId: data.sessionId || null,
+          ...data, // データオブジェクトの内容をイベントデータに含める
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
       return this._handleError(error, 'setState', context, { state, data });
     }
   }
-  
+
   /**
    * 状態を遷移
    * @param {string} targetState - 遷移先の状態
@@ -83,37 +90,48 @@ class StateManagerAdapter extends BaseAdapter {
    */
   transitionTo(targetState, data = {}, context = null) {
     try {
-      const operationContext = context || this._createContext('transitionTo', { targetState });
-      
+      const operationContext =
+        context || this._createContext('transitionTo', { targetState });
+
       this._validateParams({ targetState }, ['targetState']);
-      
+
       // 遷移可能かどうかを検証
       if (!this.manager.canTransitionTo(targetState)) {
-        throw new ValidationError(`Cannot transition from ${this.manager.getCurrentState()} to ${targetState}`);
+        throw new ValidationError(
+          `Cannot transition from ${this.manager.getCurrentState()} to ${targetState}`
+        );
       }
-      
+
       // 現在の状態を取得（previousStateとして使用）
       const previousState = this.manager.getCurrentState();
-      
+
       const result = this.manager.transitionTo(targetState, data);
-      
+
       // イベント発行
-      this._emitEvent('state', 'state_transition', {
-        fromState: previousState,
-        toState: targetState,
-        previousState: previousState, // 後方互換性のため
-        state: targetState, // 後方互換性のため
-        timestamp: new Date().toISOString(),
-        sessionId: data.sessionId || null,
-        ...data // データオブジェクトの内容をイベントデータに含める
-      }, operationContext);
-      
+      this._emitEvent(
+        'state',
+        'state_transition',
+        {
+          fromState: previousState,
+          toState: targetState,
+          previousState: previousState, // 後方互換性のため
+          state: targetState, // 後方互換性のため
+          timestamp: new Date().toISOString(),
+          sessionId: data.sessionId || null,
+          ...data, // データオブジェクトの内容をイベントデータに含める
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
-      return this._handleError(error, 'transitionTo', context, { targetState, data });
+      return this._handleError(error, 'transitionTo', context, {
+        targetState,
+        data,
+      });
     }
   }
-  
+
   /**
    * 遷移可能かどうかを検証
    * @param {string} targetState - 遷移先の状態
@@ -122,16 +140,19 @@ class StateManagerAdapter extends BaseAdapter {
    */
   canTransitionTo(targetState, context = null) {
     try {
-      const operationContext = context || this._createContext('canTransitionTo', { targetState });
-      
+      const operationContext =
+        context || this._createContext('canTransitionTo', { targetState });
+
       this._validateParams({ targetState }, ['targetState']);
-      
+
       return this.manager.canTransitionTo(targetState);
     } catch (error) {
-      return this._handleError(error, 'canTransitionTo', context, { targetState });
+      return this._handleError(error, 'canTransitionTo', context, {
+        targetState,
+      });
     }
   }
-  
+
   /**
    * 状態履歴を取得
    * @param {OperationContext} context - 操作コンテキスト（オプション）
@@ -139,14 +160,15 @@ class StateManagerAdapter extends BaseAdapter {
    */
   getStateHistory(context = null) {
     try {
-      const operationContext = context || this._createContext('getStateHistory');
-      
+      const operationContext =
+        context || this._createContext('getStateHistory');
+
       return this.manager.getStateHistory();
     } catch (error) {
       return this._handleError(error, 'getStateHistory', context);
     }
   }
-  
+
   /**
    * 前の状態を取得
    * @param {OperationContext} context - 操作コンテキスト（オプション）
@@ -154,8 +176,9 @@ class StateManagerAdapter extends BaseAdapter {
    */
   getPreviousState(context = null) {
     try {
-      const operationContext = context || this._createContext('getPreviousState');
-      
+      const operationContext =
+        context || this._createContext('getPreviousState');
+
       return this.manager.getPreviousState();
     } catch (error) {
       return this._handleError(error, 'getPreviousState', context);

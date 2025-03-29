@@ -3,1836 +3,896 @@
  */
 
 const StorageService = require('../../../src/lib/utils/storage');
-const { 
-  createMockLogger, 
-  createMockEventEmitter, 
-  createMockErrorHandler, 
-  mockTimestamp 
-} = require('../../helpers/mock-factory');
-const { 
-  expectStandardizedEventEmitted, 
-  expectErrorHandled 
-} = require('../../helpers/test-helpers');
+const { StorageError } = require('../../../src/lib/utils/errors');
 const {
-  normalizePath,
-  setupPathMatchers
-} = require('../../helpers/path-helpers');
+  createMockLogger,
+  createMockEventEmitter,
+  createMockErrorHandler,
+  mockTimestamp,
+} = require('../../helpers/mock-factory');
+const {
+  expectStandardizedEventEmitted,
+} = require('../../helpers/test-helpers');
+const path = require('path'); // path モジュールを直接使用
+const fs = require('fs'); // fs モジュールを直接使用 (モックされる)
 
-// fsとpathのモック
+// fs モジュールをモック
 jest.mock('fs');
-jest.mock('path');
-
-// テスト実行前にパスマッチャーをセットアップ
-setupPathMatchers();
-
-/**
- * StorageServiceのテスト用オプションを作成
- * @param {Object} overrides - 上書きするオプション
- * @returns {Object} テスト用オプション
- */
-function createStorageServiceTestOptions(overrides = {}) {
+// path モジュールは beforeEach で spyOn を使ってモックする
+// path モジュールをモック
+jest.mock('path', () => {
+  const originalPath = jest.requireActual('path');
   return {
-    basePath: '/test/base/path',
-    logger: createMockLogger(),
-    eventEmitter: createMockEventEmitter(),
-    errorHandler: createMockErrorHandler(),
-    ...overrides
+    ...originalPath, // 他の path 関数は元の実装を使用
+    // join, dirname, normalize を jest.fn() でラップし、元の関数を呼び出す
+    join: jest.fn((...args) => originalPath.join(...args)),
+    dirname: jest.fn((p) => originalPath.dirname(p)),
+    normalize: jest.fn((p) => originalPath.normalize(p)),
   };
-}
+});
+
 
 describe('StorageService', () => {
   let storageService;
   let mockLogger;
   let mockEventEmitter;
   let mockErrorHandler;
-  let fs;
-  let path;
+  let fsMock;
+  let pathMock;
+
+  const BASE_PATH = '/test/base/path';
+  const TEST_DIR = 'test-dir';
+  const TEST_FILE_JSON = 'test-file.json';
+  const TEST_FILE_TXT = 'test-file.txt';
+  const TEST_FILE_BIN = 'test-file.bin';
+  const NATIVE_TEST_DIR_PATH = path.join(BASE_PATH, TEST_DIR);
+  const NATIVE_JSON_PATH = path.join(NATIVE_TEST_DIR_PATH, TEST_FILE_JSON);
+  const NATIVE_TXT_PATH = path.join(NATIVE_TEST_DIR_PATH, TEST_FILE_TXT);
+  const NATIVE_BIN_PATH = path.join(NATIVE_TEST_DIR_PATH, TEST_FILE_BIN);
+  const MOCK_TIMESTAMP_ISO = '2025-03-24T00:00:00.000Z';
+  const MOCK_TIMESTAMP_MS = new Date(MOCK_TIMESTAMP_ISO).getTime();
+  const MOCK_RANDOM = 0.123456789;
+  const EXPECTED_TRACE_ID = `trace-${MOCK_TIMESTAMP_MS}-4fzzxw8a5`;
+  const EXPECTED_REQUEST_ID = `req-${MOCK_TIMESTAMP_MS}-4fzzxw8a5`;
+
 
   beforeEach(() => {
-    // モックのリセット（一度だけ実行）
     jest.clearAllMocks();
-    jest.restoreAllMocks();
-    
-    // fsとpathのモックを取得
-    fs = require('fs');
-    path = require('path');
-    
-    // パスの結合をシミュレート - プラットフォーム固有の区切り文字を考慮
-    path.join.mockImplementation((...args) => {
-      // Windowsスタイルのパスを返す（テスト環境がWindowsの場合）
-      if (process.platform === 'win32') {
-        return args.join('\\');
-      } else {
-        return args.join('/');
-      }
-    });
-    
-    // fs.existsSyncのモック実装を改善
-    fs.existsSync.mockImplementation((path) => {
-      // パスを正規化して比較
-      const normalizedPath = normalizePath(path);
-      if (normalizedPath.includes('/test/base/path/test-dir')) {
-        return true; // テストディレクトリは存在すると仮定
-      }
-      return false; // その他のパスは存在しないと仮定
-    });
-    
-    // fs.writeFileSyncのモック - spyOnを使用
-    jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-    
-    // 時間のモック
-    mockTimestamp('2025-03-24T00:00:00.000Z');
-    
-    // 共通モックファクトリを使用
+
+    fsMock = require('fs');
+    // path モジュールは jest.mock でモックされる
+
+    // fs モックのデフォルト実装
+    fsMock.existsSync.mockReturnValue(false);
+    fsMock.readFileSync.mockReturnValue('{}');
+    fsMock.writeFileSync.mockImplementation(() => {});
+    fsMock.mkdirSync.mockImplementation(() => {});
+    fsMock.unlinkSync.mockImplementation(() => {});
+    fsMock.rmdirSync.mockImplementation(() => {});
+    fsMock.copyFileSync.mockImplementation(() => {});
+    fsMock.rmSync.mockImplementation(() => {});
+    fsMock.lstatSync.mockReturnValue({ isDirectory: () => false });
+    fsMock.readdirSync.mockReturnValue([]);
+
+    // 時間関連のモック
+    mockTimestamp(MOCK_TIMESTAMP_ISO);
+    jest.spyOn(Date, 'now').mockReturnValue(MOCK_TIMESTAMP_MS);
+    jest.spyOn(Math, 'random').mockReturnValue(MOCK_RANDOM);
+
+    // 依存関係のモック
     mockLogger = createMockLogger();
     mockEventEmitter = createMockEventEmitter();
+    // エラーハンドラのデフォルト値を更新
     mockErrorHandler = createMockErrorHandler({
-      defaultReturnValues: {
-        readJSON: null,
-        writeJSON: null,
-        readText: null,
-        writeText: null,
-        writeFile: null,
-        updateJSON: null,
-        deleteFile: false,
-        deleteDirectory: null,
-        copyFile: false,
-        listFiles: []
-      }
+        defaultReturnValues: {
+            readJSON: null, writeJSON: false, readText: null, writeText: false,
+            writeFile: false, updateJSON: null, deleteFile: false,
+            deleteDirectory: false, copyFile: false, listFiles: [],
+            fileExists: false, ensureDirectoryExists: false,
+            '_getNativeFilePath (mkdir)': undefined, // エラーハンドラが呼ばれた場合、これらの操作は値を返さない
+            '_ensureDirectoryExists (mkdir)': undefined,
+        }
     });
-    
-    // mockErrorHandler.handleメソッドの実装を明示的に設定
-    mockErrorHandler.handle.mockImplementation((error, service, operation, context) => {
-      const defaultValues = mockErrorHandler.defaultReturnValues || {};
-      return defaultValues[operation] !== undefined ? defaultValues[operation] : null;
+
+    // StorageService のインスタンス作成
+    storageService = new StorageService({
+        basePath: BASE_PATH,
+        logger: mockLogger,
+        eventEmitter: mockEventEmitter,
+        errorHandler: mockErrorHandler,
     });
-    
-    // StorageServiceのインスタンス作成
-    storageService = new StorageService(createStorageServiceTestOptions());
-  });
-  
-  // テスト間のクリーンアップを追加
-  afterEach(() => {
-    // タイマーをリセット - 直接リセットする
-    jest.useRealTimers();
+    // IDジェネレーターをモックして固定値を返すようにする (関数であることを維持)
+    storageService._traceIdGenerator = jest.fn().mockImplementation(() => EXPECTED_TRACE_ID);
+    storageService._requestIdGenerator = jest.fn().mockImplementation(() => EXPECTED_REQUEST_ID);
   });
 
+   afterEach(() => {
+     jest.restoreAllMocks();
+   });
+
+   describe('constructor', () => {
+        test('logger がないとエラーをスローする', () => {
+            expect(() => new StorageService({ basePath: BASE_PATH })).toThrow('Logger instance is required');
+        });
+
+        test('デフォルト値とカスタム値で初期化される', () => {
+            // Arrange & Act (beforeEach で初期化済み)
+            // Assert
+            expect(storageService.basePath).toBe(BASE_PATH);
+            expect(storageService.logger).toBe(mockLogger);
+            expect(storageService.eventEmitter).toBe(mockEventEmitter);
+            expect(storageService.errorHandler).toBe(mockErrorHandler);
+            expect(typeof storageService._traceIdGenerator).toBe('function'); // typeof で関数であることを確認
+            expect(typeof storageService._requestIdGenerator).toBe('function'); // typeof で関数であることを確認
+
+            // デフォルト basePath のテスト
+            const defaultService = new StorageService({ logger: mockLogger });
+            expect(defaultService.basePath).toBe(process.cwd());
+        });
+   });
+
+  describe('_getNativeFilePath', () => {
+    test('ディレクトリが存在する場合、正しいネイティブパスを返す', () => {
+      // Arrange
+      fsMock.existsSync.mockReturnValue(true);
+      // Act
+      const result = storageService._getNativeFilePath(TEST_DIR, TEST_FILE_JSON);
+      // Assert
+      expect(result).toBe(NATIVE_JSON_PATH);
+      expect(require('path').join).toHaveBeenCalledWith(BASE_PATH, TEST_DIR, TEST_FILE_JSON);
+      expect(fsMock.existsSync).toHaveBeenCalledWith(NATIVE_TEST_DIR_PATH);
+      expect(fsMock.mkdirSync).not.toHaveBeenCalled();
+    });
+
+    test('ディレクトリが存在しない場合、ディレクトリを作成して正しいネイティブパスを返す', () => {
+      // Arrange
+      fsMock.existsSync.mockReturnValue(false);
+      // Act
+      const result = storageService._getNativeFilePath(TEST_DIR, TEST_FILE_JSON);
+      // Assert
+      expect(result).toBe(NATIVE_JSON_PATH);
+      expect(fsMock.existsSync).toHaveBeenCalledWith(NATIVE_TEST_DIR_PATH);
+      expect(fsMock.mkdirSync).toHaveBeenCalledWith(NATIVE_TEST_DIR_PATH, { recursive: true });
+      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_created', { path: NATIVE_TEST_DIR_PATH, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+    });
+
+     test('ディレクトリ作成時にエラーが発生した場合、エラーをハンドルする', () => {
+       // Arrange
+       fsMock.existsSync.mockReturnValue(false);
+       const error = new Error('mkdir failed');
+       fsMock.mkdirSync.mockImplementation(() => { throw error; });
+       // Act
+       const result = storageService._getNativeFilePath('error-dir', 'file.json');
+       // Assert
+       expect(result).toBe(path.join(BASE_PATH, 'error-dir', 'file.json'));
+       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+         expect.any(StorageError),
+         'StorageService',
+         '_getNativeFilePath (mkdir)',
+         expect.objectContaining({ directory: path.join(BASE_PATH, 'error-dir') })
+       );
+     });
+  });
+
+  // getFilePath (deprecated) のテスト
   describe('getFilePath', () => {
-    test('ディレクトリが存在する場合、正しいパスを返す', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(true);
-      
-      // Act
-      const result = storageService.getFilePath('test-dir', 'test-file.json');
-      
-      // Assert
-      expect(result).toMatchPath('/test/base/path/test-dir/test-file.json');
-      expect(path.join).toHaveBeenCalledWith('/test/base/path', 'test-dir');
-      expect(path.join).toHaveBeenCalledWith(expect.any(String), 'test-file.json');
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.mkdirSync).not.toHaveBeenCalled();
-    });
-
-    test('ディレクトリが存在しない場合、ディレクトリを作成して正しいパスを返す', () => {
-      // Arrange
-      fs.existsSync.mockReturnValueOnce(false);
-      
-      // Act
-      const result = storageService.getFilePath('test-dir', 'test-file.json');
-      
-      // Assert
-      expect(result).toMatchPath('/test/base/path/test-dir/test-file.json');
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.mkdirSync).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:created', {
-        path: expect.stringMatching(/test-dir/)
+      test('ネイティブパスを / 区切りに変換して返す', () => {
+          // Arrange
+          const nativePath = 'c:\\test\\path';
+          const expectedPath = 'c:/test/path';
+          jest.spyOn(storageService, '_getNativeFilePath').mockReturnValue(nativePath);
+          // Act
+          const result = storageService.getFilePath('dir', 'file');
+          // Assert
+          expect(result).toBe(expectedPath);
+          expect(storageService._getNativeFilePath).toHaveBeenCalledWith('dir', 'file');
       });
-    });
-
-    describe('ensureDirectoryExists', () => {
-      test('ディレクトリが存在する場合、何もしない', () => {
-        // Arrange
-        fs.existsSync.mockReturnValue(true);
-        
-        // Act
-        storageService.ensureDirectoryExists('/test/dir');
-        
-        // Assert
-        expect(fs.existsSync).toHaveBeenCalled();
-        expect(fs.mkdirSync).not.toHaveBeenCalled();
-      });
-
-      test('ディレクトリが存在しない場合、ディレクトリを作成する', () => {
-        // Arrange
-        fs.existsSync.mockReturnValue(false);
-        
-        // Act
-        storageService.ensureDirectoryExists('/test/dir');
-        
-        // Assert
-        expect(fs.existsSync).toHaveBeenCalled();
-        expect(fs.mkdirSync).toHaveBeenCalled();
-        
-        // イベント発行の検証をヘルパー関数で実施
-        expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:created', {
-          path: expect.stringMatching(/test\/dir/)
-        });
-      });
-
-      test('ディレクトリ作成時にエラーが発生した場合、エラーハンドラーを呼び出す', () => {
-        // Arrange
-        fs.existsSync.mockReturnValue(false);
-        const error = new Error('テストエラー');
-        fs.mkdirSync.mockImplementation(() => {
-          throw error;
-        });
-        
-        // Act
-        storageService.ensureDirectoryExists('/test/dir');
-        
-        // Assert
-        expect(fs.existsSync).toHaveBeenCalled();
-        expect(fs.mkdirSync).toHaveBeenCalled();
-        
-        // エラー処理の検証をヘルパー関数で実施
-        expectErrorHandled(mockErrorHandler, 'StorageError', 'ディレクトリの作成に失敗しました', {
-          directory: expect.stringMatching(/test\/dir/)
-        });
-      });
-    });
   });
 
   describe('readJSON', () => {
     test('ファイルが存在する場合、JSONオブジェクトを返す', () => {
       // Arrange
       const jsonContent = '{"key": "value"}';
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(jsonContent);
-      
+      fsMock.existsSync.mockReturnValue(true);
+      fsMock.readFileSync.mockReturnValue(jsonContent);
+
       // Act
-      const result = storageService.readJSON('test-dir', 'test-file.json');
-      
+      const result = storageService.readJSON(TEST_DIR, TEST_FILE_JSON);
+
       // Assert
       expect(result).toEqual({ key: 'value' });
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.any(String), 'utf8');
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:read', {
-        directory: 'test-dir',
-        filename: 'test-file.json'
-      });
+      expect(fsMock.existsSync).toHaveBeenCalledWith(NATIVE_JSON_PATH);
+      expect(fsMock.readFileSync).toHaveBeenCalledWith(NATIVE_JSON_PATH, 'utf8');
+      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_read_before', { path: NATIVE_JSON_PATH, type: 'json', timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_read_after', { path: NATIVE_JSON_PATH, type: 'json', success: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
     });
 
-    test('ファイルが存在しない場合、nullを返す', () => {
+    test('ファイルが存在しない場合、nullを返し、not_foundイベントを発行する', () => {
       // Arrange
-      fs.existsSync.mockReturnValue(false);
-      
+      fsMock.existsSync.mockReturnValue(false);
       // Act
-      const result = storageService.readJSON('test-dir', 'test-file.json');
-      
+      const result = storageService.readJSON(TEST_DIR, TEST_FILE_JSON);
       // Assert
       expect(result).toBeNull();
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readFileSync).not.toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施（ファイルが存在しない場合は1回のみ）
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:not_found', {
-        directory: 'test-dir',
-        filename: 'test-file.json'
-      });
+      expect(fsMock.existsSync).toHaveBeenCalledWith(NATIVE_JSON_PATH);
+      expect(fsMock.readFileSync).not.toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_read_before', { path: NATIVE_JSON_PATH, type: 'json', timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_not_found', { path: NATIVE_JSON_PATH, type: 'json', timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
     });
 
-    test('ファイルが存在しない場合、file:not_foundイベントを発行する', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(false);
-      
-      // Act
-      const result = storageService.readJSON('test-dir', 'test-file.json');
-      
-      // Assert
-      expect(result).toBeNull();
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:not_found', {
-        directory: 'test-dir',
-        filename: 'test-file.json'
-      });
-    });
-
-    test('JSONパースエラーが発生した場合、エラーハンドラーを呼び出す', () => {
+    test('JSONパースエラーが発生した場合、エラーをハンドルしnullを返す', () => {
       // Arrange
       const invalidJson = '{invalid: json}';
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(invalidJson);
-      
+      fsMock.existsSync.mockReturnValue(true);
+      fsMock.readFileSync.mockReturnValue(invalidJson);
+
       // Act
-      const result = storageService.readJSON('test-dir', 'test-file.json');
-      
+      const result = storageService.readJSON(TEST_DIR, TEST_FILE_JSON);
+
       // Assert
       expect(result).toBeNull();
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.any(String), 'utf8');
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:read', {
-        directory: 'test-dir',
-        filename: 'test-file.json'
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'JSONのパースに失敗しました', {
-        directory: 'test-dir',
-        filename: 'test-file.json',
-        operation: 'readJSON'
-      });
-    });
-    
-    test('readJSONはトレースIDとリクエストIDを生成する', () => {
-      // Arrange
-      const jsonContent = '{"key": "value"}';
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(jsonContent);
-      
-      // 新しいモックイベントエミッターを作成（emitStandardizedなし）
-      const localMockEventEmitter = {
-        emit: jest.fn()
-      };
-      
-      // 新しいStorageServiceインスタンスを作成
-      const localStorageService = new StorageService({
-        ...createStorageServiceTestOptions(),
-        eventEmitter: localMockEventEmitter
-      });
-      
-      // Act
-      const result = localStorageService.readJSON('/test/path/file.json');
-      
-      // Assert
-      expect(result).toEqual({ key: 'value' });
-      
-      // イベント発行の検証
-      expect(localMockEventEmitter.emit).toHaveBeenCalledWith(
-        'storage:file:read:before',
-        expect.objectContaining({
-          filePath: '/test/path/file.json',
-          type: 'json',
-          traceId: expect.any(String),
-          requestId: expect.any(String)
-        })
+      expect(fsMock.readFileSync).toHaveBeenCalledWith(NATIVE_JSON_PATH, 'utf8');
+      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_read_after', { path: NATIVE_JSON_PATH, type: 'json', success: false, error: expect.any(String), timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(StorageError),
+        'StorageService',
+        'readJSON',
+        expect.objectContaining({ directory: TEST_DIR, filename: TEST_FILE_JSON })
       );
     });
+
+    test('readFileSync でエラーが発生した場合、エラーをハンドルしnullを返す', () => {
+        // Arrange
+        const error = new Error('Read error');
+        fsMock.existsSync.mockReturnValue(true);
+        fsMock.readFileSync.mockImplementation(() => { throw error; });
+
+        // Act
+        const result = storageService.readJSON(TEST_DIR, TEST_FILE_JSON);
+
+        // Assert
+        expect(result).toBeNull();
+        expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+          expect.any(StorageError),
+          'StorageService',
+          'readJSON',
+          expect.objectContaining({ directory: TEST_DIR, filename: TEST_FILE_JSON })
+        );
+        expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_read_after', { path: NATIVE_JSON_PATH, type: 'json', success: false, error: error.message, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+      });
   });
 
   describe('writeJSON', () => {
-    test('JSONファイルを正常に書き込む', () => {
+    test('JSONファイルを正常に書き込み、trueを返す', () => {
       // Arrange
       const data = { key: 'value' };
-      
       // Act
-      const result = storageService.writeJSON('test-dir', 'test-file.json', data);
-      
+      const result = storageService.writeJSON(TEST_DIR, TEST_FILE_JSON, data);
       // Assert
       expect(result).toBe(true);
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.any(String),
-        JSON.stringify(data, null, 2),
-        'utf8'
-      );
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:write', {
-        directory: 'test-dir',
-        filename: 'test-file.json'
-      });
+      expect(fsMock.writeFileSync).toHaveBeenCalledWith(NATIVE_JSON_PATH, JSON.stringify(data, null, 2), 'utf8');
+      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_write_before', { directory: TEST_DIR, filename: TEST_FILE_JSON, type: 'json', timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_write_after', { directory: TEST_DIR, filename: TEST_FILE_JSON, type: 'json', success: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
     });
 
-    test('書き込み時にエラーが発生した場合、エラーハンドラーを呼び出す', () => {
+    test('書き込み時にエラーが発生した場合、エラーをハンドルしfalseを返す', () => {
       // Arrange
       const data = { key: 'value' };
-      const error = new Error('テストエラー');
-      fs.writeFileSync.mockImplementation(() => {
-        throw error;
-      });
-      
-      // Act
-      const result = storageService.writeJSON('test-dir', 'test-file.json', data);
-      
-      // Assert
-      expect(result).toBe(true); // モックが適切に設定されているため
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.any(String),
-        JSON.stringify(data, null, 2),
-        'utf8'
-      );
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:write:error', {
-        directory: 'test-dir',
-        filename: 'test-file.json',
-        error: expect.any(Error)
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'JSONファイルの書き込みに失敗しました', {
-        directory: 'test-dir',
-        filename: 'test-file.json',
-        operation: 'writeJSON'
-      });
-    });
-    
-    test('writeJSONでエラー発生時の戻り値を検証する', () => {
-      // Arrange
-      const data = { key: 'value' };
-      const error = new Error('テストエラー');
-      fs.writeFileSync.mockImplementation(() => {
-        throw error;
-      });
-      
-      // 新しいStorageServiceインスタンスを作成
-      const localMockErrorHandler = createMockErrorHandler();
-      const localStorageService = new StorageService({
-        ...createStorageServiceTestOptions(),
-        errorHandler: localMockErrorHandler
-      });
-      
-      // Act
-      const result = localStorageService.writeJSON('test-dir', 'test-file.json', data);
-      
-      // Assert
-      expect(result).toBe(true); // 実装では常にtrueを返す
-      expect(localMockErrorHandler.handle).toHaveBeenCalled();
-    });
+      const error = new Error('Write error');
+      fsMock.writeFileSync.mockImplementation(() => { throw error; });
 
-    test('書き込みエラー時にfile:write:afterイベントを発行する', () => {
-      // Arrange
-      const data = { key: 'value' };
-      const error = new Error('テストエラー');
-      fs.writeFileSync.mockImplementation(() => { throw error; });
-      
       // Act
-      const result = storageService.writeJSON('test-dir', 'test-file.json', data);
-      
-      // Assert
-      expect(result).toBe(true);
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:write:after', {
-        directory: 'test-dir',
-        filename: 'test-file.json',
-        type: 'json',
-        success: false,
-        error
-      });
-    });
-  });
+      const result = storageService.writeJSON(TEST_DIR, TEST_FILE_JSON, data);
 
-  describe('readText', () => {
-    test('ファイルが存在する場合、テキスト内容を返す', () => {
-      // Arrange
-      const textContent = 'テキスト内容';
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(textContent);
-      
-      // Act
-      const result = storageService.readText('test-dir', 'test-file.txt');
-      
-      // Assert
-      expect(result).toBe(textContent);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.any(String), 'utf8');
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:read', {
-        directory: 'test-dir',
-        filename: 'test-file.txt'
-      });
-    });
-
-    test('ファイルが存在しない場合、nullを返す', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(false);
-      
-      // Act
-      const result = storageService.readText('test-dir', 'test-file.txt');
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readFileSync).not.toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施（ファイルが存在しない場合は1回のみ）
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:not_found', {
-        directory: 'test-dir',
-        filename: 'test-file.txt'
-      });
-    });
-    
-    test('readTextでファイルが存在しない場合の処理を検証する', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(false);
-      
-      // Act
-      const result = storageService.readText('test-dir', 'non-existent-file.txt');
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(fs.readFileSync).not.toHaveBeenCalled();
-      
-      // イベント発行の検証
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:not_found', {
-        directory: 'test-dir',
-        filename: 'non-existent-file.txt'
-      });
-    });
-    
-    test('readTextでエラー発生時の処理を検証する', () => {
-      // Arrange
-      const error = new Error('テストエラー');
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockImplementation(() => {
-        throw error;
-      });
-      
-      // Act
-      const result = storageService.readText('test-dir', 'test-file.txt');
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(fs.readFileSync).toHaveBeenCalled();
-      
-      // エラー処理の検証
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'テキストファイルの読み込みに失敗しました', {
-        directory: 'test-dir',
-        filename: 'test-file.txt',
-        operation: 'readText'
-      });
-    });
-  });
-
-  describe('writeText', () => {
-    test('テキストファイルを正常に書き込む', () => {
-      // Arrange
-      const content = 'テキスト内容';
-      // _ensureDirectoryExistsのモックを追加
-      jest.spyOn(storageService, '_ensureDirectoryExists').mockImplementation(() => {});
-      
-      // Act
-      const result = storageService.writeText('test-dir', 'test-file.txt', content);
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.any(String),
-        content,
-        'utf8'
-      );
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:write', {
-        directory: 'test-dir',
-        filename: 'test-file.txt'
-      });
-    });
-  });
-
-  describe('writeFile', () => {
-    test('バイナリファイルを正常に書き込む', () => {
-      // Arrange
-      const content = Buffer.from('バイナリデータ');
-      jest.spyOn(storageService, '_ensureDirectoryExists').mockImplementation(() => {});
-      
-      // Act
-      const result = storageService.writeFile('test-dir', 'test-file.bin', content);
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.any(String),
-        content
-      );
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:write', {
-        directory: 'test-dir',
-        filename: 'test-file.bin'
-      });
-    });
-
-    test('書き込み時にエラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const content = Buffer.from('バイナリデータ');
-      const error = new Error('テストエラー');
-      jest.spyOn(storageService, '_ensureDirectoryExists').mockImplementation(() => {});
-      fs.writeFileSync.mockImplementation(() => {
-        throw error;
-      });
-      
-      // Act
-      const result = storageService.writeFile('test-dir', 'test-file.bin', content);
-      
-      // Assert
-      expect(result).toBeNull(); // エラーハンドラーのデフォルト値に合わせて修正
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:write:after', {
-        directory: 'test-dir',
-        filename: 'test-file.bin',
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'ファイルの書き込みに失敗しました', {
-        directory: 'test-dir',
-        filename: 'test-file.bin',
-        operation: 'writeFile'
-      });
-    });
-    
-    test('writeFileでエラー発生時の戻り値を検証する', () => {
-      // Arrange
-      const content = Buffer.from('バイナリデータ');
-      const error = new Error('テストエラー');
-      
-      // 新しいStorageServiceインスタンスを作成
-      const localMockErrorHandler = createMockErrorHandler();
-      localMockErrorHandler.handle.mockReturnValue(false);
-      
-      const localStorageService = new StorageService({
-        ...createStorageServiceTestOptions(),
-        errorHandler: localMockErrorHandler
-      });
-      
-      jest.spyOn(localStorageService, '_ensureDirectoryExists').mockImplementation(() => {});
-      fs.writeFileSync.mockImplementation(() => {
-        throw error;
-      });
-      
-      // Act
-      const result = localStorageService.writeFile('test-dir', 'test-file.bin', content);
-      
       // Assert
       expect(result).toBe(false);
-      expect(localMockErrorHandler.handle).toHaveBeenCalled();
-    });
-  });
-
-  describe('updateJSON', () => {
-    test('JSONファイルを正常に更新する', () => {
-      // Arrange
-      const initialData = { key: 'value' };
-      const updatedData = { key: 'updated', newKey: 'newValue' };
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(JSON.stringify(initialData));
-      const updateFn = jest.fn().mockReturnValue(updatedData);
-      
-      // Act
-      const result = storageService.updateJSON('test-dir', 'test-file.json', updateFn);
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.any(String), 'utf8');
-      expect(updateFn).toHaveBeenCalledWith(initialData);
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.any(String),
-        JSON.stringify(updatedData, null, 2),
-        'utf8'
-      );
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:update:before', {
-        directory: 'test-dir',
-        filename: 'test-file.json',
-        type: 'json'
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:update:after', {
-        directory: 'test-dir',
-        filename: 'test-file.json',
-        type: 'json',
-        success: true
-      });
-    });
-
-    test('ファイルが存在しない場合、新規作成する', () => {
-      // Arrange
-      const updatedData = { key: 'new', newKey: 'newValue' };
-      
-      // fs.existsSyncのモックをリセットして明示的に設定
-      fs.existsSync.mockReset();
-      fs.existsSync.mockImplementation((path) => false); // ディレクトリもファイルも存在しない
-      
-      // fs.mkdirSyncのモックを設定（ディレクトリ作成をシミュレート）
-      fs.mkdirSync.mockReset();
-      fs.mkdirSync.mockImplementation(() => {});
-      
-      const updateFn = jest.fn().mockReturnValue(updatedData);
-      
-      // Act
-      const result = storageService.updateJSON('test-dir', 'test-file.json', updateFn);
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readFileSync).not.toHaveBeenCalled();
-      expect(updateFn).toHaveBeenCalledWith({});
-      
-      // fs.writeFileSyncの呼び出しを確認
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.any(String),
-        JSON.stringify(updatedData, null, 2),
-        'utf8'
-      );
-    });
-
-    test('更新時にエラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const error = new Error('テストエラー');
-      
-      // fs.existsSyncのモックをリセットして明示的に設定
-      fs.existsSync.mockReset();
-      fs.existsSync.mockImplementation((path) => true);
-      
-      fs.readFileSync.mockImplementation(() => {
-        throw error;
-      });
-      
-      const updateFn = jest.fn();
-      
-      // Act
-      const result = storageService.updateJSON('test-dir', 'test-file.json', updateFn);
-      
-      // Assert
-      expect(result).toBeNull(); // エラーハンドラーのデフォルト値に合わせて修正
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:update:after', {
-        directory: 'test-dir',
-        filename: 'test-file.json',
-        type: 'json',
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'JSONファイルの更新に失敗しました', {
-        directory: 'test-dir',
-        filename: 'test-file.json',
-        operation: 'updateJSON'
-      });
-    });
-  });
-
-
-  describe('deleteFile', () => {
-    test('ファイルを正常に削除する', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(true);
-      
-      // Act
-      const result = storageService.deleteFile('test-dir', 'test-file.txt');
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.unlinkSync).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:delete:before', {
-        directory: 'test-dir',
-        filename: 'test-file.txt'
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:delete:after', {
-        directory: 'test-dir',
-        filename: 'test-file.txt',
-        success: true
-      });
-    });
-
-    test('ファイルが存在しない場合、成功を返す', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(false);
-      
-      // Act
-      const result = storageService.deleteFile('test-dir', 'test-file.txt');
-      
-      // Assert
-      expect(result).toBe(false);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.unlinkSync).not.toHaveBeenCalled();
-    });
-
-    test('削除時にエラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const error = new Error('テストエラー');
-      fs.existsSync.mockReturnValue(true);
-      fs.unlinkSync.mockImplementation(() => {
-        throw error;
-      });
-      
-      // Act
-      const result = storageService.deleteFile('test-dir', 'test-file.txt');
-      
-      // Assert
-      expect(result).toBe(false); // 実装では false を返す
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:delete:after', {
-        directory: 'test-dir',
-        filename: 'test-file.txt',
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'ファイルの削除に失敗しました', {
-        directory: 'test-dir',
-        filename: 'test-file.txt',
-        operation: 'deleteFile'
-      });
-    });
-  });
-
-  describe('deleteDirectory', () => {
-    test('ディレクトリを正常に削除する（非再帰的）', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(true);
-      
-      // Act
-      const result = storageService.deleteDirectory('test-dir', false);
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.rmdirSync).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:delete:before', {
-        directory: 'test-dir',
-        recursive: false
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:delete:after', {
-        directory: 'test-dir',
-        recursive: false,
-        success: true
-      });
-    });
-
-    test('ディレクトリを正常に削除する（再帰的）', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(true);
-      jest.spyOn(storageService, '_removeDirectoryRecursive').mockImplementation(() => {});
-      
-      // Act
-      const result = storageService.deleteDirectory('test-dir', true);
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(storageService._removeDirectoryRecursive).toHaveBeenCalled();
-      expect(fs.rmdirSync).not.toHaveBeenCalled();
-    });
-
-    test('ディレクトリが存在しない場合、成功を返す', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(false);
-      
-      // Act
-      const result = storageService.deleteDirectory('test-dir');
-      
-      // Assert
-      expect(result).toBe(false);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.rmdirSync).not.toHaveBeenCalled();
-    });
-
-    test('削除時にエラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const error = new Error('テストエラー');
-      fs.existsSync.mockReturnValue(true);
-      fs.rmdirSync.mockImplementation(() => {
-        throw error;
-      });
-      
-      // Act
-      const result = storageService.deleteDirectory('test-dir', false);
-      
-      // Assert
-      expect(result).toBeNull(); // エラーハンドラーのデフォルト値に合わせて修正
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:delete:after', {
-        directory: 'test-dir',
-        recursive: false,
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'ディレクトリの削除に失敗しました', {
-        directory: 'test-dir',
-        operation: 'deleteDirectory'
-      });
-    });
-  });
-
-  describe('copyFile', () => {
-    test('ファイルを正常にコピーする', () => {
-      // Arrange
-      const sourcePath = '/test/base/path/source-dir/source-file.txt';
-      const destPath = '/test/base/path/dest-dir/dest-file.txt';
-      
-      // ソースファイルが存在するようにモックを設定
-      fs.existsSync.mockImplementation((path) => {
-        return true; // すべてのパスが存在すると仮定
-      });
-      
-      // getFilePathのモックを設定
-      jest.spyOn(storageService, 'getFilePath')
-        .mockReturnValueOnce(sourcePath)
-        .mockReturnValueOnce(destPath);
-      
-      // _ensureDirectoryExistsのモックを設定
-      jest.spyOn(storageService, '_ensureDirectoryExists').mockImplementation(() => {});
-      
-      // Act
-      const result = storageService.copyFile('source-dir', 'source-file.txt', 'dest-dir', 'dest-file.txt');
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(storageService._ensureDirectoryExists).toHaveBeenCalled();
-      expect(fs.copyFileSync).toHaveBeenCalledWith(sourcePath, destPath);
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:copy:before', {
-        sourceDir: 'source-dir',
-        sourceFile: 'source-file.txt',
-        destDir: 'dest-dir',
-        destFile: 'dest-file.txt'
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:copy:after', {
-        sourceDir: 'source-dir',
-        sourceFile: 'source-file.txt',
-        destDir: 'dest-dir',
-        destFile: 'dest-file.txt',
-        success: true
-      });
-    });
-
-    test('コピー時にエラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const error = new Error('テストエラー');
-      jest.spyOn(storageService, '_ensureDirectoryExists').mockImplementation(() => {});
-      fs.copyFileSync.mockImplementation(() => {
-        throw error;
-      });
-      
-      // Act
-      const result = storageService.copyFile('source-dir', 'source-file.txt', 'dest-dir', 'dest-file.txt');
-      
-      // Assert
-      expect(result).toBe(false); // エラーハンドラーのデフォルト値に合わせて修正
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:copy:after', {
-        sourceDir: 'source-dir',
-        sourceFile: 'source-file.txt',
-        destDir: 'dest-dir',
-        destFile: 'dest-file.txt',
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'ファイルのコピーに失敗しました', {
-        sourceDir: 'source-dir',
-        sourceFile: 'source-file.txt',
-        destDir: 'dest-dir',
-        destFile: 'dest-file.txt',
-        operation: 'copyFile'
-      });
-    });
-  });
-
-
-
-  describe('_handleError', () => {
-    test('エラーハンドラーがある場合、それを使用する', () => {
-      // Arrange
-      const error = new Error('テストエラー');
-      const context = {
-        directory: 'test-dir',
-        filename: 'test-file.txt',
-        operation: 'readJSON'
-      };
-      
-      // 新しいStorageServiceインスタンスを作成
-      const testStorageService = new StorageService({
-        basePath: '/test/base/path',
-        logger: createMockLogger(),
-        eventEmitter: createMockEventEmitter(),
-        errorHandler: {
-          handle: jest.fn().mockReturnValue(null)
-        }
-      });
-      
-      // Act
-      const result = testStorageService._handleError('エラーメッセージ', error, context);
-      
-      // Assert
-      expect(result).toBeNull();
-      
-      // エラーハンドラーが呼び出されたことを確認
-      const handleMock = testStorageService.errorHandler.handle;
-      expect(handleMock).toHaveBeenCalled();
-      
-      // 呼び出し引数を個別に確認
-      const callArgs = handleMock.mock.calls[0];
-      expect(callArgs[0]).toHaveProperty('name', 'StorageError');
-      expect(callArgs[0]).toHaveProperty('message', 'エラーメッセージ');
-      expect(callArgs[0]).toHaveProperty('cause', error);
-      expect(callArgs[1]).toBe('StorageService');
-      expect(callArgs[2]).toBe(context.operation);
-      expect(callArgs[3]).toEqual({ additionalContext: context });
-    });
-
-    test('エラーハンドラーがない場合、ロガーを使用する', () => {
-      // Arrange
-      // モックロガーを新しく作成して、storageServiceWithoutHandlerに渡す
-      const localMockLogger = createMockLogger();
-      const storageServiceWithoutHandler = new StorageService({
-        ...createStorageServiceTestOptions(),
-        errorHandler: null,
-        logger: localMockLogger
-      });
-      const error = new Error('テストエラー');
-      const context = {
-        directory: 'test-dir',
-        filename: 'test-file.txt',
-        operation: 'readJSON'
-      };
-      
-      // Act
-      const result = storageServiceWithoutHandler._handleError('エラーメッセージ', error, context);
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(localMockLogger.error).toHaveBeenCalledWith(
-        '[StorageService] エラーメッセージ:',
-        expect.objectContaining({
-          error_name: 'Error',
-          error_message: 'テストエラー',
-          context,
-          stack: expect.any(String)
-        })
-      );
-    });
-
-    test('操作に応じて適切なデフォルト値を返す', () => {
-      // Arrange
-      const storageServiceWithoutHandler = new StorageService({
-        ...createStorageServiceTestOptions(),
-        errorHandler: null
-      });
-      const error = new Error('テストエラー');
-      
-      // Act
-      // readJSON操作
-      let result = storageServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'readJSON' });
-      
-      // Assert
-      expect(result).toBeNull();
-      
-      // writeJSON操作
-      result = storageServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'writeJSON' });
-      expect(result).toBe(false);
-      
-      // readText操作
-      result = storageServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'readText' });
-      expect(result).toBeNull();
-      
-      // writeText操作
-      result = storageServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'writeText' });
-      expect(result).toBe(false);
-      
-      // fileExists操作
-      result = storageServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'fileExists' });
-      expect(result).toBe(false);
-      
-      // listFiles操作
-      result = storageServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'listFiles' });
-      expect(result).toEqual([]);
-      
-      // 不明な操作
-      result = storageServiceWithoutHandler._handleError('エラーメッセージ', error, { operation: 'unknown' });
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('lockFile', () => {
-    test('ファイルロックを正常に取得する', async () => {
-      // Arrange
-      // fs.existsSyncのモックを設定 - より安全な実装
-      fs.existsSync.mockImplementation((path) => {
-        if (path && typeof path === 'string' && path.includes('.lock')) {
-          return false; // ロックファイルは存在しない
-        }
-        return true; // 通常のファイルは存在する
-      });
-      
-      // fs.writeFileSyncのモックを設定
-      fs.writeFileSync.mockImplementation(() => {});
-      
-      // 環境変数を設定してテスト環境であることを明示
-      process.env.NODE_ENV = 'test';
-      
-      // Act
-      const lock = await storageService.lockFile('test-dir', 'test-file.json');
-      
-      // Assert
-      expect(lock).toHaveProperty('release');
-      expect(typeof lock.release).toBe('function');
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.stringMatching(/\.lock$/),
-        expect.stringContaining('pid'),
-        'utf8'
-      );
-    }, 10000); // タイムアウトを10秒に増やす
-
-    test('ロックを解除する', async () => {
-      // Arrange
-      // fs.existsSyncのモックを設定 - より安全な実装
-      fs.existsSync.mockImplementation((path) => {
-        if (path && typeof path === 'string' && path.includes('.lock')) {
-          return false; // 最初はロックファイルは存在しない（取得時）
-        }
-        return true; // 通常のファイルは存在する
-      });
-      
-      // fs.unlinkSyncのモックを設定
-      fs.unlinkSync = jest.fn();
-      
-      // 環境変数を設定してテスト環境であることを明示
-      process.env.NODE_ENV = 'test';
-      
-      // ロックを取得
-      const lock = await storageService.lockFile('test-dir', 'test-file.json');
-      
-      // ロック解除時にはロックファイルが存在するようにモックを変更
-      fs.existsSync.mockImplementation((path) => true);
-      
-      // Act
-      lock.release();
-      
-      // Assert
-      expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringMatching(/\.lock$/));
-    }, 10000); // タイムアウトを10秒に増やす
-
-    test('ロックファイルが既に存在する場合、エラーが発生する', async () => {
-      // Arrange
-      // fs.existsSyncのモックを設定 - ロックファイルが常に存在する
-      const existsSyncSpy = jest.spyOn(fs, 'existsSync');
-      existsSyncSpy.mockImplementation((path) => {
-        if (path.includes('.lock')) {
-          return true; // ロックファイルは常に存在する
-        }
-        return true; // 通常のファイルも存在する
-      });
-      
-      // タイムアウトを短く設定し、モックを使わずに実際のタイムアウトを使用
-      const timeoutPromise = storageService.lockFile('test-dir', 'test-file.json', 10);
-      
-      // Act & Assert - 新しいエラーメッセージに合わせる
-      await expect(timeoutPromise).rejects.toThrow('ファイルロックの最大試行回数を超えました');
-    });
-    
-    test('ロックファイルが既に存在する場合、再試行後にタイムアウトエラーをスローする', async () => {
-      // Arrange
-      fs.existsSync.mockImplementation((path) => {
-        if (path.includes('.lock')) {
-          return true; // ロックファイルは常に存在する
-        }
-        return true; // 通常のファイルも存在する
-      });
-      
-      // Act & Assert
-      await expect(storageService.lockFile('test-dir', 'test-file.json', 50))
-        .rejects.toThrow('ファイルロックの最大試行回数を超えました');
-    });
-    
-    test('lockFileでタイムアウトした場合、エラーをスローする', async () => {
-      // Arrange
-      // 新しいStorageServiceインスタンスを作成
-      const localStorageService = new StorageService(createStorageServiceTestOptions());
-      
-      // タイムアウトエラーをスローするようにモック
-      jest.spyOn(localStorageService, 'lockFile').mockImplementation(() => {
-        return Promise.reject(new Error('ファイルロックのタイムアウト: test-dir/test-file.json'));
-      });
-      
-      // Act & Assert
-      await expect(localStorageService.lockFile('test-dir', 'test-file.json', 1))
-        .rejects.toThrow('ファイルロックのタイムアウト');
-    });
-    
-    test('lockFileで最大試行回数を超えた場合、エラーをスローする', async () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(true);
-      process.env.NODE_ENV = 'test';
-      
-      // Act & Assert
-      await expect(storageService.lockFile('test-dir', 'test-file.json')).rejects.toThrow('ファイルロックの最大試行回数を超えました');
-    });
-  });
-
-  describe('fileExists', () => {
-    test('ファイルが存在する場合、trueを返す', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(true);
-      
-      // Act
-      const result = storageService.fileExists('test-dir', 'test-file.json');
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.existsSync).toHaveBeenCalled();
-    });
-
-    test('ファイルが存在しない場合、falseを返す', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(false);
-      
-      // Act
-      const result = storageService.fileExists('test-dir', 'test-file.json');
-      
-      // Assert
-      expect(result).toBe(false);
-      expect(fs.existsSync).toHaveBeenCalled();
-    });
-
-    test('単一引数でパスを指定した場合も動作する', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(true);
-      
-      // Act
-      const result = storageService.fileExists('/test/path/to/file.json');
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.existsSync).toHaveBeenCalled();
-    });
-
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const error = new Error('テストエラー');
-      fs.existsSync.mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue(false);
-      
-      // Act
-      const result = storageService.fileExists('test-dir', 'test-file.json');
-      
-      // Assert
-      expect(result).toBe(false);
-      expect(fs.existsSync).toHaveBeenCalled();
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'ファイルの存在確認に失敗しました', {
-        filePath: expect.any(String),
-        operation: 'fileExists'
-      });
-    });
-  });
-
-  describe('listFiles', () => {
-    test('ディレクトリ内のファイル一覧を取得する', () => {
-      // Arrange
-      const mockFiles = ['file1.txt', 'file2.json', 'file3.js'];
-      fs.existsSync.mockReturnValue(true);
-      fs.readdirSync.mockReturnValue(mockFiles);
-      
-      // Act
-      const result = storageService.listFiles('test-dir');
-      
-      // Assert
-      expect(result).toEqual(mockFiles);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readdirSync).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:list:before', {
-        directory: 'test-dir',
-        pattern: null
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:list:after', {
-        directory: 'test-dir',
-        pattern: null,
-        success: true,
-        count: mockFiles.length
-      });
-    });
-
-    test('パターンを指定してファイル一覧をフィルタリングする', () => {
-      // Arrange
-      const mockFiles = ['file1.txt', 'file2.json', 'file3.js'];
-      fs.existsSync.mockReturnValue(true);
-      fs.readdirSync.mockReturnValue(mockFiles);
-      
-      // Act
-      const result = storageService.listFiles('test-dir', '\\.json$');
-      
-      // Assert
-      expect(result).toEqual(['file2.json']);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readdirSync).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:list:before', {
-        directory: 'test-dir',
-        pattern: '\\.json$'
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:list:after', {
-        directory: 'test-dir',
-        pattern: '\\.json$',
-        success: true,
-        count: 1
-      });
-    });
-
-    test('ディレクトリが存在しない場合、空配列を返す', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(false);
-      
-      // Act
-      const result = storageService.listFiles('test-dir');
-      
-      // Assert
-      expect(result).toEqual([]);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readdirSync).not.toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:list:before', {
-        directory: 'test-dir',
-        pattern: null
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:list:after', {
-        directory: 'test-dir',
-        pattern: null,
-        success: true,
-        count: 0
-      });
-    });
-
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const error = new Error('テストエラー');
-      fs.existsSync.mockReturnValue(true);
-      fs.readdirSync.mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue([]);
-      
-      // Act
-      const result = storageService.listFiles('test-dir');
-      
-      // Assert
-      expect(result).toEqual([]);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readdirSync).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:list:before', {
-        directory: 'test-dir',
-        pattern: null
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:list:after', {
-        directory: 'test-dir',
-        pattern: null,
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'ディレクトリの一覧取得に失敗しました', {
-        directory: 'test-dir',
-        operation: 'listFiles'
-      });
-    });
-  });
-
-  describe('deleteFile', () => {
-    test('ファイルを正常に削除する', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(true);
-      fs.unlinkSync = jest.fn();
-      
-      // Act
-      const result = storageService.deleteFile('test-dir', 'test-file.json');
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.unlinkSync).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:delete:before', {
-        directory: 'test-dir',
-        filename: 'test-file.json'
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:delete:after', {
-        directory: 'test-dir',
-        filename: 'test-file.json',
-        success: true
-      });
-    });
-
-    test('ファイルが存在しない場合、falseを返す', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(false);
-      fs.unlinkSync = jest.fn();
-      
-      // Act
-      const result = storageService.deleteFile('test-dir', 'test-file.json');
-      
-      // Assert
-      expect(result).toBe(false);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.unlinkSync).not.toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:delete:before', {
-        directory: 'test-dir',
-        filename: 'test-file.json'
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:not_found', {
-        directory: 'test-dir',
-        filename: 'test-file.json'
-      });
-    });
-
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const error = new Error('テストエラー');
-      fs.existsSync.mockReturnValue(true);
-      fs.unlinkSync = jest.fn().mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue(false);
-      
-      // Act
-      const result = storageService.deleteFile('test-dir', 'test-file.json');
-      
-      // Assert
-      expect(result).toBe(false);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.unlinkSync).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:delete:before', {
-        directory: 'test-dir',
-        filename: 'test-file.json'
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:delete:after', {
-        directory: 'test-dir',
-        filename: 'test-file.json',
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'ファイルの削除に失敗しました', {
-        directory: 'test-dir',
-        filename: 'test-file.json',
-        operation: 'deleteFile'
-      });
-    });
-  });
-
-  describe('deleteDirectory', () => {
-    test('ディレクトリを正常に削除する（非再帰的）', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(true);
-      fs.rmdirSync = jest.fn();
-      
-      // Act
-      const result = storageService.deleteDirectory('test-dir');
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.rmdirSync).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:delete:before', {
-        directory: 'test-dir',
-        recursive: false
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:delete:after', {
-        directory: 'test-dir',
-        recursive: false,
-        success: true
-      });
-    });
-
-    test('ディレクトリを再帰的に削除する', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(true);
-      // _removeDirectoryRecursiveをモック
-      jest.spyOn(storageService, '_removeDirectoryRecursive').mockImplementation(() => {});
-      
-      // Act
-      const result = storageService.deleteDirectory('test-dir', true);
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(storageService._removeDirectoryRecursive).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:delete:before', {
-        directory: 'test-dir',
-        recursive: true
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:delete:after', {
-        directory: 'test-dir',
-        recursive: true,
-        success: true
-      });
-    });
-
-    test('ディレクトリが存在しない場合、falseを返す', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(false);
-      fs.rmdirSync = jest.fn();
-      
-      // Act
-      const result = storageService.deleteDirectory('test-dir');
-      
-      // Assert
-      expect(result).toBe(false);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.rmdirSync).not.toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:delete:before', {
-        directory: 'test-dir',
-        recursive: false
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory:not_found', {
-        directory: 'test-dir'
-      });
-    });
-  });
-
-  describe('copyFile', () => {
-    test('ファイルを正常にコピーする', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(true);
-      fs.copyFileSync = jest.fn();
-      
-      // Act
-      const result = storageService.copyFile('source-dir', 'source-file.json', 'dest-dir', 'dest-file.json');
-      
-      // Assert
-      expect(result).toBe(true);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.copyFileSync).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:copy:before', {
-        sourceDir: 'source-dir',
-        sourceFile: 'source-file.json',
-        destDir: 'dest-dir',
-        destFile: 'dest-file.json'
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:copy:after', {
-        sourceDir: 'source-dir',
-        sourceFile: 'source-file.json',
-        destDir: 'dest-dir',
-        destFile: 'dest-file.json',
-        success: true
-      });
-    });
-
-    test('ソースファイルが存在しない場合、falseを返す', () => {
-      // Arrange
-      fs.existsSync.mockReturnValue(false);
-      fs.copyFileSync = jest.fn();
-      
-      // Act
-      const result = storageService.copyFile('source-dir', 'source-file.json', 'dest-dir', 'dest-file.json');
-      
-      // Assert
-      expect(result).toBe(false);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.copyFileSync).not.toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:copy:before', {
-        sourceDir: 'source-dir',
-        sourceFile: 'source-file.json',
-        destDir: 'dest-dir',
-        destFile: 'dest-file.json'
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:not_found', {
-        directory: 'source-dir',
-        filename: 'source-file.json'
-      });
-    });
-
-    test('エラーが発生した場合、エラーハンドラーを呼び出す', () => {
-      // Arrange
-      const error = new Error('テストエラー');
-      fs.existsSync.mockReturnValue(true);
-      fs.copyFileSync = jest.fn().mockImplementation(() => {
-        throw error;
-      });
-      mockErrorHandler.handle.mockReturnValue(false);
-      
-      // Act
-      const result = storageService.copyFile('source-dir', 'source-file.json', 'dest-dir', 'dest-file.json');
-      
-      // Assert
-      expect(result).toBe(false);
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.copyFileSync).toHaveBeenCalled();
-      
-      // イベント発行の検証をヘルパー関数で実施
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:copy:before', {
-        sourceDir: 'source-dir',
-        sourceFile: 'source-file.json',
-        destDir: 'dest-dir',
-        destFile: 'dest-file.json'
-      });
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file:copy:after', {
-        sourceDir: 'source-dir',
-        sourceFile: 'source-file.json',
-        destDir: 'dest-dir',
-        destFile: 'dest-file.json',
-        success: false,
-        error
-      });
-      
-      // エラー処理の検証をヘルパー関数で実施
-      expectErrorHandled(mockErrorHandler, 'StorageError', 'ファイルのコピーに失敗しました', {
-        sourceDir: 'source-dir',
-        sourceFile: 'source-file.json',
-        destDir: 'dest-dir',
-        destFile: 'dest-file.json',
-        operation: 'copyFile'
-      });
-    });
-  });
-
-  describe('_emitEvent', () => {
-    test('標準化されたイベント発行メソッドがある場合、それを使用する', () => {
-      // Arrange
-      const eventName = 'test:event';
-      const data = { key: 'value' };
-      
-      // 新しいモックイベントエミッターを作成
-      const localMockEventEmitter = {
-        emit: jest.fn(),
-        emitStandardized: jest.fn()
-      };
-      
-      // 新しいStorageServiceインスタンスを作成
-      const localStorageService = new StorageService({
-        ...createStorageServiceTestOptions(),
-        eventEmitter: localMockEventEmitter
-      });
-      
-      // Act
-      localStorageService._emitEvent(eventName, data);
-      
-      // Assert
-      expect(localMockEventEmitter.emitStandardized).toHaveBeenCalledWith(
-        'storage',
-        eventName,
-        expect.objectContaining({
-          ...data,
-          timestamp: expect.any(String)
-        })
-      );
-    });
-
-    test('標準化されたイベント発行メソッドがない場合、従来のemitを使用する', () => {
-      // Arrange
-      const eventName = 'test:event';
-      const data = { key: 'value' };
-      
-      // 新しいモックイベントエミッターを作成（emitStandardizedなし）
-      const localMockEventEmitter = {
-        emit: jest.fn()
-      };
-      
-      // 新しいStorageServiceインスタンスを作成
-      const localStorageService = new StorageService({
-        ...createStorageServiceTestOptions(),
-        eventEmitter: localMockEventEmitter
-      });
-      
-      // Act
-      localStorageService._emitEvent(eventName, data);
-      
-      // Assert
-      expect(localMockEventEmitter.emit).toHaveBeenCalledWith(
-        'storage:test:event',
-        expect.objectContaining({
-          ...data,
-          timestamp: expect.any(String)
-        })
-      );
-    });
-
-    test('イベントエミッターがない場合、何も起こらない', () => {
-      // Arrange
-      const storageServiceWithoutEmitter = new StorageService({
-        ...createStorageServiceTestOptions(),
-        eventEmitter: null
-      });
-      
-      // Act & Assert - エラーが発生しないことを確認
-      expect(() => {
-        storageServiceWithoutEmitter._emitEvent('test:event', {});
-      }).not.toThrow();
-    });
-    
-    test('_emitEventでエラーが発生した場合、警告をログに出力する', () => {
-      // Arrange
-      const eventName = 'test:event';
-      const data = { key: 'value' };
-      const error = new Error('イベントエラー');
-      
-      // 新しいモックロガーとイベントエミッターを作成
-      const localMockLogger = {
-        warn: jest.fn(),
-        error: jest.fn()
-      };
-      
-      const localMockEventEmitter = {
-        emitStandardized: jest.fn().mockImplementation(() => {
-          throw error;
-        }),
-        emit: jest.fn()
-      };
-      
-      // 新しいStorageServiceインスタンスを作成
-      const localStorageService = new StorageService({
-        ...createStorageServiceTestOptions(),
-        logger: localMockLogger,
-        eventEmitter: localMockEventEmitter
-      });
-      
-      // Act
-      localStorageService._emitEvent(eventName, data);
-      
-      // Assert
-      expect(localMockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('イベント発行中にエラーが発生しました'),
-        error
+      expect(fsMock.writeFileSync).toHaveBeenCalled();
+      expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_write_error', { directory: TEST_DIR, filename: TEST_FILE_JSON, type: 'json', error: error.message, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(StorageError),
+        'StorageService',
+        'writeJSON',
+        expect.objectContaining({ directory: TEST_DIR, filename: TEST_FILE_JSON })
       );
     });
   });
 
-  describe('_removeDirectoryRecursive', () => {
-    test('ディレクトリを再帰的に削除する', () => {
-      // Arrange
-      const dirPath = '/test/dir';
-      const files = ['file1.txt'];
-      const dirs = ['subdir1'];
-      
-      // モックをクリア
-      fs.readdirSync.mockClear();
-      fs.lstatSync.mockClear();
-      fs.unlinkSync.mockClear();
-      fs.rmdirSync.mockClear();
-      
-      // fs.existsSyncのモック
-      fs.existsSync.mockReturnValue(true);
-      
-      // fs.readdirSyncのモック - 最初のディレクトリにはファイルとサブディレクトリがある
-      fs.readdirSync.mockImplementation((path) => {
-        if (path === dirPath) {
-          return [...files, ...dirs];
-        }
-        // サブディレクトリには何もない
-        return [];
-      });
-      
-      // fs.lstatSyncのモック
-      fs.lstatSync.mockImplementation((path) => ({
-        isDirectory: () => dirs.some(dir => path.includes(dir))
-      }));
-      
-      // fs.unlinkSyncのモック
-      fs.unlinkSync.mockImplementation(() => {});
-      
-      // fs.rmdirSyncのモック
-      fs.rmdirSync.mockImplementation(() => {});
-      
-      // Act
-      storageService._removeDirectoryRecursive(dirPath);
-      
-      // Assert
-      // ファイルの削除が呼ばれたことを確認
-      expect(fs.unlinkSync).toHaveBeenCalledTimes(files.length);
-      
-      // サブディレクトリの削除が呼ばれたことを確認 - サブディレクトリと親ディレクトリ
-      expect(fs.rmdirSync).toHaveBeenCalledTimes(dirs.length + 1);
-    });
+   describe('readText', () => {
+     test('ファイルが存在する場合、テキスト内容を返す', async () => {
+       // Arrange
+       const textContent = 'テキスト内容';
+       fsMock.existsSync.mockReturnValue(true);
+       fsMock.readFileSync.mockReturnValue(textContent);
 
-    test('エラーが発生した場合、ロガーにエラーを出力する', () => {
-      // Arrange
-      const dirPath = '/test/dir';
-      const error = new Error('テストエラー');
-      
-      // 新しいロガーとStorageServiceインスタンスを作成
-      const localMockLogger = createMockLogger();
-      const localStorageService = new StorageService({
-        ...createStorageServiceTestOptions(),
-        logger: localMockLogger
+       // Act
+       const result = storageService.readText(TEST_DIR, TEST_FILE_TXT);
+
+       // Assert
+       expect(result).toBe(textContent);
+       expect(fsMock.readFileSync).toHaveBeenCalledWith(NATIVE_TXT_PATH, 'utf8');
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_read_before', { directory: TEST_DIR, filename: TEST_FILE_TXT, type: 'text', timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_read_after', { directory: TEST_DIR, filename: TEST_FILE_TXT, type: 'text', success: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('ファイルが存在しない場合、nullを返す', async () => {
+       // Arrange
+       fsMock.existsSync.mockReturnValue(false);
+       // Act
+       const result = storageService.readText(TEST_DIR, TEST_FILE_TXT);
+       // Assert
+       expect(result).toBeNull();
+       expect(fsMock.readFileSync).not.toHaveBeenCalled();
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_not_found', { path: NATIVE_TXT_PATH, type: 'text', timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('エラーが発生した場合、エラーをハンドルしnullを返す', async () => {
+       // Arrange
+       const error = new Error('Read error');
+       fsMock.existsSync.mockReturnValue(true);
+       fsMock.readFileSync.mockImplementation(() => { throw error; });
+
+       // Act
+       const result = storageService.readText(TEST_DIR, TEST_FILE_TXT);
+
+       // Assert
+       expect(result).toBeNull();
+       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+         expect.any(StorageError),
+         'StorageService',
+         'readText',
+         expect.objectContaining({ directory: TEST_DIR, filename: TEST_FILE_TXT })
+       );
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_read_after', { directory: TEST_DIR, filename: TEST_FILE_TXT, type: 'text', success: false, error: error.message, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+   });
+
+   describe('writeText', () => {
+     test('テキストファイルを正常に書き込み、trueを返す', async () => {
+       // Arrange
+       const content = 'テキスト内容';
+       // Act
+       const result = storageService.writeText(TEST_DIR, TEST_FILE_TXT, content);
+       // Assert
+       expect(result).toBe(true);
+       expect(fsMock.writeFileSync).toHaveBeenCalledWith(NATIVE_TXT_PATH, content, 'utf8');
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_write_before', { directory: TEST_DIR, filename: TEST_FILE_TXT, type: 'text', timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_write_after', { directory: TEST_DIR, filename: TEST_FILE_TXT, type: 'text', success: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('書き込み時にエラーが発生した場合、エラーをハンドルしfalseを返す', async () => {
+       // Arrange
+       const content = 'テキスト内容';
+       const error = new Error('Write error');
+       fsMock.writeFileSync.mockImplementation(() => { throw error; });
+
+       // Act
+       const result = storageService.writeText(TEST_DIR, TEST_FILE_TXT, content);
+
+       // Assert
+       expect(result).toBe(false);
+       expect(fsMock.writeFileSync).toHaveBeenCalled();
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_write_error', { directory: TEST_DIR, filename: TEST_FILE_TXT, type: 'text', error: error.message, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+         expect.any(StorageError),
+         'StorageService',
+         'writeText',
+         expect.objectContaining({ directory: TEST_DIR, filename: TEST_FILE_TXT })
+       );
+     });
+   });
+
+   describe('writeFile', () => {
+     test('バイナリファイルを正常に書き込み、trueを返す', async () => {
+       // Arrange
+       const content = Buffer.from('バイナリデータ');
+       // Act
+       const result = storageService.writeFile(TEST_DIR, TEST_FILE_BIN, content);
+       // Assert
+       expect(result).toBe(true);
+       expect(fsMock.writeFileSync).toHaveBeenCalledWith(NATIVE_BIN_PATH, content);
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_write_before', { directory: TEST_DIR, filename: TEST_FILE_BIN, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_write_after', { directory: TEST_DIR, filename: TEST_FILE_BIN, success: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('書き込み時にエラーが発生した場合、エラーをハンドルしfalseを返す', async () => {
+       // Arrange
+       const content = Buffer.from('バイナリデータ');
+       const error = new Error('Write error');
+       fsMock.writeFileSync.mockImplementation(() => { throw error; });
+
+       // Act
+       const result = storageService.writeFile(TEST_DIR, TEST_FILE_BIN, content);
+
+       // Assert
+       expect(result).toBe(false);
+       expect(fsMock.writeFileSync).toHaveBeenCalled();
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_write_after', { directory: TEST_DIR, filename: TEST_FILE_BIN, success: false, error: error.message, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+         expect.any(StorageError),
+         'StorageService',
+         'writeFile',
+         expect.objectContaining({ directory: TEST_DIR, filename: TEST_FILE_BIN })
+       );
+     });
+   });
+
+   describe('updateJSON', () => {
+     test('JSONファイルを正常に更新し、trueを返す', async () => {
+       // Arrange
+       const initialData = { key: 'value', count: 1 };
+       const updatedData = { key: 'value', count: 2 };
+       fsMock.existsSync.mockReturnValue(true);
+       fsMock.readFileSync.mockReturnValue(JSON.stringify(initialData));
+       const updateFn = jest.fn((data) => ({ ...data, count: data.count + 1 }));
+
+       // Act
+       const result = storageService.updateJSON(TEST_DIR, TEST_FILE_JSON, updateFn);
+
+       // Assert
+       expect(result).toBe(true);
+       expect(updateFn).toHaveBeenCalledWith(initialData);
+       expect(fsMock.writeFileSync).toHaveBeenCalledWith(NATIVE_JSON_PATH, JSON.stringify(updatedData, null, 2), 'utf8');
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_update_before', { directory: TEST_DIR, filename: TEST_FILE_JSON, type: 'json', timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_update_after', { directory: TEST_DIR, filename: TEST_FILE_JSON, type: 'json', success: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('ファイルが存在しない場合、新規作成し、nullを返す', async () => {
+       // Arrange
+       const updatedData = { key: 'new', count: 1 };
+       fsMock.existsSync.mockReturnValue(false);
+       const updateFn = jest.fn(() => updatedData);
+
+       // Act
+       const result = storageService.updateJSON(TEST_DIR, TEST_FILE_JSON, updateFn);
+
+       // Assert
+       expect(result).toBeNull();
+       expect(updateFn).toHaveBeenCalledWith({});
+       expect(fsMock.writeFileSync).toHaveBeenCalledWith(NATIVE_JSON_PATH, JSON.stringify(updatedData, null, 2), 'utf8');
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_update_before', { directory: TEST_DIR, filename: TEST_FILE_JSON, type: 'json', timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_update_after', { directory: TEST_DIR, filename: TEST_FILE_JSON, type: 'json', success: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('更新時にエラーが発生した場合、エラーをハンドルしnullを返す', async () => {
+       // Arrange
+       const error = new Error('Update error');
+       fsMock.existsSync.mockReturnValue(true);
+       fsMock.readFileSync.mockReturnValue('{"key":"value"}');
+       fsMock.writeFileSync.mockImplementation(() => { throw error; });
+       const updateFn = jest.fn((data) => data);
+
+       // Act
+       const result = storageService.updateJSON(TEST_DIR, TEST_FILE_JSON, updateFn);
+
+       // Assert
+       expect(result).toBeNull();
+       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+         expect.any(StorageError),
+         'StorageService',
+         'updateJSON',
+         expect.objectContaining({ directory: TEST_DIR, filename: TEST_FILE_JSON })
+       );
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_update_after', { directory: TEST_DIR, filename: TEST_FILE_JSON, type: 'json', success: false, error: error.message, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('updateFn がエラーをスローした場合、エラーをハンドルしnullを返す', () => {
+        // Arrange
+        const error = new Error('Update function error');
+        fsMock.existsSync.mockReturnValue(true);
+        fsMock.readFileSync.mockReturnValue('{"key":"value"}');
+        const updateFn = jest.fn(() => { throw error; });
+
+        // Act
+        const result = storageService.updateJSON(TEST_DIR, TEST_FILE_JSON, updateFn);
+
+        // Assert
+        expect(result).toBeNull();
+        expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+          expect.any(StorageError),
+          'StorageService',
+          'updateJSON',
+          expect.objectContaining({ directory: TEST_DIR, filename: TEST_FILE_JSON })
+        );
+        expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_update_after', { directory: TEST_DIR, filename: TEST_FILE_JSON, type: 'json', success: false, error: error.message, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
       });
-      
-      // fs.existsSyncのモック
-      fs.existsSync.mockReturnValue(true);
-      
-      // fs.readdirSyncのモック
-      fs.readdirSync.mockImplementation(() => {
-        throw error;
+   });
+
+   // lockFile のテストは省略
+
+   describe('fileExists', () => {
+     test('ファイルが存在する場合、trueを返す', () => {
+       // Arrange
+       fsMock.existsSync.mockReturnValue(true);
+       // Act
+       const result = storageService.fileExists(TEST_DIR, TEST_FILE_TXT);
+       // Assert
+       expect(result).toBe(true);
+       expect(fsMock.existsSync).toHaveBeenCalledWith(NATIVE_TXT_PATH);
+     });
+
+     test('ファイルが存在しない場合、falseを返す', () => {
+       // Arrange
+       fsMock.existsSync.mockReturnValue(false);
+       // Act
+       const result = storageService.fileExists(TEST_DIR, TEST_FILE_TXT);
+       // Assert
+       expect(result).toBe(false);
+       expect(fsMock.existsSync).toHaveBeenCalledWith(NATIVE_TXT_PATH);
+     });
+
+      test('単一引数でパスを指定した場合も動作する', () => {
+        // Arrange
+        fsMock.existsSync.mockReturnValue(true);
+        // Act
+        const result = storageService.fileExists(NATIVE_TXT_PATH);
+        // Assert
+        expect(result).toBe(true);
+        expect(fsMock.existsSync).toHaveBeenCalledWith(NATIVE_TXT_PATH);
       });
-      
-      // Act
-      localStorageService._removeDirectoryRecursive(dirPath);
-      
-      // Assert
-      expect(localMockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('ディレクトリの再帰的削除中にエラーが発生しました'),
-        expect.objectContaining({
-          directory: dirPath,
-          error_name: error.name,
-          error_message: error.message,
-          stack: expect.any(String)
-        })
-      );
-    });
-  });
+
+     test('エラーが発生した場合、エラーをハンドルしfalseを返す', () => {
+       // Arrange
+       const error = new Error('existsSync error');
+       fsMock.existsSync.mockImplementation(() => { throw error; });
+
+       // Act
+       const result = storageService.fileExists(TEST_DIR, TEST_FILE_TXT);
+
+       // Assert
+       expect(result).toBe(false);
+       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+         expect.any(StorageError),
+         'StorageService',
+         'fileExists',
+         expect.objectContaining({ directory: TEST_DIR, filename: TEST_FILE_TXT })
+       );
+     });
+
+     test('不正な引数 (文字列以外) を渡した場合、警告ログを出力し false を返す', () => {
+       // Arrange
+       const invalidArg1 = 123;
+       const invalidArg2 = null;
+
+       // Act & Assert (単一引数)
+       expect(storageService.fileExists(invalidArg1)).toBe(false);
+       expect(mockLogger.warn).toHaveBeenCalledWith('fileExists に不正な引数が渡されました (単一引数):', { args: [invalidArg1] });
+
+       // Act & Assert (二引数)
+       expect(storageService.fileExists(invalidArg1, 'file.txt')).toBe(false);
+       expect(mockLogger.warn).toHaveBeenCalledWith('fileExists に不正な引数が渡されました (二引数):', { args: [invalidArg1, 'file.txt'] });
+       expect(storageService.fileExists('dir', invalidArg2)).toBe(false);
+       expect(mockLogger.warn).toHaveBeenCalledWith('fileExists に不正な引数が渡されました (二引数):', { args: ['dir', invalidArg2] });
+     });
+
+     test('不正な数の引数を渡した場合、警告ログを出力し false を返す', () => {
+        // Arrange
+        const args0 = [];
+        const args3 = ['dir', 'file', 'extra'];
+
+        // Act & Assert (0引数)
+        expect(storageService.fileExists(...args0)).toBe(false);
+        expect(mockLogger.warn).toHaveBeenCalledWith('fileExists に不正な数の引数が渡されました:', { args: args0 });
+
+        // Act & Assert (3引数)
+        expect(storageService.fileExists(...args3)).toBe(false);
+        expect(mockLogger.warn).toHaveBeenCalledWith('fileExists に不正な数の引数が渡されました:', { args: args3 });
+     });
+   });
+
+   describe('listFiles', () => {
+     test('ディレクトリ内のファイル一覧を取得する', () => {
+       // Arrange
+       const mockFiles = ['file1.txt', 'file2.json'];
+       fsMock.existsSync.mockReturnValue(true);
+       fsMock.readdirSync.mockReturnValue(mockFiles);
+
+       // Act
+       const result = storageService.listFiles(TEST_DIR);
+
+       // Assert
+       expect(result).toEqual(mockFiles);
+       expect(fsMock.readdirSync).toHaveBeenCalledWith(NATIVE_TEST_DIR_PATH);
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_list_before', { directory: TEST_DIR, pattern: null, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_list_after', { directory: TEST_DIR, pattern: null, success: true, count: 2, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('パターンを指定してファイル一覧をフィルタリングする', () => {
+       // Arrange
+       const mockFiles = ['file1.txt', 'file2.json'];
+       fsMock.existsSync.mockReturnValue(true);
+       fsMock.readdirSync.mockReturnValue(mockFiles);
+
+       // Act
+       const result = storageService.listFiles(TEST_DIR, '\\.json$');
+
+       // Assert
+       expect(result).toEqual(['file2.json']);
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_list_after', { directory: TEST_DIR, pattern: '\\.json$', success: true, count: 1, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('ディレクトリが存在しない場合、空配列を返す', () => {
+       // Arrange
+       fsMock.existsSync.mockReturnValue(false);
+       // Act
+       const result = storageService.listFiles(TEST_DIR);
+       // Assert
+       expect(result).toEqual([]);
+       expect(fsMock.readdirSync).not.toHaveBeenCalled();
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_not_found', { directory: TEST_DIR, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('エラーが発生した場合、エラーをハンドルし空配列を返す', () => {
+       // Arrange
+       const error = new Error('readdir error');
+       fsMock.existsSync.mockReturnValue(true);
+       fsMock.readdirSync.mockImplementation(() => { throw error; });
+
+       // Act
+       const result = storageService.listFiles(TEST_DIR);
+
+       // Assert
+       expect(result).toEqual([]);
+       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+         expect.any(StorageError),
+         'StorageService',
+         'listFiles',
+         expect.objectContaining({ directory: TEST_DIR, pattern: null })
+       );
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_list_after', { directory: TEST_DIR, pattern: null, success: false, error: error.message, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+   });
+
+   describe('deleteFile', () => {
+     test('ファイルを正常に削除し、trueを返す', () => {
+       // Arrange
+       fsMock.existsSync.mockReturnValue(true);
+       // Act
+       const result = storageService.deleteFile(TEST_DIR, TEST_FILE_TXT);
+       // Assert
+       expect(result).toBe(true);
+       expect(fsMock.unlinkSync).toHaveBeenCalledWith(NATIVE_TXT_PATH);
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_delete_before', { directory: TEST_DIR, filename: TEST_FILE_TXT, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_delete_after', { directory: TEST_DIR, filename: TEST_FILE_TXT, success: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('ファイルが存在しない場合、falseを返す', () => {
+       // Arrange
+       fsMock.existsSync.mockReturnValue(false);
+       // Act
+       const result = storageService.deleteFile(TEST_DIR, TEST_FILE_TXT);
+       // Assert
+       expect(result).toBe(false);
+       expect(fsMock.unlinkSync).not.toHaveBeenCalled();
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_not_found', { directory: TEST_DIR, filename: TEST_FILE_TXT, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('エラーが発生した場合、エラーをハンドルしfalseを返す', () => {
+       // Arrange
+       const error = new Error('unlink error');
+       fsMock.existsSync.mockReturnValue(true);
+       fsMock.unlinkSync.mockImplementation(() => { throw error; });
+
+       // Act
+       const result = storageService.deleteFile(TEST_DIR, TEST_FILE_TXT);
+
+       // Assert
+       expect(result).toBe(false);
+       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+         expect.any(StorageError),
+         'StorageService',
+         'deleteFile',
+         expect.objectContaining({ directory: TEST_DIR, filename: TEST_FILE_TXT })
+       );
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_delete_after', { directory: TEST_DIR, filename: TEST_FILE_TXT, success: false, error: error.message, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+   });
+
+   describe('deleteDirectory', () => {
+     test('ディレクトリを正常に削除する（非再帰的）', () => {
+       // Arrange
+       fsMock.existsSync.mockReturnValue(true);
+       // Act
+       const result = storageService.deleteDirectory(TEST_DIR);
+       // Assert
+       expect(result).toBe(true);
+       expect(fsMock.rmSync).toHaveBeenCalledWith(NATIVE_TEST_DIR_PATH, { recursive: false, force: false });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_delete_before', { directory: TEST_DIR, recursive: false, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_delete_after', { directory: TEST_DIR, recursive: false, success: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('ディレクトリを再帰的に削除する', () => {
+       // Arrange
+       fsMock.existsSync.mockReturnValue(true);
+       // Act
+       const result = storageService.deleteDirectory(TEST_DIR, true);
+       // Assert
+       expect(result).toBe(true);
+       expect(fsMock.rmSync).toHaveBeenCalledWith(NATIVE_TEST_DIR_PATH, { recursive: true, force: true });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_delete_before', { directory: TEST_DIR, recursive: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_delete_after', { directory: TEST_DIR, recursive: true, success: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('ディレクトリが存在しない場合、falseを返す', () => {
+       // Arrange
+       fsMock.existsSync.mockReturnValue(false);
+       // Act
+       const result = storageService.deleteDirectory(TEST_DIR);
+       // Assert
+       expect(result).toBe(false);
+       expect(fsMock.rmSync).not.toHaveBeenCalled();
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_not_found', { directory: TEST_DIR, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('エラーが発生した場合、エラーをハンドルしfalseを返す', () => {
+       // Arrange
+       const error = new Error('rm error');
+       fsMock.existsSync.mockReturnValue(true);
+       fsMock.rmSync.mockImplementation(() => { throw error; });
+
+       // Act
+       const result = storageService.deleteDirectory(TEST_DIR, true);
+
+       // Assert
+       expect(result).toBe(false);
+       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+         expect.any(StorageError),
+         'StorageService',
+         'deleteDirectory',
+         expect.objectContaining({ directory: TEST_DIR, recursive: true })
+       );
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_delete_after', { directory: TEST_DIR, recursive: true, success: false, error: error.message, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+   });
+
+   describe('copyFile', () => {
+     const SOURCE_DIR = 'source-dir';
+     const SOURCE_FILE = 'source.txt';
+     const DEST_DIR = 'dest-dir';
+     const DEST_FILE = 'dest.txt';
+     const NATIVE_SOURCE_PATH = path.join(BASE_PATH, SOURCE_DIR, SOURCE_FILE);
+     const NATIVE_DEST_PATH = path.join(BASE_PATH, DEST_DIR, DEST_FILE);
+
+     test('ファイルを正常にコピーし、trueを返す', () => {
+       // Arrange
+       fsMock.existsSync.mockReturnValue(true);
+       // Act
+       const result = storageService.copyFile(SOURCE_DIR, SOURCE_FILE, DEST_DIR, DEST_FILE);
+       // Assert
+       expect(result).toBe(true);
+       expect(fsMock.copyFileSync).toHaveBeenCalledWith(NATIVE_SOURCE_PATH, NATIVE_DEST_PATH);
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_copy_before', { sourceDir: SOURCE_DIR, sourceFile: SOURCE_FILE, destDir: DEST_DIR, destFile: DEST_FILE, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_copy_after', { sourceDir: SOURCE_DIR, sourceFile: SOURCE_FILE, destDir: DEST_DIR, destFile: DEST_FILE, success: true, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('ソースファイルが存在しない場合、falseを返す', () => {
+       // Arrange
+       fsMock.existsSync.mockImplementation(p => p !== NATIVE_SOURCE_PATH);
+       // Act
+       const result = storageService.copyFile(SOURCE_DIR, SOURCE_FILE, DEST_DIR, DEST_FILE);
+       // Assert
+       expect(result).toBe(false);
+       expect(fsMock.copyFileSync).not.toHaveBeenCalled();
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_not_found', { directory: SOURCE_DIR, filename: SOURCE_FILE, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+
+     test('エラーが発生した場合、エラーをハンドルしfalseを返す', () => {
+       // Arrange
+       const error = new Error('copy error');
+       fsMock.existsSync.mockReturnValue(true);
+       fsMock.copyFileSync.mockImplementation(() => { throw error; });
+
+       // Act
+       const result = storageService.copyFile(SOURCE_DIR, SOURCE_FILE, DEST_DIR, DEST_FILE);
+
+       // Assert
+       expect(result).toBe(false);
+       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+         expect.any(StorageError),
+         'StorageService',
+         'copyFile',
+         expect.objectContaining({ sourceDir: SOURCE_DIR, sourceFile: SOURCE_FILE, destDir: DEST_DIR, destFile: DEST_FILE })
+       );
+       expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'file_copy_after', { sourceDir: SOURCE_DIR, sourceFile: SOURCE_FILE, destDir: DEST_DIR, destFile: DEST_FILE, success: false, error: error.message, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+     });
+   });
+
+   describe('_emitEvent', () => {
+     test('emitStandardized を正しい引数で呼び出す', () => {
+       // Arrange
+       const eventName = 'test_event';
+       const data = { key: 'value' };
+       // Act
+       storageService._emitEvent(eventName, data);
+       // Assert
+       expect(mockEventEmitter.emitStandardized).toHaveBeenCalledWith(
+         'storage',
+         eventName,
+         expect.objectContaining({
+           key: 'value',
+           timestamp: MOCK_TIMESTAMP_ISO,
+           traceId: EXPECTED_TRACE_ID,
+           requestId: EXPECTED_REQUEST_ID,
+         })
+       );
+     });
+
+      test('イベント名にコロンが含まれる場合、アンダースコアに置換する', () => {
+        // Arrange
+        const eventName = 'file:read:before';
+        const data = { path: 'p' };
+        // Act
+        storageService._emitEvent(eventName, data);
+        // Assert
+        expect(mockEventEmitter.emitStandardized).toHaveBeenCalledWith(
+          'storage',
+          'file_read_before',
+          expect.any(Object)
+        );
+      });
+
+     test('イベントエミッターがない場合、何も起こらない', () => {
+       // Arrange
+       storageService.eventEmitter = null;
+       // Act & Assert
+       expect(() => {
+         storageService._emitEvent('test_event', {});
+       }).not.toThrow();
+       expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled(); // 元のモックが呼ばれないことを確認
+     });
+
+     test('イベント発行中にエラーが発生した場合、警告ログを出力する', () => {
+       // Arrange
+       const error = new Error('Emit error');
+       mockEventEmitter.emitStandardized.mockImplementation(() => { throw error; });
+       // Act
+       storageService._emitEvent('test_event', {});
+       // Assert
+       expect(mockLogger.warn).toHaveBeenCalledWith(`イベント発行中にエラーが発生しました: storage:test_event`, error);
+     });
+   });
+
+   // _handleError のテストは省略 (エラーハンドラモックで検証)
+
+   describe('ensureDirectoryExists', () => {
+       test('ディレクトリが存在する場合、trueを返す', () => {
+           // Arrange
+           fsMock.existsSync.mockReturnValue(true);
+           // Act
+           const result = storageService.ensureDirectoryExists(TEST_DIR);
+           // Assert
+           expect(result).toBe(true);
+           expect(fsMock.existsSync).toHaveBeenCalledWith(NATIVE_TEST_DIR_PATH);
+           expect(fsMock.mkdirSync).not.toHaveBeenCalled();
+       });
+
+       test('ディレクトリが存在しない場合、作成してtrueを返す', () => {
+           // Arrange
+           fsMock.existsSync.mockReturnValue(false);
+           // Act
+           const result = storageService.ensureDirectoryExists(TEST_DIR);
+           // Assert
+           expect(result).toBe(true);
+           expect(fsMock.existsSync).toHaveBeenCalledWith(NATIVE_TEST_DIR_PATH);
+           expect(fsMock.mkdirSync).toHaveBeenCalledWith(NATIVE_TEST_DIR_PATH, { recursive: true });
+           expectStandardizedEventEmitted(mockEventEmitter, 'storage', 'directory_created', { path: NATIVE_TEST_DIR_PATH, timestamp: 'any', traceId: expect.any(String), requestId: expect.any(String) });
+       });
+
+       test('ディレクトリ作成時にエラーが発生した場合、エラーをハンドルしfalseを返す', () => {
+           // Arrange
+           fsMock.existsSync.mockReturnValue(false);
+           const error = new Error('mkdir failed');
+           fsMock.mkdirSync.mockImplementation(() => { throw error; });
+           // Act
+           const result = storageService.ensureDirectoryExists(TEST_DIR);
+           // Assert
+           expect(result).toBe(false);
+           expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+               expect.any(StorageError),
+               'StorageService',
+               '_ensureDirectoryExists (mkdir)',
+               expect.objectContaining({ directory: NATIVE_TEST_DIR_PATH })
+           );
+       });
+   });
+
 });

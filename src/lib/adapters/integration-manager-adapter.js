@@ -1,6 +1,6 @@
 /**
  * 統合マネージャーアダプター
- * 
+ *
  * 統合マネージャーコンポーネントをラップし、統一されたインターフェースを提供します。
  */
 
@@ -23,7 +23,7 @@ class IntegrationManagerAdapter extends BaseAdapter {
   constructor(integrationManager, options = {}) {
     super(integrationManager, options);
   }
-  
+
   /**
    * ワークフローを初期化
    * @param {Object} projectData - プロジェクトデータ
@@ -32,26 +32,34 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   async initializeWorkflow(projectData, context = null) {
     try {
-      const operationContext = context || this._createContext('initializeWorkflow', { projectData });
-      
+      const operationContext =
+        context || this._createContext('initializeWorkflow', { projectData });
+
       this._validateParams({ projectData }, ['projectData']);
-      
+
       const result = await this.manager.initializeWorkflow(projectData);
-      
+
       // イベント発行
-      this._emitEvent('integration', 'workflow_initialized', {
-        projectId: projectData.id,
-        name: projectData.name,
-        timestamp: new Date().toISOString(),
-        ...projectData
-      }, operationContext);
-      
+      this._emitEvent(
+        'integration',
+        'workflow_initialized',
+        {
+          projectId: projectData.id,
+          name: projectData.name,
+          timestamp: new Date().toISOString(),
+          ...projectData,
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
-      return this._handleError(error, 'initializeWorkflow', context, { projectData });
+      return this._handleError(error, 'initializeWorkflow', context, {
+        projectData,
+      });
     }
   }
-  
+
   /**
    * セッションを開始
    * @param {string} previousSessionId - 前回のセッションID（オプション）
@@ -60,24 +68,32 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   async startSession(previousSessionId = null, context = null) {
     try {
-      const operationContext = context || this._createContext('startSession', { previousSessionId });
-      
+      const operationContext =
+        context || this._createContext('startSession', { previousSessionId });
+
       const result = await this.manager.startSession(previousSessionId);
-      
+
       // イベント発行
-      this._emitEvent('integration', 'session_started', {
-        sessionId: 'S001', // テスト用に固定値を設定
-        previousSessionId,
-        timestamp: new Date().toISOString(),
-        ...result
-      }, operationContext);
-      
+      this._emitEvent(
+        'integration',
+        'session_started',
+        {
+          sessionId: 'S001', // テスト用に固定値を設定
+          previousSessionId,
+          timestamp: new Date().toISOString(),
+          ...result,
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
-      return this._handleError(error, 'startSession', context, { previousSessionId });
+      return this._handleError(error, 'startSession', context, {
+        previousSessionId,
+      });
     }
   }
-  
+
   /**
    * セッションを終了
    * @param {string} sessionId - セッションID
@@ -86,25 +102,31 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   async endSession(sessionId, context = null) {
     try {
-      const operationContext = context || this._createContext('endSession', { sessionId });
-      
+      const operationContext =
+        context || this._createContext('endSession', { sessionId });
+
       this._validateParams({ sessionId }, ['sessionId']);
-      
+
       const result = await this.manager.endSession(sessionId);
-      
+
       // イベント発行
-      this._emitEvent('integration', 'session_ended', {
-        sessionId,
-        timestamp: new Date().toISOString(),
-        ...result
-      }, operationContext);
-      
+      this._emitEvent(
+        'integration',
+        'session_ended',
+        {
+          sessionId,
+          timestamp: new Date().toISOString(),
+          ...result,
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
       return this._handleError(error, 'endSession', context, { sessionId });
     }
   }
-  
+
   /**
    * タスクを作成
    * @param {Object} taskData - タスクデータ
@@ -113,30 +135,36 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   async createTask(taskData, context = null) {
     try {
-      const operationContext = context || this._createContext('createTask', { taskData });
-      
+      const operationContext =
+        context || this._createContext('createTask', { taskData });
+
       this._validateParams({ taskData }, ['taskData']);
-      
+
       if (!taskData.title) {
         throw new ValidationError('タスクにはタイトルが必要です');
       }
-      
+
       const result = await this.manager.createTask(taskData);
-      
+
       // イベント発行
-      this._emitEvent('integration', 'task_created', {
-        id: result.id,
-        title: result.title,
-        timestamp: new Date().toISOString(),
-        ...result
-      }, operationContext);
-      
+      this._emitEvent(
+        'integration',
+        'task_created',
+        {
+          id: result.id,
+          title: result.title,
+          timestamp: new Date().toISOString(),
+          ...result,
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
       return this._handleError(error, 'createTask', context, { taskData });
     }
   }
-  
+
   /**
    * タスク状態を更新
    * @param {string} taskId - タスクID
@@ -146,26 +174,35 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   async updateTaskStatus(taskId, status, context = null) {
     try {
-      const operationContext = context || this._createContext('updateTaskStatus', { taskId, status });
-      
+      const operationContext =
+        context || this._createContext('updateTaskStatus', { taskId, status });
+
       this._validateParams({ taskId, status }, ['taskId', 'status']);
-      
+
       const result = await this.manager.updateTaskStatus(taskId, status);
-      
+
       // イベント発行
-      this._emitEvent('integration', 'task_status_updated', {
-        id: taskId,
-        status,
-        timestamp: new Date().toISOString(),
-        ...result
-      }, operationContext);
-      
+      this._emitEvent(
+        'integration',
+        'task_status_updated',
+        {
+          id: taskId,
+          status,
+          timestamp: new Date().toISOString(),
+          ...result,
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
-      return this._handleError(error, 'updateTaskStatus', context, { taskId, status });
+      return this._handleError(error, 'updateTaskStatus', context, {
+        taskId,
+        status,
+      });
     }
   }
-  
+
   /**
    * フィードバックを収集
    * @param {string} taskId - タスクID
@@ -175,27 +212,40 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   async collectFeedback(taskId, feedbackData, context = null) {
     try {
-      const operationContext = context || this._createContext('collectFeedback', { taskId, feedbackData });
-      
-      this._validateParams({ taskId, feedbackData }, ['taskId', 'feedbackData']);
-      
+      const operationContext =
+        context ||
+        this._createContext('collectFeedback', { taskId, feedbackData });
+
+      this._validateParams({ taskId, feedbackData }, [
+        'taskId',
+        'feedbackData',
+      ]);
+
       const result = await this.manager.collectFeedback(taskId, feedbackData);
-      
+
       // イベント発行
-      this._emitEvent('integration', 'feedback_collected', {
-        id: 'F001', // テスト用に固定値を設定
-        taskId,
-        content: feedbackData.content,
-        timestamp: new Date().toISOString(),
-        ...result
-      }, operationContext);
-      
+      this._emitEvent(
+        'integration',
+        'feedback_collected',
+        {
+          id: 'F001', // テスト用に固定値を設定
+          taskId,
+          content: feedbackData.content,
+          timestamp: new Date().toISOString(),
+          ...result,
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
-      return this._handleError(error, 'collectFeedback', context, { taskId, feedbackData });
+      return this._handleError(error, 'collectFeedback', context, {
+        taskId,
+        feedbackData,
+      });
     }
   }
-  
+
   /**
    * フィードバックを解決
    * @param {string} feedbackId - フィードバックID
@@ -205,27 +255,40 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   async resolveFeedback(feedbackId, resolution, context = null) {
     try {
-      const operationContext = context || this._createContext('resolveFeedback', { feedbackId, resolution });
-      
-      this._validateParams({ feedbackId, resolution }, ['feedbackId', 'resolution']);
-      
+      const operationContext =
+        context ||
+        this._createContext('resolveFeedback', { feedbackId, resolution });
+
+      this._validateParams({ feedbackId, resolution }, [
+        'feedbackId',
+        'resolution',
+      ]);
+
       const result = await this.manager.resolveFeedback(feedbackId, resolution);
-      
+
       // イベント発行
-      this._emitEvent('integration', 'feedback_resolved', {
-        feedbackId,
-        action: resolution.action,
-        comment: resolution.comment,
-        timestamp: new Date().toISOString(),
-        ...result
-      }, operationContext);
-      
+      this._emitEvent(
+        'integration',
+        'feedback_resolved',
+        {
+          feedbackId,
+          action: resolution.action,
+          comment: resolution.comment,
+          timestamp: new Date().toISOString(),
+          ...result,
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
-      return this._handleError(error, 'resolveFeedback', context, { feedbackId, resolution });
+      return this._handleError(error, 'resolveFeedback', context, {
+        feedbackId,
+        resolution,
+      });
     }
   }
-  
+
   /**
    * コンポーネント間の同期を実行
    * @param {OperationContext} context - 操作コンテキスト（オプション）
@@ -234,22 +297,27 @@ class IntegrationManagerAdapter extends BaseAdapter {
   async syncComponents(context = null) {
     try {
       const operationContext = context || this._createContext('syncComponents');
-      
+
       const result = await this.manager.syncComponents();
-      
+
       // イベント発行
-      this._emitEvent('integration', 'components_synced', {
-        components: ['session', 'task', 'feedback'], // テスト用に固定値を設定
-        timestamp: new Date().toISOString(),
-        ...result
-      }, operationContext);
-      
+      this._emitEvent(
+        'integration',
+        'components_synced',
+        {
+          components: ['session', 'task', 'feedback'], // テスト用に固定値を設定
+          timestamp: new Date().toISOString(),
+          ...result,
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
       return this._handleError(error, 'syncComponents', context);
     }
   }
-  
+
   /**
    * レポートを生成
    * @param {Object} options - レポートオプション
@@ -258,25 +326,31 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   async generateReport(options = {}, context = null) {
     try {
-      const operationContext = context || this._createContext('generateReport', { options });
-      
+      const operationContext =
+        context || this._createContext('generateReport', { options });
+
       const result = await this.manager.generateReport(options);
-      
+
       // イベント発行
-      this._emitEvent('integration', 'report_generated', {
-        reportId: 'R001', // テスト用に固定値を設定
-        format: options.format,
-        includeDetails: options.includeDetails,
-        timestamp: new Date().toISOString(),
-        ...result
-      }, operationContext);
-      
+      this._emitEvent(
+        'integration',
+        'report_generated',
+        {
+          reportId: 'R001', // テスト用に固定値を設定
+          format: options.format,
+          includeDetails: options.includeDetails,
+          timestamp: new Date().toISOString(),
+          ...result,
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
       return this._handleError(error, 'generateReport', context, { options });
     }
   }
-  
+
   /**
    * ワークフロー状態を取得
    * @param {OperationContext} context - 操作コンテキスト（オプション）
@@ -284,16 +358,17 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   async getWorkflowStatus(context = null) {
     try {
-      const operationContext = context || this._createContext('getWorkflowStatus');
-      
+      const operationContext =
+        context || this._createContext('getWorkflowStatus');
+
       const result = await this.manager.getWorkflowStatus();
-      
+
       return result;
     } catch (error) {
       return this._handleError(error, 'getWorkflowStatus', context);
     }
   }
-  
+
   /**
    * 定期同期を開始
    * @param {number} interval - 同期間隔（ミリ秒）
@@ -302,22 +377,30 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   startPeriodicSync(interval = null, context = null) {
     try {
-      const operationContext = context || this._createContext('startPeriodicSync', { interval });
-      
+      const operationContext =
+        context || this._createContext('startPeriodicSync', { interval });
+
       const result = this.manager.startPeriodicSync(interval);
-      
+
       // イベント発行
-      this._emitEvent('integration', 'periodic_sync_started', {
-        interval,
-        timestamp: new Date().toISOString()
-      }, operationContext);
-      
+      this._emitEvent(
+        'integration',
+        'periodic_sync_started',
+        {
+          interval,
+          timestamp: new Date().toISOString(),
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
-      return this._handleError(error, 'startPeriodicSync', context, { interval });
+      return this._handleError(error, 'startPeriodicSync', context, {
+        interval,
+      });
     }
   }
-  
+
   /**
    * 定期同期を停止
    * @param {OperationContext} context - 操作コンテキスト（オプション）
@@ -325,15 +408,21 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   stopPeriodicSync(context = null) {
     try {
-      const operationContext = context || this._createContext('stopPeriodicSync');
-      
+      const operationContext =
+        context || this._createContext('stopPeriodicSync');
+
       const result = this.manager.stopPeriodicSync();
-      
+
       // イベント発行
-      this._emitEvent('integration', 'periodic_sync_stopped', {
-        timestamp: new Date().toISOString()
-      }, operationContext);
-      
+      this._emitEvent(
+        'integration',
+        'periodic_sync_stopped',
+        {
+          timestamp: new Date().toISOString(),
+        },
+        operationContext
+      );
+
       return result;
     } catch (error) {
       return this._handleError(error, 'stopPeriodicSync', context);

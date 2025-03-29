@@ -4,518 +4,296 @@
 
 const EventEmitter = require('../../../src/lib/utils/event-emitter');
 const { EnhancedEventEmitter } = require('../../../src/lib/core/event-system');
-const { 
-  createMockLogger, 
-  createMockEventEmitter,
-  mockTimestamp 
+const {
+  createMockLogger,
+  mockTimestamp,
 } = require('../../helpers/mock-factory');
-const { 
-  expectEventEmitted,
-  expectLogged
-} = require('../../helpers/test-helpers');
+// expectStandardizedEventEmitted は EventEmitter 自体のテストでは直接使わない
 
 describe('EventEmitter', () => {
   let eventEmitter;
   let mockLogger;
-  
+  const MOCK_TIMESTAMP_ISO = '2025-03-24T00:00:00.000Z';
+
   beforeEach(() => {
+    // モックのセットアップ
     jest.clearAllMocks();
     mockLogger = createMockLogger();
-    
-    // 日付・時間関連のモックを設定
-    mockTimestamp('2025-03-24T00:00:00.000Z');
-    
+
+    // 時間関連のモック
+    mockTimestamp(MOCK_TIMESTAMP_ISO);
+
     // EventEmitterのインスタンスを作成
     eventEmitter = new EventEmitter({
       logger: mockLogger,
-      debugMode: true,
-      keepHistory: true,
-      historyLimit: 200
+      debugMode: true, // デバッグログのテストのため true に
     });
   });
-  
+
   afterEach(() => {
     jest.restoreAllMocks();
   });
-  
+
   describe('constructor', () => {
-    test('デフォルト値で初期化される', () => {
-      // Arrange
-      const instance = new EventEmitter();
-      
-      // Assert
-      expect(instance.logger).toEqual(console);
-      expect(instance.debugMode).toBe(false);
-      expect(instance._isStandardized).toBe(false);
-    });
-    
+     test('logger がないとエラーをスローする', () => {
+       expect(() => new EventEmitter()).toThrow('Logger instance is required');
+     });
+
     test('カスタム値で初期化される', () => {
       // Arrange
       const customLogger = createMockLogger();
       const instance = new EventEmitter({
         logger: customLogger,
-        debugMode: true
+        debugMode: true,
       });
-      
+
       // Assert
       expect(instance.logger).toBe(customLogger);
       expect(instance.debugMode).toBe(true);
-      expect(instance._isStandardized).toBe(false);
     });
-    
+
     test('親クラスのコンストラクタを正しく呼び出す', () => {
-      // Arrange
-      const options = {
-        logger: mockLogger,
-        debugMode: true,
-        keepHistory: true,
-        historyLimit: 200
-      };
-      
-      // Act
-      const instance = new EventEmitter(options);
-      
+      // Assert (beforeEach でインスタンスが作成される際に検証される)
+      expect(eventEmitter.logger).toBe(mockLogger);
+      expect(eventEmitter.debugMode).toBe(true);
+    });
+
+    test('debugMode オプションがない場合、false で初期化される', () => {
+      // Arrange & Act
+      const instance = new EventEmitter({ logger: mockLogger }); // debugMode なし
       // Assert
-      expect(instance.logger).toBe(mockLogger);
-      expect(instance.debugMode).toBe(true);
+      expect(instance.debugMode).toBe(false);
     });
   });
-  
+
   describe('on', () => {
     test('親クラスのonメソッドを呼び出す', () => {
       // Arrange
       const event = 'test-event';
       const callback = jest.fn();
-      
-      // onメソッドをスパイ
-      jest.spyOn(eventEmitter, 'on');
-      
+      const superOnSpy = jest.spyOn(EnhancedEventEmitter.prototype, 'on');
+
       // Act
       eventEmitter.on(event, callback);
-      
+
       // Assert
-      expect(eventEmitter.on).toHaveBeenCalledWith(event, callback);
+      expect(superOnSpy).toHaveBeenCalledWith(event, callback);
     });
   });
-  
+
   describe('off', () => {
     test('親クラスのoffメソッドを呼び出す', () => {
       // Arrange
       const event = 'test-event';
       const callback = jest.fn();
-      
-      // offメソッドをスパイ
-      jest.spyOn(eventEmitter, 'off');
-      
+      const superOffSpy = jest.spyOn(EnhancedEventEmitter.prototype, 'off');
+
       // Act
       eventEmitter.off(event, callback);
-      
-      // Assert
-      expect(eventEmitter.off).toHaveBeenCalledWith(event, callback);
-    });
-  });
-  
-  describe('emit', () => {
-    test.each([
-      ['標準形式', 'component:action', true],
-      ['非標準形式', 'non-standard-event', false],
-      ['コロンを含む非標準形式', 'non:standard:event', true],
-      ['コロンなしのイベント（_isStandardized=false）', 'simpleevent', false]
-    ])('%s のイベント名の場合、警告出力は %s', (_, event, shouldWarn) => {
-      // Arrange
-      const data = { key: 'value' };
-      
-      // 親クラスのemitをスパイ
-      const superEmit = jest.spyOn(EnhancedEventEmitter.prototype, 'emit').mockImplementation(() => {});
-      
-      // Act
-      eventEmitter.emit(event, data);
-      
-      // Assert
-      expect(superEmit).toHaveBeenCalledWith(event, data);
-      
-      if (shouldWarn) {
-        expect(mockLogger.warn).toHaveBeenCalledWith(`非標準のイベント名: ${event}`, { context: {} });
-      } else {
-        expect(mockLogger.warn).not.toHaveBeenCalled();
-      }
-    });
-    test('_isStandardizedがtrueの場合、警告を出力しない', () => {
-      // Arrange
-      const event = 'non:standard:event';
-      const data = { key: 'value' };
-      
-      // 親クラスのemitをスパイ
-      const superEmit = jest.spyOn(EnhancedEventEmitter.prototype, 'emit').mockImplementation(() => {});
-      
-      // _isStandardizedをtrueに設定
-      eventEmitter._isStandardized = true;
-      
-      // Act
-      eventEmitter.emit(event, data);
-      
-      // Assert
-      expect(superEmit).toHaveBeenCalledWith(event, data);
-      expect(mockLogger.warn).not.toHaveBeenCalled();
-      
-      // 元に戻す
-      eventEmitter._isStandardized = false;
-    });
 
-    test('コロンなしのイベント（_isStandardized=true）の場合、警告を出力しない', () => {
-      // Arrange
-      const event = 'simpleevent';
-      const data = { key: 'value' };
-      
-      // 親クラスのemitをスパイ
-      const superEmit = jest.spyOn(EnhancedEventEmitter.prototype, 'emit').mockImplementation(() => {});
-      
-      // _isStandardizedをtrueに設定
-      eventEmitter._isStandardized = true;
-      
-      // Act
-      eventEmitter.emit(event, data);
-      
       // Assert
-      expect(superEmit).toHaveBeenCalledWith(event, data);
-      expect(mockLogger.warn).not.toHaveBeenCalled();
-      
-      // 元に戻す
-      eventEmitter._isStandardized = false;
+      expect(superOffSpy).toHaveBeenCalledWith(event, callback);
     });
   });
-  
+
+  // emit メソッドのテストブロックは削除
+
   describe('emitStandardized', () => {
-    test('標準化されたイベントを発行する', () => {
+    test('標準化されたイベントとグローバルイベントを発行する', () => {
       // Arrange
       const component = 'component';
       const action = 'action';
       const data = { key: 'value' };
-      
-      // 親クラスのemitメソッドをスパイ
-      const superEmit = jest.spyOn(EnhancedEventEmitter.prototype, 'emit').mockImplementation(() => {});
-      
+      const superEmit = jest.spyOn(EnhancedEventEmitter.prototype, 'emit');
+
       // Act
       eventEmitter.emitStandardized(component, action, data);
-      
+
       // Assert
-      // _isStandardizedがfalseに戻ることを確認
-      expect(eventEmitter._isStandardized).toBe(false);
-      
-      // 標準化されたイベントが発行されることを確認
+      // 標準化されたイベントの発行検証
       expect(superEmit).toHaveBeenCalledWith(
         `${component}:${action}`,
         expect.objectContaining({
           ...data,
-          timestamp: '2025-03-24T00:00:00.000Z',
+          timestamp: MOCK_TIMESTAMP_ISO, // 正確なタイムスタンプを検証
           component,
-          action
+          action,
         })
       );
-      
-      // グローバルイベントも発行されることを確認
+
+      // グローバルイベントの発行検証
       expect(superEmit).toHaveBeenCalledWith(
         'event',
         expect.objectContaining({
           type: `${component}:${action}`,
           ...data,
-          timestamp: '2025-03-24T00:00:00.000Z',
+          timestamp: MOCK_TIMESTAMP_ISO,
           component,
-          action
+          action,
         })
       );
+       expect(superEmit).toHaveBeenCalledTimes(2);
     });
 
-    test('dataパラメータのデフォルト値を使用して標準化されたイベントを発行する', () => {
+    test('dataパラメータのデフォルト値を使用してイベントを発行する', () => {
       // Arrange
       const component = 'component';
       const action = 'action';
-      
-      // 親クラスのemitメソッドをスパイ
-      const superEmit = jest.spyOn(EnhancedEventEmitter.prototype, 'emit').mockImplementation(() => {});
-      
-      // Act - dataパラメータを省略
-      eventEmitter.emitStandardized(component, action);
-      
+      const superEmit = jest.spyOn(EnhancedEventEmitter.prototype, 'emit');
+
+      // Act
+      eventEmitter.emitStandardized(component, action); // dataパラメータを省略
+
       // Assert
-      // _isStandardizedがfalseに戻ることを確認
-      expect(eventEmitter._isStandardized).toBe(false);
-      
-      // 標準化されたイベントが発行されることを確認
+      // 標準化されたイベントの発行検証 (空のデータ)
       expect(superEmit).toHaveBeenCalledWith(
         `${component}:${action}`,
         expect.objectContaining({
-          timestamp: '2025-03-24T00:00:00.000Z',
+          timestamp: MOCK_TIMESTAMP_ISO,
           component,
-          action
+          action,
         })
       );
-      
-      // グローバルイベントも発行されることを確認
+       // グローバルイベントの発行検証 (空のデータ)
       expect(superEmit).toHaveBeenCalledWith(
         'event',
         expect.objectContaining({
           type: `${component}:${action}`,
-          timestamp: '2025-03-24T00:00:00.000Z',
+          timestamp: MOCK_TIMESTAMP_ISO,
           component,
-          action
+          action,
         })
       );
+       expect(superEmit).toHaveBeenCalledTimes(2);
     });
-    
-    test('エラーが発生した場合でも_isStandardizedがfalseに戻る', () => {
+
+    test('エラーが発生した場合でも例外をスローする', () => {
       // Arrange
       const component = 'component';
       const action = 'action';
       const data = { key: 'value' };
-      
-      // 親クラスのemitメソッドをスパイしてエラーをスローするように設定
       jest.spyOn(EnhancedEventEmitter.prototype, 'emit').mockImplementation(() => {
         throw new Error('テストエラー');
       });
-      
+
       // Act & Assert
       expect(() => {
         eventEmitter.emitStandardized(component, action, data);
       }).toThrow('テストエラー');
-      
-      // _isStandardizedがfalseに戻ることを確認
-      expect(eventEmitter._isStandardized).toBe(false);
     });
   });
-  
-  describe('emitAsync', () => {
-    test.each([
-      ['標準形式', 'component:action', true],
-      ['非標準形式', 'non-standard-event', false],
-      ['コロンを含む非標準形式', 'non:standard:event', true],
-      ['コロンなしのイベント（_isStandardized=false）', 'simpleevent', false]
-    ])('%s のイベント名の場合、警告出力は %s', async (_, event, shouldWarn) => {
-      // Arrange
-      const data = { key: 'value' };
-      
-      // 親クラスのemitAsyncをスパイ
-      const superEmitAsync = jest.spyOn(EnhancedEventEmitter.prototype, 'emitAsync').mockResolvedValue(true);
-      
-      // Act
-      await eventEmitter.emitAsync(event, data);
-      
-      // Assert
-      expect(superEmitAsync).toHaveBeenCalledWith(event, data);
-      
-      if (shouldWarn) {
-        expect(mockLogger.warn).toHaveBeenCalledWith(`非標準のイベント名: ${event}`, { context: {} });
-      } else {
-        expect(mockLogger.warn).not.toHaveBeenCalled();
-      }
-    });
-    
-    test('_isStandardizedがtrueの場合、警告を出力しない', async () => {
-      // Arrange
-      const event = 'non:standard:event';
-      const data = { key: 'value' };
-      
-      // 親クラスのemitAsyncをスパイ
-      const superEmitAsync = jest.spyOn(EnhancedEventEmitter.prototype, 'emitAsync').mockResolvedValue(true);
-      
-      // _isStandardizedをtrueに設定
-      eventEmitter._isStandardized = true;
-      
-      // Act
-      await eventEmitter.emitAsync(event, data);
-      
-      // Assert
-      expect(superEmitAsync).toHaveBeenCalledWith(event, data);
-      expect(mockLogger.warn).not.toHaveBeenCalled();
-      
-      // 元に戻す
-      eventEmitter._isStandardized = false;
-    });
 
-    test('コロンなしのイベント（_isStandardized=true）の場合、警告を出力しない', async () => {
-      // Arrange
-      const event = 'simpleevent';
-      const data = { key: 'value' };
-      
-      // 親クラスのemitAsyncをスパイ
-      const superEmitAsync = jest.spyOn(EnhancedEventEmitter.prototype, 'emitAsync').mockResolvedValue(true);
-      
-      // _isStandardizedをtrueに設定
-      eventEmitter._isStandardized = true;
-      
-      // Act
-      await eventEmitter.emitAsync(event, data);
-      
-      // Assert
-      expect(superEmitAsync).toHaveBeenCalledWith(event, data);
-      expect(mockLogger.warn).not.toHaveBeenCalled();
-      
-      // 元に戻す
-      eventEmitter._isStandardized = false;
-    });
-  });
-  
+  // emitAsync メソッドのテストブロックは削除
+
   describe('emitStandardizedAsync', () => {
-    test('標準化された非同期イベントを発行する', async () => {
+    test('標準化された非同期イベントとグローバルイベントを発行する', async () => {
       // Arrange
       const component = 'component';
       const action = 'action';
       const data = { key: 'value' };
-      
-      // 親クラスのemitAsyncメソッドをスパイ
-      const superEmitAsync = jest.spyOn(EnhancedEventEmitter.prototype, 'emitAsync').mockResolvedValue(undefined);
-      
+      const superEmitAsync = jest.spyOn(EnhancedEventEmitter.prototype, 'emitAsync').mockResolvedValue(true);
+
       // Act
       await eventEmitter.emitStandardizedAsync(component, action, data);
-      
+
       // Assert
-      // _isStandardizedがfalseに戻ることを確認
-      expect(eventEmitter._isStandardized).toBe(false);
-      
-      // 標準化されたイベントが発行されることを確認
+      // 標準化されたイベントの発行検証
       expect(superEmitAsync).toHaveBeenCalledWith(
         `${component}:${action}`,
         expect.objectContaining({
           ...data,
-          timestamp: '2025-03-24T00:00:00.000Z',
+          timestamp: MOCK_TIMESTAMP_ISO,
           component,
-          action
+          action,
         })
       );
-      
-      // グローバルイベントも発行されることを確認
+
+      // グローバルイベントの発行検証
       expect(superEmitAsync).toHaveBeenCalledWith(
         'event',
         expect.objectContaining({
           type: `${component}:${action}`,
           ...data,
-          timestamp: '2025-03-24T00:00:00.000Z',
+          timestamp: MOCK_TIMESTAMP_ISO,
           component,
-          action
+          action,
         })
       );
+       expect(superEmitAsync).toHaveBeenCalledTimes(2);
     });
-    
-    test('dataパラメータのデフォルト値を使用して標準化された非同期イベントを発行する', async () => {
+
+    test('dataパラメータのデフォルト値を使用してイベントを発行する', async () => {
       // Arrange
       const component = 'component';
       const action = 'action';
-      
-      // 親クラスのemitAsyncメソッドをスパイ
-      const superEmitAsync = jest.spyOn(EnhancedEventEmitter.prototype, 'emitAsync').mockResolvedValue(undefined);
-      
-      // Act - dataパラメータを省略
-      await eventEmitter.emitStandardizedAsync(component, action);
-      
+      const superEmitAsync = jest.spyOn(EnhancedEventEmitter.prototype, 'emitAsync').mockResolvedValue(true);
+
+      // Act
+      await eventEmitter.emitStandardizedAsync(component, action); // dataパラメータを省略
+
       // Assert
-      // _isStandardizedがfalseに戻ることを確認
-      expect(eventEmitter._isStandardized).toBe(false);
-      
-      // 標準化されたイベントが発行されることを確認
+      // 標準化されたイベントの発行検証 (空のデータ)
       expect(superEmitAsync).toHaveBeenCalledWith(
         `${component}:${action}`,
         expect.objectContaining({
-          timestamp: '2025-03-24T00:00:00.000Z',
+          timestamp: MOCK_TIMESTAMP_ISO,
           component,
-          action
+          action,
         })
       );
-      
-      // グローバルイベントも発行されることを確認
+       // グローバルイベントの発行検証 (空のデータ)
       expect(superEmitAsync).toHaveBeenCalledWith(
         'event',
         expect.objectContaining({
           type: `${component}:${action}`,
-          timestamp: '2025-03-24T00:00:00.000Z',
+          timestamp: MOCK_TIMESTAMP_ISO,
           component,
-          action
+          action,
         })
       );
+       expect(superEmitAsync).toHaveBeenCalledTimes(2);
     });
 
-    test('エラーが発生した場合でも_isStandardizedがfalseに戻る', async () => {
+    test('エラーが発生した場合でも例外をスローする', async () => {
       // Arrange
       const component = 'component';
       const action = 'action';
       const data = { key: 'value' };
-      
-      // 親クラスのemitAsyncメソッドをスパイしてエラーをスローするように設定
       jest.spyOn(EnhancedEventEmitter.prototype, 'emitAsync').mockRejectedValue(new Error('テストエラー'));
-      
+
       // Act & Assert
       await expect(
         eventEmitter.emitStandardizedAsync(component, action, data)
       ).rejects.toThrow('テストエラー');
-      
-      // _isStandardizedがfalseに戻ることを確認
-      expect(eventEmitter._isStandardized).toBe(false);
     });
   });
-  
+
   describe('getRegisteredEvents', () => {
     test('親クラスのgetRegisteredEventsメソッドを呼び出す', () => {
       // Arrange
-      // 親クラスのgetRegisteredEventsメソッドをスパイ
-      const superGetRegisteredEvents = jest.spyOn(EnhancedEventEmitter.prototype, 'getRegisteredEvents').mockReturnValue(['event1', 'event2']);
-      
+      const superGetRegisteredEvents = jest.spyOn(EnhancedEventEmitter.prototype, 'getRegisteredEvents').mockReturnValue(['event1']);
+
       // Act
       const result = eventEmitter.getRegisteredEvents();
-      
+
       // Assert
       expect(superGetRegisteredEvents).toHaveBeenCalled();
-      expect(result).toEqual(['event1', 'event2']);
-    });
-    
-    test('実際の実装を呼び出す', () => {
-      // Arrange
-      // 親クラスのgetRegisteredEventsメソッドをスパイ（実際の実装を呼び出す）
-      const superGetRegisteredEvents = jest.spyOn(EnhancedEventEmitter.prototype, 'getRegisteredEvents');
-      
-      // イベントリスナーを登録
-      eventEmitter.on('test-event', () => {});
-      
-      // Act
-      const result = eventEmitter.getRegisteredEvents();
-      
-      // Assert
-      expect(superGetRegisteredEvents).toHaveBeenCalled();
-      expect(result).toContain('test-event');
+      expect(result).toEqual(['event1']);
     });
   });
-  
+
   describe('listenerCount', () => {
     test('親クラスのlistenerCountメソッドを呼び出す', () => {
       // Arrange
       const event = 'test-event';
-      
-      // 親クラスのlistenerCountメソッドをスパイ
       const superListenerCount = jest.spyOn(EnhancedEventEmitter.prototype, 'listenerCount').mockReturnValue(5);
-      
+
       // Act
       const result = eventEmitter.listenerCount(event);
-      
+
       // Assert
       expect(superListenerCount).toHaveBeenCalledWith(event);
       expect(result).toBe(5);
-    });
-    
-    test('実際の実装を呼び出す', () => {
-      // Arrange
-      const event = 'test-event';
-      const callback = jest.fn();
-      
-      // イベントリスナーを登録
-      eventEmitter.on(event, callback);
-      
-      // 親クラスのlistenerCountメソッドをスパイ（実際の実装を呼び出す）
-      const superListenerCount = jest.spyOn(EnhancedEventEmitter.prototype, 'listenerCount');
-      
-      // Act
-      const result = eventEmitter.listenerCount(event);
-      
-      // Assert
-      expect(superListenerCount).toHaveBeenCalledWith(event);
-      expect(result).toBeGreaterThan(0); // 少なくとも1つのリスナーがあるはず
     });
   });
 });

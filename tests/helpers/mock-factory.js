@@ -11,7 +11,7 @@ function createMockLogger() {
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
-    debug: jest.fn()
+    debug: jest.fn(),
   };
 }
 
@@ -26,7 +26,7 @@ function createMockEventEmitter() {
     on: jest.fn(),
     once: jest.fn(),
     removeListener: jest.fn(),
-    removeAllListeners: jest.fn()
+    removeAllListeners: jest.fn(),
   };
 }
 
@@ -38,34 +38,51 @@ function createMockEventEmitter() {
  */
 function createMockErrorHandler(options = {}) {
   const { defaultReturnValues = {} } = options;
-  
+
   // デフォルト値の設定
   const defaults = {
+    // GitService operations
     getCurrentCommitHash: '',
     getCurrentBranch: '',
     extractTaskIdsFromCommitMessage: [],
     getCommitsBetween: [],
     getChangedFilesInCommit: [],
     getCommitDiffStats: { files: [], lines_added: 0, lines_deleted: 0 },
+    getCommitHistory: [],
+    getFileHistory: [],
+    getCommitDetails: null,
+    stageFiles: true,
+    createCommit: 'new-commit-hash',
+    getBranches: [],
+    // StorageService operations
     readJSON: null,
     writeJSON: false,
     readText: null,
     writeText: false,
+    writeFile: false,
+    updateJSON: null,
     fileExists: false,
     listFiles: [],
-    ...defaultReturnValues
+    deleteFile: false,
+    deleteDirectory: false,
+    copyFile: false,
+    ensureDirectoryExists: true,
+    // Other potential operations (add as needed)
+    ...defaultReturnValues,
   };
-  
+
   // モックハンドラー関数
-  const mockHandle = jest.fn().mockImplementation((error, component, operation, context) => {
-    // 操作に応じたデフォルト値を返す
-    return defaults[operation] !== undefined ? defaults[operation] : null;
-  });
-  
+  const mockHandle = jest
+    .fn()
+    .mockImplementation((error, component, operation, context) => {
+      // 操作に応じたデフォルト値を返す
+      return defaults[operation] !== undefined ? defaults[operation] : null;
+    });
+
   return {
     handle: mockHandle,
     register: jest.fn(),
-    unregister: jest.fn()
+    unregister: jest.fn(),
   };
 }
 
@@ -80,23 +97,51 @@ function mockTimestamp(isoString) {
     constructor() {
       return mockDate;
     }
-    
+
     static now() {
       return mockDate.getTime();
     }
   };
-  
+
   // 現在時刻を返す関数のモック
   global.Date.now = jest.fn(() => mockDate.getTime());
-  
+
   // requestIdとtraceIdの生成をモック
-  global.generateRequestId = jest.fn(() => `req-${mockDate.getTime()}-${Math.random().toString(36).substring(2, 10)}`);
-  global.generateTraceId = jest.fn(() => `trace-${mockDate.getTime()}-${Math.random().toString(36).substring(2, 10)}`);
+  global.generateRequestId = jest.fn(
+    () =>
+      `req-${mockDate.getTime()}-${Math.random().toString(36).substring(2, 10)}`
+  );
+  global.generateTraceId = jest.fn(
+    () =>
+      `trace-${mockDate.getTime()}-${Math.random().toString(36).substring(2, 10)}`
+  );
+}
+
+
+/**
+ * 共通のモック依存関係オブジェクトを作成
+ * @returns {Object} モック依存関係オブジェクト { logger, eventEmitter, errorHandler }
+ */
+function createMockDependencies() {
+  const mockLogger = createMockLogger();
+  const mockEventEmitter = createMockEventEmitter();
+  const mockErrorHandler = createMockErrorHandler();
+
+  // 必要に応じて他の共通モックを追加
+  // 例: const mockStorageService = { ... };
+
+  return {
+    logger: mockLogger,
+    eventEmitter: mockEventEmitter,
+    errorHandler: mockErrorHandler,
+    // storageService: mockStorageService,
+  };
 }
 
 module.exports = {
   createMockLogger,
   createMockEventEmitter,
   createMockErrorHandler,
-  mockTimestamp
+  mockTimestamp,
+  createMockDependencies
 };

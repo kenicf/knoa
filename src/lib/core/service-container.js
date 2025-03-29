@@ -1,6 +1,6 @@
 /**
  * サービスコンテナ
- * 
+ *
  * 依存性注入のためのサービスコンテナを提供します。
  * サービスの登録、取得、ファクトリー関数のサポート、循環参照の検出などの機能を提供します。
  */
@@ -51,32 +51,34 @@ class ServiceContainer {
     if (this.services.has(name)) {
       return this.services.get(name);
     }
-    
+
     // ファクトリーが登録されているか確認
     if (this.factories.has(name)) {
       // 循環参照のチェック
       if (this.resolving.has(name)) {
-        throw new Error(`循環参照が検出されました: ${Array.from(this.resolving).join(' -> ')} -> ${name}`);
+        throw new Error(
+          `循環参照が検出されました: ${Array.from(this.resolving).join(' -> ')} -> ${name}`
+        );
       }
-      
+
       // 解決中のサービスとしてマーク
       this.resolving.add(name);
-      
+
       try {
         // ファクトリー関数を実行してインスタンスを作成
         const factory = this.factories.get(name);
         const instance = factory(this);
-        
+
         // インスタンスをキャッシュ
         this.services.set(name, instance);
-        
+
         return instance;
       } finally {
         // 解決中のマークを解除
         this.resolving.delete(name);
       }
     }
-    
+
     throw new Error(`サービス '${name}' が見つかりません`);
   }
 
@@ -117,8 +119,8 @@ class ServiceContainer {
     return [
       ...new Set([
         ...Array.from(this.services.keys()),
-        ...Array.from(this.factories.keys())
-      ])
+        ...Array.from(this.factories.keys()),
+      ]),
     ];
   }
 }

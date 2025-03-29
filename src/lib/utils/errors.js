@@ -1,95 +1,69 @@
 /**
  * エラークラス定義
- * 
+ *
  * 統合マネージャーで使用する各種エラークラスを定義します。
- * src/lib/core/error-framework.js で定義されているエラークラスを継承し、
- * 後方互換性を維持しています。
+ * 主に src/lib/core/error-framework.js で定義されているエラークラスを再エクスポートします。
  */
 
 const {
   ApplicationError,
-  ValidationError: CoreValidationError,
-  StateError: CoreStateError,
-  DataConsistencyError: CoreDataConsistencyError,
+  ValidationError, // コアの ValidationError を直接利用
+  StateError, // コアの StateError を直接利用
+  DataConsistencyError, // コアの DataConsistencyError を直接利用
   TimeoutError,
-  LockError
+  LockError,
+  ConfigurationError, // 必要に応じて追加
+  AuthorizationError, // 必要に応じて追加
+  NotFoundError, // 必要に応じて追加
+  ExternalServiceError, // 必要に応じて追加
 } = require('../core/error-framework');
 
+// GitError と StorageError はこのモジュール固有のため残す
 /**
- * バリデーションエラー
- * 後方互換性のためのラッパークラス
+ * Gitエラークラス
  */
-class ValidationError extends CoreValidationError {
+class GitError extends ApplicationError {
   /**
    * コンストラクタ
    * @param {string} message - エラーメッセージ
-   * @param {Object} options - オプション
+   * @param {Error} cause - 原因となったエラー
+   * @param {Object} [context] - 追加コンテキスト
    */
-  constructor(message, options = {}) {
-    super(message, options);
+  constructor(message, cause, context = {}) {
+    super(message, { cause, code: 'ERR_GIT', context });
+    this.name = 'GitError';
   }
 }
 
 /**
- * 状態エラー
- * 後方互換性のためのラッパークラス
+ * ストレージエラークラス
  */
-class StateError extends CoreStateError {
+class StorageError extends ApplicationError {
   /**
    * コンストラクタ
    * @param {string} message - エラーメッセージ
-   * @param {Object} options - オプション
+   * @param {Error} cause - 原因となったエラー
+   * @param {Object} [context] - 追加コンテキスト
    */
-  constructor(message, options = {}) {
-    super(message, options);
-  }
-}
-
-/**
- * データ整合性エラー
- * 後方互換性のためのラッパークラス
- */
-class DataConsistencyError extends CoreDataConsistencyError {
-  /**
-   * コンストラクタ
-   * @param {string} message - エラーメッセージ
-   * @param {Object} options - オプション
-   */
-  constructor(message, options = {}) {
-    super(message, options);
-  }
-}
-
-/**
- * ロックタイムアウトエラー
- * 後方互換性のためのクラス
- */
-class LockTimeoutError extends TimeoutError {
-  /**
-   * コンストラクタ
-   * @param {string} message - エラーメッセージ
-   * @param {Object} options - オプション
-   */
-  constructor(message, options = {}) {
-    super(message, {
-      ...options,
-      code: 'ERR_LOCK_TIMEOUT',
-      context: {
-        ...(options.context || {}),
-        errorType: 'LockTimeoutError'
-      }
-    });
-    this.name = 'LockTimeoutError';
+  constructor(message, cause, context = {}) {
+    super(message, { cause, code: 'ERR_STORAGE', context });
+    this.name = 'StorageError';
   }
 }
 
 module.exports = {
+  // コアエラークラスを再エクスポート
+  ApplicationError,
   ValidationError,
   StateError,
   DataConsistencyError,
-  LockTimeoutError,
-  // 新しいエラークラスも公開
-  ApplicationError,
+  TimeoutError,
   LockError,
-  TimeoutError
+  ConfigurationError,
+  AuthorizationError,
+  NotFoundError,
+  ExternalServiceError,
+  // このモジュール固有のエラー
+  GitError,
+  StorageError,
 };

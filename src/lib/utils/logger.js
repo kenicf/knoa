@@ -1,8 +1,11 @@
 /**
  * ロガークラス
- * 
+ *
  * デバッグと監視のためのロギングシステムを提供します。
  */
+
+// TODO: Step 5 で emitStandardizedEvent ヘルパーを利用するか検討
+// const { emitStandardizedEvent } = require('./event-helpers');
 
 /**
  * ロガークラス
@@ -11,6 +14,12 @@ class Logger {
   /**
    * コンストラクタ
    * @param {Object} options - オプション
+   * @param {string} [options.level='info'] - ログレベル
+   * @param {Array} [options.transports] - ログ出力先トランスポート
+   * @param {Object} [options.contextProviders={}] - コンテキストプロバイダ
+   * @param {Object} [options.eventEmitter] - イベントエミッターインスタンス
+   * @param {Function} [options.traceIdGenerator] - トレースID生成関数
+   * @param {Function} [options.requestIdGenerator] - リクエストID生成関数
    */
   constructor(options = {}) {
     this.level = options.level || 'info';
@@ -19,27 +28,32 @@ class Logger {
       info: 1,
       warn: 2,
       error: 3,
-      fatal: 4
+      fatal: 4,
     });
-    
+
     this.transports = options.transports || [
       {
         type: 'console',
-        write: (entry) => console.log(JSON.stringify(entry))
-      }
+        // console.log は ESLint で警告が出るため、本番環境では適切なトランスポートに置き換えるべき
+        write: (entry) => console.log(JSON.stringify(entry)),
+      },
     ];
-    
+
     // コンテキスト情報取得関数
     this.contextProviders = options.contextProviders || {};
-    
-    // イベントエミッター
+
+    // イベントエミッター (必須ではないかもしれないが、現状維持)
     this.eventEmitter = options.eventEmitter;
-    
-    // トレースID生成
-    this.traceIdGenerator = options.traceIdGenerator || (() => `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
-    this.requestIdGenerator = options.requestIdGenerator || (() => `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+
+    // トレースID生成 (TODO: Step 5 で集約)
+    this.traceIdGenerator =
+      options.traceIdGenerator ||
+      (() => `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+    this.requestIdGenerator =
+      options.requestIdGenerator ||
+      (() => `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   }
-  
+
   /**
    * ログ出力
    * @param {string} level - ログレベル
@@ -47,28 +61,32 @@ class Logger {
    * @param {Object} [context] - コンテキスト情報
    */
   log(level, message, context = {}) {
-    if (this.levels[level] < this.levels[this.level]) {
+    if (this.levels[level] === undefined || this.levels[level] < this.levels[this.level]) {
       return;
     }
-    
+
     // 基本情報
     const timestamp = new Date().toISOString();
-    const traceId = context.trace_id || context.traceId || this.traceIdGenerator();
-    const requestId = context.request_id || context.requestId || this.requestIdGenerator();
-    
+    // ID生成ロジックはここで実行 (Step 5 で見直し)
+    const traceId =
+      context.trace_id || context.traceId || this.traceIdGenerator();
+    const requestId =
+      context.request_id || context.requestId || this.requestIdGenerator();
+
     const entry = {
       timestamp,
       level,
       message,
       context: {
         ...context,
+        // traceId/requestId を優先し、古い snake_case は削除も検討
         trace_id: traceId,
         request_id: requestId,
         traceId,
-        requestId
-      }
+        requestId,
+      },
     };
-    
+
     // 追加コンテキスト情報
     for (const [key, provider] of Object.entries(this.contextProviders)) {
       try {
@@ -77,42 +95,37 @@ class Logger {
         entry.context[`${key}_error`] = error.message;
       }
     }
-    
+
     // 各トランスポートにログを出力
     for (const transport of this.transports) {
       try {
         transport.write(entry);
       } catch (error) {
-        console.error(`ログ出力中にエラーが発生しました(${transport.type}):`, error);
+        // ロガー自身の内部エラーは console.error で出力
+        console.error(
+          `ログ出力中にエラーが発生しました(${transport.type}):`,
+          error
+        );
       }
     }
-    
-    // イベント発行
-    if (this.eventEmitter) {
-      // 新しい標準化されたイベント名を使用
-      if (typeof this.eventEmitter.emitStandardized === 'function') {
-        this.eventEmitter.emitStandardized('log', 'message_created', {
-          ...entry,
-          traceId,
-          requestId
-        });
-      } else {
-        // 後方互換性のため
-        this.eventEmitter.emit('log:entry', entry);
-        
-        // 開発環境では警告を表示
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('非推奨のイベント名 log:entry が使用されています。代わりに log:message_created を使用してください。');
-        }
-      }
+
+    // イベント発行 (emitStandardized に統一)
+    if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+      this.eventEmitter.emitStandardized('log', 'message_created', {
+        ...entry,
+        // emitStandardized 側で traceId/requestId が付与される想定だが、
+        // Logger 内部で生成したものを渡す
+        traceId,
+        requestId,
+      });
     }
-    
+
     // 重大度に応じて通知
     if (level === 'error' || level === 'fatal') {
       this._sendAlert(entry);
     }
   }
-  
+
   /**
    * デバッグログ
    * @param {string} message - メッセージ
@@ -121,7 +134,7 @@ class Logger {
   debug(message, context) {
     this.log('debug', message, context);
   }
-  
+
   /**
    * 情報ログ
    * @param {string} message - メッセージ
@@ -130,7 +143,7 @@ class Logger {
   info(message, context) {
     this.log('info', message, context);
   }
-  
+
   /**
    * 警告ログ
    * @param {string} message - メッセージ
@@ -139,7 +152,7 @@ class Logger {
   warn(message, context) {
     this.log('warn', message, context);
   }
-  
+
   /**
    * エラーログ
    * @param {string} message - メッセージ
@@ -148,7 +161,7 @@ class Logger {
   error(message, context) {
     this.log('error', message, context);
   }
-  
+
   /**
    * 致命的エラーログ
    * @param {string} message - メッセージ
@@ -157,7 +170,7 @@ class Logger {
   fatal(message, context) {
     this.log('fatal', message, context);
   }
-  
+
   /**
    * アラートを送信
    * @param {Object} entry - ログエントリ
@@ -166,94 +179,69 @@ class Logger {
   _sendAlert(entry) {
     // アラート送信ロジック（通知システムとの連携）
     // 実際の実装はプラグインや設定によって異なる
-    if (this.eventEmitter) {
-      // 新しい標準化されたイベント名を使用
-      if (typeof this.eventEmitter.emitStandardized === 'function') {
-        this.eventEmitter.emitStandardized('log', 'alert_created', {
-          ...entry,
-          traceId: entry.context.traceId || entry.context.trace_id,
-          requestId: entry.context.requestId || entry.context.request_id
-        });
-      } else {
-        // 後方互換性のため
-        this.eventEmitter.emit('log:alert', entry);
-        
-        // 開発環境では警告を表示
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('非推奨のイベント名 log:alert が使用されています。代わりに log:alert_created を使用してください。');
-        }
-      }
+    if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+      // emitStandardized に統一
+      this.eventEmitter.emitStandardized('log', 'alert_created', {
+        ...entry,
+        // Logger 内部で生成した traceId/requestId を渡す
+        traceId: entry.context.traceId || entry.context.trace_id,
+        requestId: entry.context.requestId || entry.context.request_id,
+      });
     }
   }
-  
+
   /**
    * トランスポートを追加
    * @param {Object} transport - トランスポート
    */
   addTransport(transport) {
+    if (!transport || typeof transport.write !== 'function') {
+        this.error('Invalid transport object provided to addTransport.', { transport });
+        return;
+    }
     this.transports.push(transport);
-    
-    if (this.eventEmitter) {
+
+    if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+      // ID生成はここで行う (Step 5 で見直し)
       const timestamp = new Date().toISOString();
       const traceId = this.traceIdGenerator();
       const requestId = this.requestIdGenerator();
-      
-      // 新しい標準化されたイベント名を使用
-      if (typeof this.eventEmitter.emitStandardized === 'function') {
-        this.eventEmitter.emitStandardized('log', 'transport_added', {
-          type: transport.type,
-          timestamp,
-          traceId,
-          requestId
-        });
-      } else {
-        // 後方互換性のため
-        this.eventEmitter.emit('log:transport_added', {
-          type: transport.type,
-          timestamp
-        });
-        
-        // 開発環境では警告を表示
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('非推奨のイベント名 log:transport_added が使用されています。代わりに log:transport_added を使用してください。');
-        }
-      }
+
+      // emitStandardized に統一
+      this.eventEmitter.emitStandardized('log', 'transport_added', {
+        type: transport.type || 'unknown', // タイプがない場合を考慮
+        timestamp,
+        traceId,
+        requestId,
+      });
     }
   }
-  
+
   /**
    * コンテキストプロバイダを追加
    * @param {string} key - キー
    * @param {Function} provider - プロバイダ関数
    */
   addContextProvider(key, provider) {
+     if (!key || typeof provider !== 'function') {
+        this.error('Invalid arguments provided to addContextProvider.', { key, providerType: typeof provider });
+        return;
+    }
     this.contextProviders[key] = provider;
-    
-    if (this.eventEmitter) {
+
+    if (this.eventEmitter && typeof this.eventEmitter.emitStandardized === 'function') {
+      // ID生成はここで行う (Step 5 で見直し)
       const timestamp = new Date().toISOString();
       const traceId = this.traceIdGenerator();
       const requestId = this.requestIdGenerator();
-      
-      // 新しい標準化されたイベント名を使用
-      if (typeof this.eventEmitter.emitStandardized === 'function') {
-        this.eventEmitter.emitStandardized('log', 'context_provider_added', {
-          key,
-          timestamp,
-          traceId,
-          requestId
-        });
-      } else {
-        // 後方互換性のため
-        this.eventEmitter.emit('log:context_provider_added', {
-          key,
-          timestamp
-        });
-        
-        // 開発環境では警告を表示
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('非推奨のイベント名 log:context_provider_added が使用されています。代わりに log:context_provider_added を使用してください。');
-        }
-      }
+
+      // emitStandardized に統一
+      this.eventEmitter.emitStandardized('log', 'context_provider_added', {
+        key,
+        timestamp,
+        traceId,
+        requestId,
+      });
     }
   }
 }

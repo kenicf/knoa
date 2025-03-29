@@ -1,12 +1,12 @@
 /**
  * エラー処理ハンドラー
- * 
+ *
  * アプリケーション全体で一貫したエラー処理を提供するためのフレームワーク。
  * エラーの処理、ログ記録、回復、監視を一元管理します。
  */
 
-const { 
-  ApplicationError, 
+const {
+  ApplicationError,
   ValidationError,
   StateError,
   DataConsistencyError,
@@ -15,7 +15,7 @@ const {
   LockError,
   TimeoutError,
   ConfigurationError,
-  DependencyError
+  DependencyError,
 } = require('./error-framework');
 
 /**
@@ -36,20 +36,20 @@ class ErrorHandler {
     if (!eventEmitter) {
       throw new Error('ErrorHandler requires an eventEmitter instance');
     }
-    
+
     this.logger = logger;
     this.eventEmitter = eventEmitter;
     this.recoveryStrategies = new Map();
     this.errorPatterns = new Map();
     this.alertThresholds = new Map();
     this.errorCounts = new Map();
-    
+
     // デフォルトの回復戦略を登録
     this._registerDefaultRecoveryStrategies();
-    
+
     // デフォルトのエラーパターンを登録
     this._registerDefaultErrorPatterns();
-    
+
     // デフォルトのアラート閾値を登録
     this._registerDefaultAlertThresholds();
   }
@@ -69,91 +69,94 @@ class ErrorHandler {
     const traceId = options.traceId || this._generateTraceId();
     const requestId = options.requestId || this._generateRequestId();
     const timestamp = new Date().toISOString();
-    
+
     // アプリケーションエラーでなければラップする
     if (!(error instanceof ApplicationError)) {
       error = new ApplicationError(error.message, {
         cause: error,
-        context: { 
-          component, 
+        context: {
+          component,
           operation,
           traceId,
           requestId,
-          ...options.additionalContext
-        }
+          ...options.additionalContext,
+        },
       });
     } else if (error.context) {
       // 既存のコンテキストにトレース情報を追加
       error.context.traceId = traceId;
       error.context.requestId = requestId;
-      
+
       // 追加コンテキスト情報があれば追加
       if (options.additionalContext) {
         error.context = {
           ...error.context,
-          ...options.additionalContext
+          ...options.additionalContext,
         };
       }
     }
-    
+
     // エラーパターンの検出
     this._detectErrorPatterns(error, component, operation);
-    
+
     // エラーカウントの更新
     this._updateErrorCounts(error, component, operation);
-    
+
     // アラート条件の確認
     this._checkAlertThresholds(error, component, operation);
-    
+
     // エラーをログに記録
     this._logError(error, component, operation, traceId, requestId);
-    
+
     // エラーイベントを発行
     this._emitErrorEvent(error, component, operation, traceId, requestId);
-    
+
     // 回復可能なエラーの場合は回復を試みる
     if (error.recoverable) {
       try {
         // エラーコードに対応する回復戦略があるか確認
         if (this.recoveryStrategies.has(error.code)) {
           return await this._executeRecoveryStrategy(
-            error.code, 
-            error, 
-            component, 
-            operation, 
-            traceId, 
+            error.code,
+            error,
+            component,
+            operation,
+            traceId,
             requestId
           );
         }
-        
+
         // エラータイプに対応する回復戦略があるか確認
         const errorType = error.constructor.name;
         if (this.recoveryStrategies.has(errorType)) {
           return await this._executeRecoveryStrategy(
-            errorType, 
-            error, 
-            component, 
-            operation, 
-            traceId, 
+            errorType,
+            error,
+            component,
+            operation,
+            traceId,
             requestId
           );
         }
       } catch (recoveryError) {
-        this.logger.error(`Recovery failed for ${error.code || error.constructor.name}:`, {
-          original_error: error.message,
-          recovery_error: recoveryError.message,
-          trace_id: traceId,
-          request_id: requestId,
-          component,
-          operation,
-          stack: recoveryError.stack
-        });
-        
+        this.logger.error(
+          `Recovery failed for ${error.code || error.constructor.name}:`,
+          {
+            original_error: error.message,
+            recovery_error: recoveryError.message,
+            trace_id: traceId,
+            request_id: requestId,
+            component,
+            operation,
+            stack: recoveryError.stack,
+          }
+        );
+
         // 回復戦略が失敗した場合は例外を再スロー
         throw recoveryError;
       }
     }
-    
+
     return error;
   }
 
@@ -170,13 +173,19 @@ class ErrorHandler {
       context: error.context,
       trace_id: traceId,
       request_id: requestId,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
-    
+
     // エラーの重大度に応じてログレベルを変更
     if (error instanceof StateError || error instanceof DataConsistencyError) {
-      this.logger.error(`[${component}] ${operation} failed - CRITICAL:`, logData);
-    } else if (error instanceof ConfigurationError || error instanceof DependencyError) {
+      this.logger.error(
+        `[${component}] ${operation} failed - CRITICAL:`,
+        logData
+      );
+    } else if (
+      error instanceof ConfigurationError ||
+      error instanceof DependencyError
+    ) {
       this.logger.error(`[${component}] ${operation} failed - MAJOR:`, logData);
     } else {
       this.logger.error(`[${component}] ${operation} failed:`, logData);
@@ -189,7 +198,7 @@ class ErrorHandler {
    */
   _emitErrorEvent(error, component, operation, traceId, requestId) {
     if (!this.eventEmitter) return;
-    
+
     const eventData = {
       error,
       component,
@@ -198,9 +207,9 @@ class ErrorHandler {
       requestId,
       errorCode: error.code,
       recoverable: error.recoverable,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
-    
+
     // 標準化されたイベント発行を使用
     if (typeof this.eventEmitter.emitStandardized === 'function') {
       this.eventEmitter.emitStandardized('error', 'occurred', eventData);
@@ -214,9 +223,16 @@ class ErrorHandler {
    * 回復戦略を実行
    * @private
    */
-  async _executeRecoveryStrategy(strategyKey, error, component, operation, traceId, requestId) {
+  async _executeRecoveryStrategy(
+    strategyKey,
+    error,
+    component,
+    operation,
+    traceId,
+    requestId
+  ) {
     const strategy = this.recoveryStrategies.get(strategyKey);
-    
+
     try {
       // 回復処理の開始をイベントで通知
       if (this.eventEmitter) {
@@ -227,19 +243,25 @@ class ErrorHandler {
           errorCode: error.code,
           traceId,
           requestId,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
-        
+
         if (typeof this.eventEmitter.emitStandardized === 'function') {
-          this.eventEmitter.emitStandardized('error', 'recovery_started', eventData);
+          this.eventEmitter.emitStandardized(
+            'error',
+            'recovery_started',
+            eventData
+          );
         } else {
           this.eventEmitter.emit('error:recovery_started', eventData);
         }
       }
-      
+
       // 回復戦略を実行
-      const result = await Promise.resolve(strategy(error, component, operation, { traceId, requestId }));
-      
+      const result = await Promise.resolve(
+        strategy(error, component, operation, { traceId, requestId })
+      );
+
       // 回復成功をイベントで通知
       if (this.eventEmitter) {
         const eventData = {
@@ -250,19 +272,23 @@ class ErrorHandler {
           result,
           traceId,
           requestId,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
-        
+
         if (typeof this.eventEmitter.emitStandardized === 'function') {
-          this.eventEmitter.emitStandardized('error', 'recovery_succeeded', eventData);
+          this.eventEmitter.emitStandardized(
+            'error',
+            'recovery_succeeded',
+            eventData
+          );
         } else {
           this.eventEmitter.emit('error:recovery_succeeded', eventData);
         }
       }
-      
+
       // 回復成功カウントを更新
       this._updateRecoverySuccessCount(error.code || error.constructor.name);
-      
+
       return result;
     } catch (recoveryError) {
       // 回復失敗をイベントで通知
@@ -275,19 +301,23 @@ class ErrorHandler {
           errorCode: error.code,
           traceId,
           requestId,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
-        
+
         if (typeof this.eventEmitter.emitStandardized === 'function') {
-          this.eventEmitter.emitStandardized('error', 'recovery_failed', eventData);
+          this.eventEmitter.emitStandardized(
+            'error',
+            'recovery_failed',
+            eventData
+          );
         } else {
           this.eventEmitter.emit('error:recovery_failed', eventData);
         }
       }
-      
+
       // 回復失敗カウントを更新
       this._updateRecoveryFailureCount(error.code || error.constructor.name);
-      
+
       throw recoveryError;
     }
   }
@@ -316,18 +346,24 @@ class ErrorHandler {
     // エラータイプ別カウント
     const errorType = error.constructor.name;
     const errorTypeKey = `type:${errorType}`;
-    this.errorCounts.set(errorTypeKey, (this.errorCounts.get(errorTypeKey) || 0) + 1);
-    
+    this.errorCounts.set(
+      errorTypeKey,
+      (this.errorCounts.get(errorTypeKey) || 0) + 1
+    );
+
     // コンポーネント別カウント
     const componentKey = `component:${component}`;
-    this.errorCounts.set(componentKey, (this.errorCounts.get(componentKey) || 0) + 1);
-    
+    this.errorCounts.set(
+      componentKey,
+      (this.errorCounts.get(componentKey) || 0) + 1
+    );
+
     // エラーコード別カウント
     if (error.code) {
       const codeKey = `code:${error.code}`;
       this.errorCounts.set(codeKey, (this.errorCounts.get(codeKey) || 0) + 1);
     }
-    
+
     // 総カウント
     this.errorCounts.set('total', (this.errorCounts.get('total') || 0) + 1);
   }
@@ -339,7 +375,10 @@ class ErrorHandler {
   _updateRecoverySuccessCount(errorKey) {
     const key = `recovery_success:${errorKey}`;
     this.errorCounts.set(key, (this.errorCounts.get(key) || 0) + 1);
-    this.errorCounts.set('recovery_success:total', (this.errorCounts.get('recovery_success:total') || 0) + 1);
+    this.errorCounts.set(
+      'recovery_success:total',
+      (this.errorCounts.get('recovery_success:total') || 0) + 1
+    );
   }
 
   /**
@@ -349,7 +388,10 @@ class ErrorHandler {
   _updateRecoveryFailureCount(errorKey) {
     const key = `recovery_failure:${errorKey}`;
     this.errorCounts.set(key, (this.errorCounts.get(key) || 0) + 1);
-    this.errorCounts.set('recovery_failure:total', (this.errorCounts.get('recovery_failure:total') || 0) + 1);
+    this.errorCounts.set(
+      'recovery_failure:total',
+      (this.errorCounts.get('recovery_failure:total') || 0) + 1
+    );
   }
 
   /**
@@ -364,35 +406,45 @@ class ErrorHandler {
           error_type: error.constructor.name,
           component,
           operation,
-          pattern: patternName
+          pattern: patternName,
         });
-        
+
         if (this.eventEmitter) {
           const eventData = {
             error,
             component,
             operation,
             pattern: patternName,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           };
-          
+
           if (typeof this.eventEmitter.emitStandardized === 'function') {
-            this.eventEmitter.emitStandardized('error', 'pattern_detected', eventData);
+            this.eventEmitter.emitStandardized(
+              'error',
+              'pattern_detected',
+              eventData
+            );
           } else {
             this.eventEmitter.emit('error:pattern_detected', eventData);
           }
         }
-        
+
         // パターンカウントを更新
         const patternKey = `pattern:${patternName}`;
-        this.errorCounts.set(patternKey, (this.errorCounts.get(patternKey) || 0) + 1);
-        
+        this.errorCounts.set(
+          patternKey,
+          (this.errorCounts.get(patternKey) || 0) + 1
+        );
+
         // パターンに対応するアクションがあれば実行
         if (pattern.action) {
           try {
             pattern.action(error, component, operation);
           } catch (actionError) {
-            this.logger.error(`Error executing pattern action for ${patternName}:`, actionError);
+            this.logger.error(
+              `Error executing pattern action for ${patternName}:`,
+              actionError
+            );
           }
         }
       }
@@ -412,9 +464,9 @@ class ErrorHandler {
           component,
           operation,
           threshold: thresholdName,
-          severity: threshold.severity
+          severity: threshold.severity,
         });
-        
+
         if (this.eventEmitter) {
           const eventData = {
             error,
@@ -422,19 +474,26 @@ class ErrorHandler {
             operation,
             threshold: thresholdName,
             severity: threshold.severity,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           };
-          
+
           if (typeof this.eventEmitter.emitStandardized === 'function') {
-            this.eventEmitter.emitStandardized('error', 'alert_triggered', eventData);
+            this.eventEmitter.emitStandardized(
+              'error',
+              'alert_triggered',
+              eventData
+            );
           } else {
             this.eventEmitter.emit('error:alert_triggered', eventData);
           }
         }
-        
+
         // アラートカウントを更新
         const alertKey = `alert:${thresholdName}`;
-        this.errorCounts.set(alertKey, (this.errorCounts.get(alertKey) || 0) + 1);
+        this.errorCounts.set(
+          alertKey,
+          (this.errorCounts.get(alertKey) || 0) + 1
+        );
       }
     }
   }
@@ -449,23 +508,27 @@ class ErrorHandler {
    */
   registerRecoveryStrategy(key, strategy, options = {}) {
     this.recoveryStrategies.set(key, strategy);
-    
+
     // 登録イベントを発行
     if (this.eventEmitter) {
       const eventData = {
         key,
         description: options.description,
         priority: options.priority,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
-      
+
       if (typeof this.eventEmitter.emitStandardized === 'function') {
-        this.eventEmitter.emitStandardized('error', 'recovery_strategy_registered', eventData);
+        this.eventEmitter.emitStandardized(
+          'error',
+          'recovery_strategy_registered',
+          eventData
+        );
       } else {
         this.eventEmitter.emit('error:recovery_strategy_registered', eventData);
       }
     }
-    
+
     return this;
   }
 
@@ -475,21 +538,25 @@ class ErrorHandler {
    */
   removeRecoveryStrategy(key) {
     const result = this.recoveryStrategies.delete(key);
-    
+
     // 削除イベントを発行
     if (result && this.eventEmitter) {
       const eventData = {
         key,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
-      
+
       if (typeof this.eventEmitter.emitStandardized === 'function') {
-        this.eventEmitter.emitStandardized('error', 'recovery_strategy_removed', eventData);
+        this.eventEmitter.emitStandardized(
+          'error',
+          'recovery_strategy_removed',
+          eventData
+        );
       } else {
         this.eventEmitter.emit('error:recovery_strategy_removed', eventData);
       }
     }
-    
+
     return result;
   }
 
@@ -524,7 +591,7 @@ class ErrorHandler {
     this.alertThresholds.set(name, {
       condition,
       severity: options.severity || 'minor',
-      description: options.description
+      description: options.description,
     });
     return this;
   }
@@ -543,36 +610,50 @@ class ErrorHandler {
    */
   _registerDefaultRecoveryStrategies() {
     // リトライ戦略
-    this.registerRecoveryStrategy('ERR_TIMEOUT', async (error, component, operation, options) => {
-      this.logger.info(`Retrying operation after timeout: ${component}.${operation}`, {
-        trace_id: options.traceId,
-        request_id: options.requestId
-      });
-      
-      // 実際のリトライロジックはここに実装
-      // 例: 元の操作を再実行する
-      
-      return { retried: true, result: null };
-    }, {
-      description: 'タイムアウトエラーに対するリトライ戦略',
-      priority: 1
-    });
-    
+    this.registerRecoveryStrategy(
+      'ERR_TIMEOUT',
+      async (error, component, operation, options) => {
+        this.logger.info(
+          `Retrying operation after timeout: ${component}.${operation}`,
+          {
+            trace_id: options.traceId,
+            request_id: options.requestId,
+          }
+        );
+
+        // 実際のリトライロジックはここに実装
+        // 例: 元の操作を再実行する
+
+        return { retried: true, result: null };
+      },
+      {
+        description: 'タイムアウトエラーに対するリトライ戦略',
+        priority: 1,
+      }
+    );
+
     // ストレージエラーの回復戦略
-    this.registerRecoveryStrategy('ERR_STORAGE', async (error, component, operation, options) => {
-      this.logger.info(`Attempting storage recovery: ${component}.${operation}`, {
-        trace_id: options.traceId,
-        request_id: options.requestId
-      });
-      
-      // 実際の回復ロジックはここに実装
-      // 例: 代替ストレージを使用する
-      
-      return { recovered: true, result: null };
-    }, {
-      description: 'ストレージエラーに対する回復戦略',
-      priority: 2
-    });
+    this.registerRecoveryStrategy(
+      'ERR_STORAGE',
+      async (error, component, operation, options) => {
+        this.logger.info(
+          `Attempting storage recovery: ${component}.${operation}`,
+          {
+            trace_id: options.traceId,
+            request_id: options.requestId,
+          }
+        );
+
+        // 実際の回復ロジックはここに実装
+        // 例: 代替ストレージを使用する
+
+        return { recovered: true, result: null };
+      },
+      {
+        description: 'ストレージエラーに対する回復戦略',
+        priority: 2,
+      }
+    );
   }
 
   /**
@@ -589,7 +670,7 @@ class ErrorHandler {
         // 例: サーキットブレーカーを開く
       }
     );
-    
+
     // データ整合性エラーパターン
     this.registerErrorPattern(
       'data_consistency_errors',
@@ -609,20 +690,21 @@ class ErrorHandler {
     // 重大なエラーのアラート
     this.registerAlertThreshold(
       'critical_error',
-      (error) => error instanceof StateError || error instanceof DataConsistencyError,
+      (error) =>
+        error instanceof StateError || error instanceof DataConsistencyError,
       {
         severity: 'critical',
-        description: '重大なシステムエラーが発生した場合のアラート'
+        description: '重大なシステムエラーが発生した場合のアラート',
       }
     );
-    
+
     // 設定エラーのアラート
     this.registerAlertThreshold(
       'configuration_error',
       (error) => error instanceof ConfigurationError,
       {
         severity: 'major',
-        description: '設定エラーが発生した場合のアラート'
+        description: '設定エラーが発生した場合のアラート',
       }
     );
   }
@@ -636,7 +718,7 @@ class ErrorHandler {
     const errorsByComponent = {};
     const patternCounts = {};
     const alertCounts = {};
-    
+
     // 統計情報を集計
     for (const [key, count] of this.errorCounts.entries()) {
       if (key.startsWith('type:')) {
@@ -649,13 +731,14 @@ class ErrorHandler {
         alertCounts[key.substring(6)] = count;
       }
     }
-    
+
     // 回復成功率の計算
     const recoverySuccess = this.errorCounts.get('recovery_success:total') || 0;
     const recoveryFailure = this.errorCounts.get('recovery_failure:total') || 0;
     const totalRecoveryAttempts = recoverySuccess + recoveryFailure;
-    const recoverySuccessRate = totalRecoveryAttempts > 0 ? recoverySuccess / totalRecoveryAttempts : 0;
-    
+    const recoverySuccessRate =
+      totalRecoveryAttempts > 0 ? recoverySuccess / totalRecoveryAttempts : 0;
+
     return {
       total_errors: this.errorCounts.get('total') || 0,
       errors_by_type: errorsByType,
@@ -665,7 +748,7 @@ class ErrorHandler {
       recovery_attempts: totalRecoveryAttempts,
       recovery_success: recoverySuccess,
       recovery_failure: recoveryFailure,
-      recovery_success_rate: recoverySuccessRate
+      recovery_success_rate: recoverySuccessRate,
     };
   }
 
@@ -677,18 +760,20 @@ class ErrorHandler {
     const statistics = this.getErrorStatistics();
     const patterns = Array.from(this.errorPatterns.keys());
     const strategies = Array.from(this.recoveryStrategies.keys());
-    const thresholds = Array.from(this.alertThresholds.entries()).map(([name, config]) => ({
-      name,
-      severity: config.severity,
-      description: config.description
-    }));
-    
+    const thresholds = Array.from(this.alertThresholds.entries()).map(
+      ([name, config]) => ({
+        name,
+        severity: config.severity,
+        description: config.description,
+      })
+    );
+
     return {
       statistics,
       patterns,
       strategies,
       thresholds,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
   }
 }
@@ -706,5 +791,5 @@ module.exports = {
   LockError,
   TimeoutError,
   ConfigurationError,
-  DependencyError
+  DependencyError,
 };

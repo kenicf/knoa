@@ -4,70 +4,79 @@
 
 const SessionManagerAdapter = require('../../../src/lib/adapters/session-manager-adapter');
 const { EnhancedEventEmitter } = require('../../../src/lib/core/event-system');
-const { ValidationError } = require('../../../src/lib/utils/errors');
+const { ValidationError } = require('../../../src/lib/utils/errors'); // エラークラスは utils から取得
+const { createMockLogger } = require('../../helpers/mock-factory'); // Logger モックを使用
+const { expectStandardizedEventEmitted } = require('../../helpers/test-helpers'); // 標準化ヘルパーを使用
 
 describe('SessionManagerAdapter', () => {
   let adapter;
   let mockSessionManager;
   let mockEventEmitter;
   let mockLogger;
-  let emittedEvents;
+  // let emittedEvents; // emitStandardized を直接検証するため不要に
 
   beforeEach(() => {
-    emittedEvents = [];
-    
+    // emittedEvents = []; // 不要
+
     // モックの作成
     mockSessionManager = {
-      createNewSession: jest.fn().mockImplementation(previousSessionId => ({
-        session_handover: { 
+      createNewSession: jest.fn().mockImplementation((previousSessionId) => ({
+        session_handover: {
           session_id: 'session-test-1',
-          previous_session_id: previousSessionId
-        }
+          previous_session_id: previousSessionId,
+        },
       })),
-      updateSession: jest.fn().mockImplementation((sessionId, updateData) => ({ 
+      updateSession: jest.fn().mockImplementation((sessionId, updateData) => ({
         session_handover: { session_id: sessionId },
-        ...updateData
+        ...updateData,
       })),
-      endSession: jest.fn().mockImplementation(sessionId => ({ 
+      endSession: jest.fn().mockImplementation((sessionId) => ({
         session_handover: { session_id: sessionId },
         ended: true,
-        duration: 3600
+        duration: 3600,
       })),
       addTaskToSession: jest.fn().mockImplementation((sessionId, taskId) => ({
         session_handover: { session_id: sessionId },
-        tasks: [taskId]
+        tasks: [taskId],
       })),
-      removeTaskFromSession: jest.fn().mockImplementation((sessionId, taskId) => ({
-        session_handover: { session_id: sessionId },
-        tasks: []
-      })),
-      addGitCommitToSession: jest.fn().mockImplementation((sessionId, commitHash) => ({
-        session_handover: { session_id: sessionId },
-        commits: [commitHash]
-      }))
+      removeTaskFromSession: jest
+        .fn()
+        .mockImplementation((sessionId, taskId) => ({
+          session_handover: { session_id: sessionId },
+          tasks: [],
+        })),
+      addGitCommitToSession: jest
+        .fn()
+        .mockImplementation((sessionId, commitHash) => ({
+          session_handover: { session_id: sessionId },
+          commits: [commitHash],
+        })),
     };
-    
-    mockLogger = {
-      debug: jest.fn(),
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn()
+
+    mockLogger = createMockLogger(); // mock-factory から取得
+
+    // EventEmitter のモックを作成 (emitStandardized をスパイ)
+    mockEventEmitter = {
+        emitStandardized: jest.fn(),
+        // on メソッドは後方互換性テスト削除のため不要
     };
-    
-    // 実際のEventEmitterを使用
-    mockEventEmitter = new EnhancedEventEmitter({ logger: mockLogger });
-    
-    // イベントをキャプチャ
-    mockEventEmitter.on('*', (data, eventName) => {
-      emittedEvents.push({ name: eventName, data });
-    });
-    
+
+    // イベントキャプチャは不要に
+    // mockEventEmitter.on('*', (data, eventName) => {
+    //   emittedEvents.push({ name: eventName, data });
+    // });
+
     // アダプターの作成
     adapter = new SessionManagerAdapter(mockSessionManager, {
       eventEmitter: mockEventEmitter,
-      logger: mockLogger
+      logger: mockLogger,
     });
   });
+
+   afterEach(() => {
+       jest.clearAllMocks();
+       jest.restoreAllMocks();
+   });
 
   // 基本機能のテスト
   describe('基本機能', () => {
@@ -81,345 +90,216 @@ describe('SessionManagerAdapter', () => {
 
   // createNewSessionのテスト
   describe('createNewSession', () => {
-    test('新しいセッションを作成し、イベントを発行する', async () => {
+    test('新しいセッションを作成し、session_created イベントを発行する', async () => {
       const previousSessionId = 'previous-session-1';
       const result = await adapter.createNewSession(previousSessionId);
-      
-      // 基本的な機能のテスト
+
       expect(mockSessionManager.createNewSession).toHaveBeenCalledWith(previousSessionId);
       expect(result).toEqual({
-        session_handover: { 
+        session_handover: {
           session_id: 'session-test-1',
-          previous_session_id: previousSessionId
-        }
+          previous_session_id: previousSessionId,
+        },
       });
-      
-      // イベント発行のテスト
-      expect(emittedEvents.length).toBeGreaterThan(0);
-      const sessionCreatedEvent = emittedEvents.find(e => e.name === 'session:session_created');
-      expect(sessionCreatedEvent).toBeDefined();
-      expect(sessionCreatedEvent.data.id).toBe('session-test-1');
-      expect(sessionCreatedEvent.data.previousSessionId).toBe(previousSessionId);
-      expect(sessionCreatedEvent.data.timestamp).toBeDefined();
+
+      // イベント発行のテスト (expectStandardizedEventEmitted を使用)
+      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'session_created', {
+          id: 'session-test-1',
+          previousSessionId: previousSessionId,
+          // timestamp, traceId, requestId はヘルパー内で検証
+      });
     });
-    
+
     test('エラー時に適切に処理する', async () => {
-      mockSessionManager.createNewSession.mockImplementationOnce(() => {
-        throw new Error('セッション作成エラー');
-      });
-      
+      const error = new Error('セッション作成エラー');
+      mockSessionManager.createNewSession.mockImplementationOnce(() => { throw error; });
+
       const result = await adapter.createNewSession('previous-session-1');
-      // 修正された期待値 - 部分一致で検証
-      expect(result).toMatchObject({
-        error: true,
-        message: 'セッション作成エラー',
-        operation: 'createNewSession'
-      });
-      
-      // タイムスタンプなどの動的な値が存在することを確認
+      expect(result).toMatchObject({ error: true, message: 'セッション作成エラー', operation: 'createNewSession' });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalled();
-      expect(mockLogger.error).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('createNewSession'), error);
     });
   });
 
   // updateSessionのテスト
   describe('updateSession', () => {
-    test('セッションを更新し、イベントを発行する', async () => {
+    test('セッションを更新し、session_updated イベントを発行する', async () => {
       const sessionId = 'session-test-1';
       const updateData = { status: 'active' };
-      
+
       const result = await adapter.updateSession(sessionId, updateData);
-      
-      // 基本的な機能のテスト
+
       expect(mockSessionManager.updateSession).toHaveBeenCalledWith(sessionId, updateData);
-      expect(result).toEqual({ 
-        session_handover: { session_id: sessionId },
-        status: 'active'
-      });
-      
+      expect(result).toEqual({ session_handover: { session_id: sessionId }, status: 'active' });
+
       // イベント発行のテスト
-      const sessionUpdatedEvent = emittedEvents.find(e => e.name === 'session:session_updated');
-      expect(sessionUpdatedEvent).toBeDefined();
-      expect(sessionUpdatedEvent.data.id).toBe(sessionId);
-      expect(sessionUpdatedEvent.data.updates).toEqual(updateData);
-      expect(sessionUpdatedEvent.data.timestamp).toBeDefined();
+      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'session_updated', {
+          id: sessionId,
+          updates: updateData,
+      });
     });
-    
+
     test('エラー時に適切に処理する', async () => {
-      mockSessionManager.updateSession.mockImplementationOnce(() => {
-        throw new Error('セッション更新エラー');
-      });
-      
+        const error = new Error('セッション更新エラー');
+      mockSessionManager.updateSession.mockImplementationOnce(() => { throw error; });
+
       const result = await adapter.updateSession('session-test-1', { status: 'active' });
-      // 修正された期待値 - 部分一致で検証
-      expect(result).toMatchObject({
-        error: true,
-        message: 'セッション更新エラー',
-        operation: 'updateSession'
-      });
-      
-      // タイムスタンプなどの動的な値が存在することを確認
+      expect(result).toMatchObject({ error: true, message: 'セッション更新エラー', operation: 'updateSession' });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalled();
-      expect(mockLogger.error).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('updateSession'), error);
     });
   });
 
   // endSessionのテスト
   describe('endSession', () => {
-    test('セッションを終了し、イベントを発行する', async () => {
+    test('セッションを終了し、session_ended イベントを発行する', async () => {
       const sessionId = 'session-test-1';
-      
+
       const result = await adapter.endSession(sessionId);
-      
-      // 基本的な機能のテスト
+
       expect(mockSessionManager.endSession).toHaveBeenCalledWith(sessionId);
-      expect(result).toEqual({ 
-        session_handover: { session_id: sessionId },
-        ended: true,
-        duration: 3600
-      });
-      
+      expect(result).toEqual({ session_handover: { session_id: sessionId }, ended: true, duration: 3600 });
+
       // イベント発行のテスト
-      const sessionEndedEvent = emittedEvents.find(e => e.name === 'session:session_ended');
-      expect(sessionEndedEvent).toBeDefined();
-      expect(sessionEndedEvent.data.id).toBe(sessionId);
-      expect(sessionEndedEvent.data.endTime).toBeDefined();
-      expect(sessionEndedEvent.data.duration).toBe(3600);
+      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'session_ended', {
+          id: sessionId,
+          endTime: expect.any(String), // 実際の終了時間が入る
+          duration: 3600,
+      });
     });
-    
+
     test('エラー時に適切に処理する', async () => {
-      mockSessionManager.endSession.mockImplementationOnce(() => {
-        throw new Error('セッション終了エラー');
-      });
-      
+        const error = new Error('セッション終了エラー');
+      mockSessionManager.endSession.mockImplementationOnce(() => { throw error; });
+
       const result = await adapter.endSession('session-test-1');
-      // 修正された期待値 - 部分一致で検証
-      expect(result).toMatchObject({
-        error: true,
-        message: 'セッション終了エラー',
-        operation: 'endSession'
-      });
-      
-      // タイムスタンプなどの動的な値が存在することを確認
+      expect(result).toMatchObject({ error: true, message: 'セッション終了エラー', operation: 'endSession' });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalled();
-      expect(mockLogger.error).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('endSession'), error);
     });
   });
 
   // addTaskToSessionのテスト
   describe('addTaskToSession', () => {
-    test('セッションにタスクを追加し、イベントを発行する', async () => {
+    test('セッションにタスクを追加し、task_added イベントを発行する', async () => {
       const sessionId = 'session-test-1';
       const taskId = 'T001';
-      
+
       const result = await adapter.addTaskToSession(sessionId, taskId);
-      
-      // 基本的な機能のテスト
+
       expect(mockSessionManager.addTaskToSession).toHaveBeenCalledWith(sessionId, taskId);
-      expect(result).toEqual({ 
-        session_handover: { session_id: sessionId },
-        tasks: [taskId]
-      });
-      
+      expect(result).toEqual({ session_handover: { session_id: sessionId }, tasks: [taskId] });
+
       // イベント発行のテスト
-      const taskAddedEvent = emittedEvents.find(e => e.name === 'session:task_added');
-      expect(taskAddedEvent).toBeDefined();
-      expect(taskAddedEvent.data.sessionId).toBe(sessionId);
-      expect(taskAddedEvent.data.taskId).toBe(taskId);
-      expect(taskAddedEvent.data.timestamp).toBeDefined();
+      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'task_added', {
+          sessionId: sessionId,
+          taskId: taskId,
+      });
     });
-    
+
     test('タスクIDが不正な形式の場合はエラーを返す', async () => {
       const result = await adapter.addTaskToSession('session-test-1', 'invalid-task-id');
-      // 修正された期待値 - 部分一致で検証
-      expect(result).toMatchObject({
-        error: true,
-        message: expect.stringContaining('タスクIDはT000形式である必要があります'),
-        operation: 'addTaskToSession'
-      });
-      
-      // タイムスタンプなどの動的な値が存在することを確認
+      expect(result).toMatchObject({ error: true, message: expect.stringContaining('タスクIDはT000形式'), operation: 'addTaskToSession' });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('addTaskToSession'), expect.any(ValidationError));
     });
-    
+
     test('エラー時に適切に処理する', async () => {
-      mockSessionManager.addTaskToSession.mockImplementationOnce(() => {
-        throw new Error('タスク追加エラー');
-      });
-      
+        const error = new Error('タスク追加エラー');
+      mockSessionManager.addTaskToSession.mockImplementationOnce(() => { throw error; });
+
       const result = await adapter.addTaskToSession('session-test-1', 'T001');
-      // 修正された期待値 - 部分一致で検証
-      expect(result).toMatchObject({
-        error: true,
-        message: 'タスク追加エラー',
-        operation: 'addTaskToSession'
-      });
-      
-      // タイムスタンプなどの動的な値が存在することを確認
+      expect(result).toMatchObject({ error: true, message: 'タスク追加エラー', operation: 'addTaskToSession' });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalled();
-      expect(mockLogger.error).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('addTaskToSession'), error);
     });
   });
 
   // removeTaskFromSessionのテスト
   describe('removeTaskFromSession', () => {
-    test('セッションからタスクを削除し、イベントを発行する', async () => {
+    test('セッションからタスクを削除し、task_removed イベントを発行する', async () => {
       const sessionId = 'session-test-1';
       const taskId = 'T001';
-      
+
       const result = await adapter.removeTaskFromSession(sessionId, taskId);
-      
-      // 基本的な機能のテスト
+
       expect(mockSessionManager.removeTaskFromSession).toHaveBeenCalledWith(sessionId, taskId);
-      expect(result).toEqual({ 
-        session_handover: { session_id: sessionId },
-        tasks: []
-      });
-      
+      expect(result).toEqual({ session_handover: { session_id: sessionId }, tasks: [] });
+
       // イベント発行のテスト
-      const taskRemovedEvent = emittedEvents.find(e => e.name === 'session:task_removed');
-      expect(taskRemovedEvent).toBeDefined();
-      expect(taskRemovedEvent.data.sessionId).toBe(sessionId);
-      expect(taskRemovedEvent.data.taskId).toBe(taskId);
-      expect(taskRemovedEvent.data.timestamp).toBeDefined();
+      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'task_removed', {
+          sessionId: sessionId,
+          taskId: taskId,
+      });
     });
-    
+
     test('タスクIDが不正な形式の場合はエラーを返す', async () => {
       const result = await adapter.removeTaskFromSession('session-test-1', 'invalid-task-id');
-      // 修正された期待値 - 部分一致で検証
-      expect(result).toMatchObject({
-        error: true,
-        message: expect.stringContaining('タスクIDはT000形式である必要があります'),
-        operation: 'removeTaskFromSession'
-      });
-      
-      // タイムスタンプなどの動的な値が存在することを確認
+      expect(result).toMatchObject({ error: true, message: expect.stringContaining('タスクIDはT000形式'), operation: 'removeTaskFromSession' });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('removeTaskFromSession'), expect.any(ValidationError));
     });
-    
+
     test('エラー時に適切に処理する', async () => {
-      mockSessionManager.removeTaskFromSession.mockImplementationOnce(() => {
-        throw new Error('タスク削除エラー');
-      });
-      
+        const error = new Error('タスク削除エラー');
+      mockSessionManager.removeTaskFromSession.mockImplementationOnce(() => { throw error; });
+
       const result = await adapter.removeTaskFromSession('session-test-1', 'T001');
-      // 修正された期待値 - 部分一致で検証
-      expect(result).toMatchObject({
-        error: true,
-        message: 'タスク削除エラー',
-        operation: 'removeTaskFromSession'
-      });
-      
-      // タイムスタンプなどの動的な値が存在することを確認
+      expect(result).toMatchObject({ error: true, message: 'タスク削除エラー', operation: 'removeTaskFromSession' });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalled();
-      expect(mockLogger.error).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('removeTaskFromSession'), error);
     });
   });
 
   // addGitCommitToSessionのテスト
   describe('addGitCommitToSession', () => {
-    test('セッションにGitコミットを関連付け、イベントを発行する', async () => {
+    test('セッションにGitコミットを関連付け、git_commit_added イベントを発行する', async () => {
       const sessionId = 'session-test-1';
       const commitHash = 'abc123';
-      
+
       const result = await adapter.addGitCommitToSession(sessionId, commitHash);
-      
-      // 基本的な機能のテスト
+
       expect(mockSessionManager.addGitCommitToSession).toHaveBeenCalledWith(sessionId, commitHash);
-      expect(result).toEqual({ 
-        session_handover: { session_id: sessionId },
-        commits: [commitHash]
-      });
-      
+      expect(result).toEqual({ session_handover: { session_id: sessionId }, commits: [commitHash] });
+
       // イベント発行のテスト
-      const commitAddedEvent = emittedEvents.find(e => e.name === 'session:git_commit_added');
-      expect(commitAddedEvent).toBeDefined();
-      expect(commitAddedEvent.data.sessionId).toBe(sessionId);
-      expect(commitAddedEvent.data.commitHash).toBe(commitHash);
-      expect(commitAddedEvent.data.timestamp).toBeDefined();
+      expectStandardizedEventEmitted(mockEventEmitter, 'session', 'git_commit_added', {
+          sessionId: sessionId,
+          commitHash: commitHash,
+      });
     });
-    
+
     test('エラー時に適切に処理する', async () => {
-      mockSessionManager.addGitCommitToSession.mockImplementationOnce(() => {
-        throw new Error('コミット関連付けエラー');
-      });
-      
+        const error = new Error('コミット関連付けエラー');
+      mockSessionManager.addGitCommitToSession.mockImplementationOnce(() => { throw error; });
+
       const result = await adapter.addGitCommitToSession('session-test-1', 'abc123');
-      // 修正された期待値 - 部分一致で検証
-      expect(result).toMatchObject({
-        error: true,
-        message: 'コミット関連付けエラー',
-        operation: 'addGitCommitToSession'
-      });
-      
-      // タイムスタンプなどの動的な値が存在することを確認
+      expect(result).toMatchObject({ error: true, message: 'コミット関連付けエラー', operation: 'addGitCommitToSession' });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('addGitCommitToSession'), error);
     });
   });
 
-  // 後方互換性のテスト
-  describe('後方互換性', () => {
-    test('古いイベント名と新しいイベント名の両方が発行される', async () => {
-      // 古いイベント名と新しいイベント名のリスナーを登録
-      const oldEventListener = jest.fn();
-      const newEventListener = jest.fn();
-      
-      mockEventEmitter.on('session:started', oldEventListener);
-      mockEventEmitter.on('session:session_created', newEventListener);
-      
-      // セッションを作成
-      await adapter.createNewSession('previous-session-1');
-      
-      // 両方のリスナーが呼び出されることを確認
-      expect(oldEventListener).toHaveBeenCalled();
-      expect(newEventListener).toHaveBeenCalled();
-      
-      // 警告ログが出力されることを確認（開発環境の場合）
-      if (process.env.NODE_ENV === 'development') {
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          expect.stringContaining('非推奨のイベント名'),
-          expect.any(Object)
-        );
-      }
-    });
-  });
+  // 後方互換性のテストは削除
 
   // バリデーションのテスト
   describe('バリデーション', () => {
     test('必須パラメータがない場合はエラーを返す', async () => {
-      // _validateParamsをスパイ
-      jest.spyOn(adapter, '_validateParams').mockImplementationOnce(() => {
-        throw new ValidationError('必須パラメータがありません');
-      });
-      
+      // _validateParams はプライベートメソッドなので直接スパイせず、
+      // 実際にエラーが発生するケースで検証する
       const result = await adapter.updateSession(undefined, { status: 'active' });
-      // 修正された期待値 - 部分一致で検証
-      expect(result).toMatchObject({
-        error: true,
-        message: '必須パラメータがありません',
-        operation: 'updateSession'
-      });
-      
-      // タイムスタンプなどの動的な値が存在することを確認
+      expect(result).toMatchObject({ error: true, message: expect.stringContaining('必須パラメータ sessionId がありません'), operation: 'updateSession' });
       expect(result.timestamp).toBeDefined();
       expect(result.code).toBeDefined();
-      expect(mockLogger.error).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('updateSession'), expect.any(ValidationError));
     });
   });
 });

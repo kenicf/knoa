@@ -188,7 +188,10 @@
 <a name='L123'></a><a href='#L123'>123</a>
 <a name='L124'></a><a href='#L124'>124</a>
 <a name='L125'></a><a href='#L125'>125</a>
-<a name='L126'></a><a href='#L126'>126</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L126'></a><a href='#L126'>126</a>
+<a name='L127'></a><a href='#L127'>127</a>
+<a name='L128'></a><a href='#L128'>128</a>
+<a name='L129'></a><a href='#L129'>129</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -250,29 +253,22 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -286,8 +282,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -303,6 +299,15 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -313,9 +318,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
  * サービスコンテナ
- * 
+ *
  * 依存性注入のためのサービスコンテナを提供します。
  * サービスの登録、取得、ファクトリー関数のサポート、循環参照の検出などの機能を提供します。
  */
@@ -366,32 +372,34 @@ class ServiceContainer {
 <span class="cstat-no" title="statement not covered" >    if (this.services.has(name)) {</span>
 <span class="cstat-no" title="statement not covered" >      return this.services.get(name);</span>
     }
-    
+&nbsp;
     // ファクトリーが登録されているか確認
 <span class="cstat-no" title="statement not covered" >    if (this.factories.has(name)) {</span>
       // 循環参照のチェック
 <span class="cstat-no" title="statement not covered" >      if (this.resolving.has(name)) {</span>
-<span class="cstat-no" title="statement not covered" >        throw new Error(`循環参照が検出されました: ${Array.from(this.resolving).join(' -&gt; ')} -&gt; ${name}`);</span>
+<span class="cstat-no" title="statement not covered" >        throw new Error(</span>
+          `循環参照が検出されました: ${Array.from(this.resolving).join(' -&gt; ')} -&gt; ${name}`
+        );
       }
-      
+&nbsp;
       // 解決中のサービスとしてマーク
 <span class="cstat-no" title="statement not covered" >      this.resolving.add(name);</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      try {</span>
         // ファクトリー関数を実行してインスタンスを作成
         const factory = <span class="cstat-no" title="statement not covered" >this.factories.get(name);</span>
         const instance = <span class="cstat-no" title="statement not covered" >factory(this);</span>
-        
+&nbsp;
         // インスタンスをキャッシュ
 <span class="cstat-no" title="statement not covered" >        this.services.set(name, instance);</span>
-        
+&nbsp;
 <span class="cstat-no" title="statement not covered" >        return instance;</span>
       } finally {
         // 解決中のマークを解除
 <span class="cstat-no" title="statement not covered" >        this.resolving.delete(name);</span>
       }
     }
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    throw new Error(`サービス '${name}' が見つかりません`);</span>
   }
 &nbsp;
@@ -432,20 +440,21 @@ class ServiceContainer {
 <span class="cstat-no" title="statement not covered" >    return [</span>
       ...new Set([
         ...Array.from(this.services.keys()),
-        ...Array.from(this.factories.keys())
-      ])
+        ...Array.from(this.factories.keys()),
+      ]),
     ];
   }
 }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >module.exports = ServiceContainer;</span></pre></td></tr></table></pre>
+<span class="cstat-no" title="statement not covered" >module.exports = ServiceContainer;</span>
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-03-26T22:38:58.263Z
+                at 2025-03-29T11:46:38.498Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

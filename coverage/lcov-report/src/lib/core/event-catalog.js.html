@@ -1208,7 +1208,8 @@
 <a name='L1143'></a><a href='#L1143'>1143</a>
 <a name='L1144'></a><a href='#L1144'>1144</a>
 <a name='L1145'></a><a href='#L1145'>1145</a>
-<a name='L1146'></a><a href='#L1146'>1146</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L1146'></a><a href='#L1146'>1146</a>
+<a name='L1147'></a><a href='#L1147'>1147</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2353,9 +2354,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
  * イベントカタログ
- * 
+ *
  * システム全体で使用されるイベントの定義と説明を管理します。
  * このファイルでは、標準的なイベントの定義を提供します。
  */
@@ -2377,15 +2379,15 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     dependencies: 'タスクの依存関係',
     priority: 'タスクの優先度',
     estimated_hours: '見積もり時間',
-    progress_percentage: '進捗率'
+    progress_percentage: '進捗率',
   },
   examples: [
     `emitter.emitStandardized('task', 'created', { 
       id: 'T001', 
       title: '基本ディレクトリ構造の設計',
       status: 'pending'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('task:updated', {</span>
@@ -2395,7 +2397,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     id: 'タスクID',
     updates: '更新内容',
     previous: '更新前の値',
-    current: '更新後の値'
+    current: '更新後の値',
   },
   examples: [
     `emitter.emitStandardized('task', 'updated', { 
@@ -2403,8 +2405,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       updates: { status: 'in_progress' },
       previous: { status: 'pending' },
       current: { status: 'in_progress' }
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('task:deleted', {</span>
@@ -2412,14 +2414,14 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
   category: 'task',
   schema: {
     id: 'タスクID',
-    reason: '削除理由'
+    reason: '削除理由',
   },
   examples: [
     `emitter.emitStandardized('task', 'deleted', { 
       id: 'T001', 
       reason: '重複タスクのため削除'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('task:statusChanged', {</span>
@@ -2429,15 +2431,15 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     id: 'タスクID',
     previousStatus: '変更前のステータス',
     newStatus: '変更後のステータス',
-    timestamp: '変更日時'
+    timestamp: '変更日時',
   },
   examples: [
     `emitter.emitStandardized('task', 'statusChanged', { 
       id: 'T001', 
       previousStatus: 'pending',
       newStatus: 'in_progress'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // セッション関連イベント
@@ -2448,14 +2450,14 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     id: 'セッションID',
     timestamp: '開始時刻',
     project_id: 'プロジェクトID',
-    previous_session_id: '前回のセッションID'
+    previous_session_id: '前回のセッションID',
   },
   examples: [
     `emitter.emitStandardized('session', 'started', { 
       id: 'session-20250322-1',
       project_id: 'knoa'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('session:ended', {</span>
@@ -2465,15 +2467,15 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     id: 'セッションID',
     timestamp: '終了時刻',
     duration: 'セッション時間（秒）',
-    completed_tasks: '完了したタスク'
+    completed_tasks: '完了したタスク',
   },
   examples: [
     `emitter.emitStandardized('session', 'ended', { 
       id: 'session-20250322-1',
       duration: 3600,
       completed_tasks: ['T001', 'T002']
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('session:handover', {</span>
@@ -2482,15 +2484,15 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
   schema: {
     from_session_id: '引継ぎ元セッションID',
     to_session_id: '引継ぎ先セッションID',
-    handover_data: '引継ぎデータ'
+    handover_data: '引継ぎデータ',
   },
   examples: [
     `emitter.emitStandardized('session', 'handover', { 
       from_session_id: 'session-20250322-1',
       to_session_id: 'session-20250322-2',
       handover_data: { current_focus: 'T011' }
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // フィードバック関連イベント
@@ -2502,7 +2504,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     task_id: 'タスクID',
     content: 'フィードバック内容',
     type: 'フィードバックタイプ',
-    severity: '重要度'
+    severity: '重要度',
   },
   examples: [
     `emitter.emitStandardized('feedback', 'collected', { 
@@ -2511,8 +2513,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       content: 'ディレクトリ構造が複雑すぎる',
       type: 'improvement',
       severity: 'medium'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('feedback:resolved', {</span>
@@ -2521,15 +2523,15 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
   schema: {
     id: 'フィードバックID',
     resolution: '解決内容',
-    resolution_time: '解決にかかった時間'
+    resolution_time: '解決にかかった時間',
   },
   examples: [
     `emitter.emitStandardized('feedback', 'resolved', { 
       id: 'F001',
       resolution: 'ディレクトリ構造をシンプル化しました',
       resolution_time: 3600
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // Git関連イベント
@@ -2541,7 +2543,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     message: 'コミットメッセージ',
     author: '作者',
     files_changed: '変更されたファイル',
-    related_tasks: '関連タスク'
+    related_tasks: '関連タスク',
   },
   examples: [
     `emitter.emitStandardized('git', 'committed', { 
@@ -2550,8 +2552,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       author: 'AI Developer',
       files_changed: 5,
       related_tasks: ['T007']
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // ストレージ関連イベント
@@ -2565,7 +2567,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     filename: 'ファイル名',
     type: 'ファイルタイプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_read_before', {
@@ -2574,8 +2576,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       type: 'json',
       traceId: 'trace-1234567890',
       requestId: 'req-1234567890'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:file_read_after', {</span>
@@ -2589,7 +2591,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     success: '成功したかどうか',
     error: 'エラー情報（失敗時）',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_read_after', {
@@ -2599,8 +2601,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       success: true,
       traceId: 'trace-1234567890',
       requestId: 'req-1234567890'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // ファイル書き込み関連イベント
@@ -2613,7 +2615,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     filename: 'ファイル名',
     type: 'ファイルタイプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_write_before', {
@@ -2622,8 +2624,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       type: 'json',
       traceId: 'trace-1234567890',
       requestId: 'req-1234567890'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:file_write_after', {</span>
@@ -2637,7 +2639,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     success: '成功したかどうか',
     error: 'エラー情報（失敗時）',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_write_after', {
@@ -2647,8 +2649,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       success: true,
       traceId: 'trace-1234567890',
       requestId: 'req-1234567890'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:fileCreated', {</span>
@@ -2657,15 +2659,15 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
   schema: {
     path: 'ファイルパス',
     size: 'ファイルサイズ',
-    content_type: 'コンテンツタイプ'
+    content_type: 'コンテンツタイプ',
   },
   examples: [
     `emitter.emitStandardized('storage', 'fileCreated', { 
       path: 'ai-context/tasks/T011-implementation-strategy.md',
       size: 24560,
       content_type: 'text/markdown'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:fileUpdated', {</span>
@@ -2675,7 +2677,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     path: 'ファイルパス',
     previous_size: '更新前のサイズ',
     new_size: '更新後のサイズ',
-    changes: '変更内容'
+    changes: '変更内容',
   },
   examples: [
     `emitter.emitStandardized('storage', 'fileUpdated', { 
@@ -2683,8 +2685,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       previous_size: 4096,
       new_size: 4256,
       changes: { added_tasks: ['T011'] }
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // システム関連イベント
@@ -2694,15 +2696,15 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
   schema: {
     version: 'システムバージョン',
     components: '初期化されたコンポーネント',
-    startup_time: '起動時間（ミリ秒）'
+    startup_time: '起動時間（ミリ秒）',
   },
   examples: [
     `emitter.emitStandardized('system', 'initialized', { 
       version: '1.0.0',
       components: ['task', 'session', 'feedback'],
       startup_time: 1200
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('system:error', {</span>
@@ -2713,7 +2715,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     message: 'エラーメッセージ',
     component: 'エラーが発生したコンポーネント',
     stack: 'スタックトレース',
-    recoverable: '回復可能かどうか'
+    recoverable: '回復可能かどうか',
   },
   examples: [
     `emitter.emitStandardized('system', 'error', { 
@@ -2721,8 +2723,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       message: 'タスクIDが無効です',
       component: 'task-manager',
       recoverable: true
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // ロガー関連イベント
@@ -2736,7 +2738,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     context: 'コンテキスト情報',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('log', 'message_created', {
@@ -2746,8 +2748,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('log:alert_created', {</span>
@@ -2760,7 +2762,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     context: 'コンテキスト情報',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('log', 'alert_created', {
@@ -2770,8 +2772,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('log:transport_added', {</span>
@@ -2782,7 +2784,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     type: 'トランスポートタイプ',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('log', 'transport_added', {
@@ -2790,8 +2792,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('log:context_provider_added', {</span>
@@ -2802,7 +2804,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     key: 'プロバイダキー',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('log', 'context_provider_added', {
@@ -2810,8 +2812,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // キャッシュ関連イベント
@@ -2824,7 +2826,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     maxSize: '最大キャッシュサイズ',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('cache', 'system_initialized', {
@@ -2833,8 +2835,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('cache:item_set', {</span>
@@ -2846,7 +2848,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     ttl: 'TTL（ミリ秒）',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('cache', 'item_set', {
@@ -2855,8 +2857,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // イベント駆動アーキテクチャ関連イベント
@@ -2866,15 +2868,15 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
   schema: {
     name: 'イベント名',
     category: 'カテゴリ',
-    description: '説明'
+    description: '説明',
   },
   examples: [
     `emitter.emitStandardized('event', 'registered', {
       name: 'task:created',
       category: 'task',
       description: '新しいタスクが作成されたときに発行されます'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // StorageServiceの標準化されたイベント
@@ -2889,7 +2891,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_read_before', {
@@ -2900,8 +2902,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:file_read_after', {</span>
@@ -2917,7 +2919,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_read_after', {
@@ -2929,8 +2931,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:file_write_before', {</span>
@@ -2944,7 +2946,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_write_before', {
@@ -2955,8 +2957,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:file_write_after', {</span>
@@ -2972,7 +2974,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_write_after', {
@@ -2984,8 +2986,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:file_update_before', {</span>
@@ -2999,7 +3001,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_update_before', {
@@ -3010,8 +3012,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:file_update_after', {</span>
@@ -3027,7 +3029,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_update_after', {
@@ -3039,8 +3041,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:directory_list_before', {</span>
@@ -3053,7 +3055,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'directory_list_before', {
@@ -3063,8 +3065,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:directory_list_after', {</span>
@@ -3080,7 +3082,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'directory_list_after', {
@@ -3092,8 +3094,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:file_delete_before', {</span>
@@ -3106,7 +3108,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_delete_before', {
@@ -3116,8 +3118,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('storage:file_delete_after', {</span>
@@ -3132,7 +3134,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_delete_after', {
@@ -3143,8 +3145,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // TaskManagerの標準化されたイベント
@@ -3160,7 +3162,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('task', 'task_created', {
@@ -3171,8 +3173,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'task'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('task:task_updated', {</span>
@@ -3187,7 +3189,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('task', 'task_updated', {
@@ -3199,8 +3201,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'task'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('task:task_deleted', {</span>
@@ -3213,7 +3215,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('task', 'task_deleted', {
@@ -3223,8 +3225,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'task'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('task:status_changed', {</span>
@@ -3238,7 +3240,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('task', 'status_changed', {
@@ -3249,8 +3251,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'task'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('task:system_initialized', {</span>
@@ -3261,7 +3263,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('task', 'system_initialized', {
@@ -3269,8 +3271,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'task'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // SessionManagerの標準化されたイベント
@@ -3284,7 +3286,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('session', 'session_started', {
@@ -3294,8 +3296,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'session'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('session:session_ended', {</span>
@@ -3309,7 +3311,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('session', 'session_ended', {
@@ -3320,8 +3322,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'session'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('session:handover_created', {</span>
@@ -3335,7 +3337,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('session', 'handover_created', {
@@ -3346,8 +3348,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'session'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('session:system_initialized', {</span>
@@ -3358,7 +3360,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('session', 'system_initialized', {
@@ -3366,8 +3368,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'session'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // FeedbackManagerの標準化されたイベント
@@ -3384,7 +3386,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('feedback', 'feedback_collected', {
@@ -3397,8 +3399,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'feedback'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('feedback:feedback_resolved', {</span>
@@ -3412,7 +3414,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('feedback', 'feedback_resolved', {
@@ -3423,8 +3425,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'feedback'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('feedback:system_initialized', {</span>
@@ -3435,7 +3437,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('feedback', 'system_initialized', {
@@ -3443,8 +3445,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'feedback'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 // IntegrationManagerの標準化されたイベント
@@ -3458,7 +3460,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('integration', 'system_initialized', {
@@ -3468,8 +3470,8 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'integration'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >eventCatalog.registerEvent('integration:workflow_initialized', {</span>
@@ -3483,7 +3485,7 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('integration', 'workflow_initialized', {
@@ -3494,18 +3496,19 @@ const eventCatalog = <span class="cstat-no" title="statement not covered" >new E
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'integration'
-    });`
-  ]
+    });`,
+  ],
 });
 &nbsp;
-<span class="cstat-no" title="statement not covered" >module.exports = eventCatalog;</span></pre></td></tr></table></pre>
+<span class="cstat-no" title="statement not covered" >module.exports = eventCatalog;</span>
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-03-26T22:38:58.263Z
+                at 2025-03-29T11:46:38.498Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

@@ -13,7 +13,9 @@ class OperationContext {
    * @param {Object} options.metadata - メタデータ
    */
   constructor(options = {}) {
-    this.id = options.id || `ctx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    this.id =
+      options.id ||
+      `ctx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     this.startTime = new Date();
     this.errorOccurred = false;
     this.errorDetails = null;
@@ -21,7 +23,7 @@ class OperationContext {
     this.metadata = options.metadata || {};
     this.logger = options.logger || console;
   }
-  
+
   /**
    * エラー状態を設定
    * @param {Error} error - エラーオブジェクト
@@ -37,20 +39,23 @@ class OperationContext {
       component,
       operation,
       timestamp: new Date().toISOString(),
-      details
+      details,
     };
-    
+
     // ロガーへのエラー出力
     if (this.logger && typeof this.logger.error === 'function') {
       this.logger.error(`Error in ${component}.${operation}:`, error, details);
     }
-    
+
     // 親コンテキストにもエラーを伝播
-    if (this.parentContext && typeof this.parentContext.setError === 'function') {
+    if (
+      this.parentContext &&
+      typeof this.parentContext.setError === 'function'
+    ) {
       this.parentContext.setError(error, component, operation, details);
     }
   }
-  
+
   /**
    * エラー状態をチェック
    * @returns {boolean} エラーが発生している場合はtrue
@@ -58,7 +63,7 @@ class OperationContext {
   hasError() {
     return this.errorOccurred;
   }
-  
+
   /**
    * コンテキスト情報を取得
    * @returns {Object} コンテキスト情報
@@ -70,10 +75,10 @@ class OperationContext {
       duration: new Date() - this.startTime,
       hasError: this.errorOccurred,
       errorDetails: this.errorDetails,
-      metadata: this.metadata
+      metadata: this.metadata,
     };
   }
-  
+
   /**
    * 子コンテキストを作成
    * @param {Object} metadata - メタデータ
@@ -85,8 +90,8 @@ class OperationContext {
       parentContext: this,
       metadata: {
         ...this.metadata,
-        ...metadata
-      }
+        ...metadata,
+      },
     });
   }
 }

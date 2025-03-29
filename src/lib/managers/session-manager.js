@@ -1,6 +1,6 @@
 /**
  * セッション管理ユーティリティ
- * 
+ *
  * セッション間の状態引継ぎを管理するためのユーティリティ関数群
  */
 
@@ -25,34 +25,38 @@ class SessionManager {
    */
   constructor(options = {}) {
     // 必須依存関係の検証
-    if (!options.storageService) throw new Error('SessionManager requires a storageService instance');
-    if (!options.gitService) throw new Error('SessionManager requires a gitService instance');
-    
+    if (!options.storageService)
+      throw new Error('SessionManager requires a storageService instance');
+    if (!options.gitService)
+      throw new Error('SessionManager requires a gitService instance');
+
     // 依存関係の設定
     this.storageService = options.storageService;
     this.gitService = options.gitService;
     this.logger = options.logger || console;
     this.eventEmitter = options.eventEmitter;
     this.errorHandler = options.errorHandler;
-    
+
     // 設定オプションの設定
     this.config = options.config || {};
     this.sessionsDir = this.config.sessionsDir || 'ai-context/sessions';
     this.templateDir = this.config.templateDir || 'src/templates/docs';
-    
+
     // ディレクトリの存在確認はstorageServiceに委譲
-    this.storageService.ensureDirectoryExists(`${this.sessionsDir}/session-history`);
-    
-    this.logger.info('SessionManager initialized', { 
+    this.storageService.ensureDirectoryExists(
+      `${this.sessionsDir}/session-history`
+    );
+
+    this.logger.info('SessionManager initialized', {
       sessionsDir: this.sessionsDir,
-      templateDir: this.templateDir
+      templateDir: this.templateDir,
     });
-    
+
     // イベントエミッターが存在する場合はイベントを発行
     if (this.eventEmitter) {
       this.eventEmitter.emit('session:manager:initialized', {
         sessionsDir: this.sessionsDir,
-        templateDir: this.templateDir
+        templateDir: this.templateDir,
       });
     }
   }
@@ -70,7 +74,7 @@ class SessionManager {
     }
 
     const handover = session.session_handover;
-    
+
     // 必須フィールドのチェック
     const requiredFields = ['session_id', 'timestamp', 'project_state_summary'];
     for (const field of requiredFields) {
@@ -79,20 +83,20 @@ class SessionManager {
         return false;
       }
     }
-    
+
     // タイムスタンプの形式チェック
     if (handover.timestamp && !this._isValidISODate(handover.timestamp)) {
       this.logger.error(`不正なタイムスタンプ形式です: ${handover.timestamp}`);
       return false;
     }
-    
+
     // プロジェクト状態サマリーの検証
     const summary = handover.project_state_summary;
     if (typeof summary !== 'object') {
       this.logger.error('プロジェクト状態サマリーがオブジェクトではありません');
       return false;
     }
-    
+
     return true;
   }
 
@@ -103,17 +107,17 @@ class SessionManager {
   async getLatestSession() {
     try {
       const latestSessionPath = `${this.sessionsDir}/latest-session.json`;
-      
+
       if (!this.storageService.fileExists(latestSessionPath)) {
         return null;
       }
-      
+
       const session = await this.storageService.readJSON(latestSessionPath);
-      
+
       if (!session || !this.validateSession(session)) {
         return null;
       }
-      
+
       return session;
     } catch (error) {
       if (this.errorHandler) {
@@ -136,31 +140,39 @@ class SessionManager {
       if (!sessionId) {
         throw new Error('セッションIDが指定されていません');
       }
-      
+
       // 履歴ディレクトリからセッションを検索
       const historyDir = `${this.sessionsDir}/session-history`;
       const files = await this.storageService.listFiles(historyDir);
-      
+
       // セッションIDを含むファイル名を検索
-      const sessionFile = files.find(file => file.includes(sessionId));
-      
+      const sessionFile = files.find((file) => file.includes(sessionId));
+
       if (!sessionFile) {
         return null;
       }
-      
+
       // ファイルからセッションを読み込み
-      const session = await this.storageService.readJSON(`${historyDir}`, sessionFile);
-      
+      const session = await this.storageService.readJSON(
+        `${historyDir}`,
+        sessionFile
+      );
+
       if (!session || !this.validateSession(session)) {
         return null;
       }
-      
+
       return session;
     } catch (error) {
       if (this.errorHandler) {
-        this.errorHandler.handle(error, 'SessionManager', 'getSessionById', { sessionId });
+        this.errorHandler.handle(error, 'SessionManager', 'getSessionById', {
+          sessionId,
+        });
       } else {
-        this.logger.error(`セッションID ${sessionId} の取得に失敗しました:`, error);
+        this.logger.error(
+          `セッションID ${sessionId} の取得に失敗しました:`,
+          error
+        );
       }
       return null;
     }
@@ -176,12 +188,12 @@ class SessionManager {
     if (!/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(dateString)) {
       return false;
     }
-    
+
     const date = new Date(dateString);
     return date instanceof Date && !isNaN(date);
   }
 }
 
 module.exports = {
-  SessionManager
+  SessionManager,
 };

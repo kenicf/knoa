@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/65</span>
+                <span class='fraction'>0/67</span>
             </div>
         
             
@@ -249,7 +249,20 @@
 <a name='L184'></a><a href='#L184'>184</a>
 <a name='L185'></a><a href='#L185'>185</a>
 <a name='L186'></a><a href='#L186'>186</a>
-<a name='L187'></a><a href='#L187'>187</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L187'></a><a href='#L187'>187</a>
+<a name='L188'></a><a href='#L188'>188</a>
+<a name='L189'></a><a href='#L189'>189</a>
+<a name='L190'></a><a href='#L190'>190</a>
+<a name='L191'></a><a href='#L191'>191</a>
+<a name='L192'></a><a href='#L192'>192</a>
+<a name='L193'></a><a href='#L193'>193</a>
+<a name='L194'></a><a href='#L194'>194</a>
+<a name='L195'></a><a href='#L195'>195</a>
+<a name='L196'></a><a href='#L196'>196</a>
+<a name='L197'></a><a href='#L197'>197</a>
+<a name='L198'></a><a href='#L198'>198</a>
+<a name='L199'></a><a href='#L199'>199</a>
+<a name='L200'></a><a href='#L200'>200</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -278,6 +291,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -293,7 +308,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -401,7 +418,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -410,9 +430,14 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -434,10 +459,11 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
  * セッション管理ユーティリティ
- * 
+ *
  * セッション間の状態引継ぎを管理するためのユーティリティ関数群
  */
 &nbsp;
@@ -462,34 +488,38 @@ class SessionManager {
    */
 <span class="fstat-no" title="function not covered" >  co</span>nstructor(options = <span class="branch-0 cbranch-no" title="branch not covered" >{})</span> {
     // 必須依存関係の検証
-<span class="cstat-no" title="statement not covered" >    if (!options.storageService) <span class="cstat-no" title="statement not covered" >throw new Error('SessionManager requires a storageService instance');</span></span>
-<span class="cstat-no" title="statement not covered" >    if (!options.gitService) <span class="cstat-no" title="statement not covered" >throw new Error('SessionManager requires a gitService instance');</span></span>
-    
+<span class="cstat-no" title="statement not covered" >    if (!options.storageService)</span>
+<span class="cstat-no" title="statement not covered" >      throw new Error('SessionManager requires a storageService instance');</span>
+<span class="cstat-no" title="statement not covered" >    if (!options.gitService)</span>
+<span class="cstat-no" title="statement not covered" >      throw new Error('SessionManager requires a gitService instance');</span>
+&nbsp;
     // 依存関係の設定
 <span class="cstat-no" title="statement not covered" >    this.storageService = options.storageService;</span>
 <span class="cstat-no" title="statement not covered" >    this.gitService = options.gitService;</span>
 <span class="cstat-no" title="statement not covered" >    this.logger = options.logger || console;</span>
 <span class="cstat-no" title="statement not covered" >    this.eventEmitter = options.eventEmitter;</span>
 <span class="cstat-no" title="statement not covered" >    this.errorHandler = options.errorHandler;</span>
-    
+&nbsp;
     // 設定オプションの設定
 <span class="cstat-no" title="statement not covered" >    this.config = options.config || {};</span>
 <span class="cstat-no" title="statement not covered" >    this.sessionsDir = this.config.sessionsDir || 'ai-context/sessions';</span>
 <span class="cstat-no" title="statement not covered" >    this.templateDir = this.config.templateDir || 'src/templates/docs';</span>
-    
+&nbsp;
     // ディレクトリの存在確認はstorageServiceに委譲
-<span class="cstat-no" title="statement not covered" >    this.storageService.ensureDirectoryExists(`${this.sessionsDir}/session-history`);</span>
-    
-<span class="cstat-no" title="statement not covered" >    this.logger.info('SessionManager initialized', { </span>
+<span class="cstat-no" title="statement not covered" >    this.storageService.ensureDirectoryExists(</span>
+      `${this.sessionsDir}/session-history`
+    );
+&nbsp;
+<span class="cstat-no" title="statement not covered" >    this.logger.info('SessionManager initialized', {</span>
       sessionsDir: this.sessionsDir,
-      templateDir: this.templateDir
+      templateDir: this.templateDir,
     });
-    
+&nbsp;
     // イベントエミッターが存在する場合はイベントを発行
 <span class="cstat-no" title="statement not covered" >    if (this.eventEmitter) {</span>
 <span class="cstat-no" title="statement not covered" >      this.eventEmitter.emit('session:manager:initialized', {</span>
         sessionsDir: this.sessionsDir,
-        templateDir: this.templateDir
+        templateDir: this.templateDir,
       });
     }
   }
@@ -507,7 +537,7 @@ class SessionManager {
     }
 &nbsp;
     const handover = <span class="cstat-no" title="statement not covered" >session.session_handover;</span>
-    
+&nbsp;
     // 必須フィールドのチェック
     const requiredFields = <span class="cstat-no" title="statement not covered" >['session_id', 'timestamp', 'project_state_summary'];</span>
 <span class="cstat-no" title="statement not covered" >    for (const field of requiredFields) {</span>
@@ -516,20 +546,20 @@ class SessionManager {
 <span class="cstat-no" title="statement not covered" >        return false;</span>
       }
     }
-    
+&nbsp;
     // タイムスタンプの形式チェック
 <span class="cstat-no" title="statement not covered" >    if (handover.timestamp &amp;&amp; !this._isValidISODate(handover.timestamp)) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.error(`不正なタイムスタンプ形式です: ${handover.timestamp}`);</span>
 <span class="cstat-no" title="statement not covered" >      return false;</span>
     }
-    
+&nbsp;
     // プロジェクト状態サマリーの検証
     const summary = <span class="cstat-no" title="statement not covered" >handover.project_state_summary;</span>
 <span class="cstat-no" title="statement not covered" >    if (typeof summary !== 'object') {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.error('プロジェクト状態サマリーがオブジェクトではありません');</span>
 <span class="cstat-no" title="statement not covered" >      return false;</span>
     }
-    
+&nbsp;
 <span class="cstat-no" title="statement not covered" >    return true;</span>
   }
 &nbsp;
@@ -540,17 +570,17 @@ class SessionManager {
 <span class="fstat-no" title="function not covered" >  as</span>ync getLatestSession() {
 <span class="cstat-no" title="statement not covered" >    try {</span>
       const latestSessionPath = <span class="cstat-no" title="statement not covered" >`${this.sessionsDir}/latest-session.json`;</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      if (!this.storageService.fileExists(latestSessionPath)) {</span>
 <span class="cstat-no" title="statement not covered" >        return null;</span>
       }
-      
+&nbsp;
       const session = <span class="cstat-no" title="statement not covered" >await this.storageService.readJSON(latestSessionPath);</span>
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      if (!session || !this.validateSession(session)) {</span>
 <span class="cstat-no" title="statement not covered" >        return null;</span>
       }
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return session;</span>
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      if (this.errorHandler) {</span>
@@ -573,31 +603,39 @@ class SessionManager {
 <span class="cstat-no" title="statement not covered" >      if (!sessionId) {</span>
 <span class="cstat-no" title="statement not covered" >        throw new Error('セッションIDが指定されていません');</span>
       }
-      
+&nbsp;
       // 履歴ディレクトリからセッションを検索
       const historyDir = <span class="cstat-no" title="statement not covered" >`${this.sessionsDir}/session-history`;</span>
       const files = <span class="cstat-no" title="statement not covered" >await this.storageService.listFiles(historyDir);</span>
-      
+&nbsp;
       // セッションIDを含むファイル名を検索
-      const sessionFile = <span class="cstat-no" title="statement not covered" >files.find(<span class="fstat-no" title="function not covered" >fi</span>le =&gt; <span class="cstat-no" title="statement not covered" >file.includes(sessionId))</span>;</span>
-      
+      const sessionFile = <span class="cstat-no" title="statement not covered" >files.find(<span class="fstat-no" title="function not covered" >(f</span>ile) =&gt; <span class="cstat-no" title="statement not covered" >file.includes(sessionId))</span>;</span>
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      if (!sessionFile) {</span>
 <span class="cstat-no" title="statement not covered" >        return null;</span>
       }
-      
+&nbsp;
       // ファイルからセッションを読み込み
-      const session = <span class="cstat-no" title="statement not covered" >await this.storageService.readJSON(`${historyDir}`, sessionFile);</span>
-      
+      const session = <span class="cstat-no" title="statement not covered" >await this.storageService.readJSON(</span>
+        `${historyDir}`,
+        sessionFile
+      );
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      if (!session || !this.validateSession(session)) {</span>
 <span class="cstat-no" title="statement not covered" >        return null;</span>
       }
-      
+&nbsp;
 <span class="cstat-no" title="statement not covered" >      return session;</span>
     } catch (error) {
 <span class="cstat-no" title="statement not covered" >      if (this.errorHandler) {</span>
-<span class="cstat-no" title="statement not covered" >        this.errorHandler.handle(error, 'SessionManager', 'getSessionById', { sessionId });</span>
+<span class="cstat-no" title="statement not covered" >        this.errorHandler.handle(error, 'SessionManager', 'getSessionById', {</span>
+          sessionId,
+        });
       } else {
-<span class="cstat-no" title="statement not covered" >        this.logger.error(`セッションID ${sessionId} の取得に失敗しました:`, error);</span>
+<span class="cstat-no" title="statement not covered" >        this.logger.error(</span>
+          `セッションID ${sessionId} の取得に失敗しました:`,
+          error
+        );
       }
 <span class="cstat-no" title="statement not covered" >      return null;</span>
     }
@@ -613,22 +651,23 @@ class SessionManager {
 <span class="cstat-no" title="statement not covered" >    if (!/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(dateString)) {</span>
 <span class="cstat-no" title="statement not covered" >      return false;</span>
     }
-    
+&nbsp;
     const date = <span class="cstat-no" title="statement not covered" >new Date(dateString);</span>
 <span class="cstat-no" title="statement not covered" >    return date instanceof Date &amp;&amp; !isNaN(date);</span>
   }
 }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >module.exports = {</span>
-  SessionManager
-};</pre></td></tr></table></pre>
+  SessionManager,
+};
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-03-26T22:38:58.404Z
+                at 2025-03-29T11:46:38.673Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

@@ -3,7 +3,9 @@
  */
 
 const ServiceContainer = require('../../../src/lib/core/service-container');
-const { registerServices } = require('../../../src/lib/core/service-definitions');
+const {
+  registerServices,
+} = require('../../../src/lib/core/service-definitions');
 
 // モック
 jest.mock('../../../src/lib/core/error-handler');
@@ -34,37 +36,37 @@ describe('ServiceDefinitions', () => {
     container = new ServiceContainer();
     config = {
       storage: {
-        basePath: '/test/path'
+        basePath: '/test/path',
       },
       git: {
-        repoPath: '/test/repo'
+        repoPath: '/test/repo',
       },
       session: {
         sessionsDir: '/test/sessions',
-        templateDir: '/test/templates'
+        templateDir: '/test/templates',
       },
       feedback: {
         feedbackDir: '/test/feedback',
-        templateDir: '/test/templates'
+        templateDir: '/test/templates',
       },
       logger: {
-        level: 'debug'
+        level: 'debug',
       },
       cache: {
-        ttl: 60000
+        ttl: 60000,
       },
       lock: {
-        timeout: 5000
+        timeout: 5000,
       },
       state: {
-        persistPath: '/test/state'
-      }
+        persistPath: '/test/state',
+      },
     };
   });
 
   test('基本サービスが登録されること', () => {
     registerServices(container, config);
-    
+
     // 基本サービス
     expect(container.has('fs')).toBe(true);
     expect(container.has('path')).toBe(true);
@@ -75,7 +77,7 @@ describe('ServiceDefinitions', () => {
 
   test('コアコンポーネントが登録されること', () => {
     registerServices(container, config);
-    
+
     // コアコンポーネント
     expect(container.has('eventEmitter')).toBe(true);
     expect(container.has('eventCatalog')).toBe(true);
@@ -86,7 +88,7 @@ describe('ServiceDefinitions', () => {
 
   test('ユーティリティが登録されること', () => {
     registerServices(container, config);
-    
+
     // ユーティリティ
     expect(container.has('storageService')).toBe(true);
     expect(container.has('gitService')).toBe(true);
@@ -99,7 +101,7 @@ describe('ServiceDefinitions', () => {
 
   test('マネージャークラスが登録されること', () => {
     registerServices(container, config);
-    
+
     // マネージャークラス
     expect(container.has('sessionManager')).toBe(true);
     expect(container.has('feedbackManager')).toBe(true);
@@ -108,7 +110,7 @@ describe('ServiceDefinitions', () => {
 
   test('アダプターが登録されること', () => {
     registerServices(container, config);
-    
+
     // アダプター
     expect(container.has('taskManagerAdapter')).toBe(true);
     expect(container.has('sessionManagerAdapter')).toBe(true);
@@ -117,7 +119,7 @@ describe('ServiceDefinitions', () => {
 
   test('統合マネージャーが登録されること', () => {
     registerServices(container, config);
-    
+
     // 統合マネージャー
     expect(container.has('integrationManager')).toBe(true);
   });
@@ -125,7 +127,7 @@ describe('ServiceDefinitions', () => {
   test('依存関係が正しく解決されること', () => {
     // モックの実装をクリア
     jest.clearAllMocks();
-    
+
     // 依存関係のモック
     const ErrorHandler = require('../../../src/lib/core/error-handler');
     const EnhancedEventEmitter = require('../../../src/lib/core/event-system');
@@ -144,13 +146,13 @@ describe('ServiceDefinitions', () => {
     const SessionManagerAdapter = require('../../../src/lib/adapters/session-manager-adapter');
     const FeedbackManagerAdapter = require('../../../src/lib/adapters/feedback-manager-adapter');
     const IntegrationManager = require('../../../src/lib/managers/integration-manager');
-    
+
     // サービスを登録
     registerServices(container, config);
-    
+
     // 依存関係の解決をテスト
     container.get('integrationManager');
-    
+
     // 各コンストラクタが呼ばれたことを確認
     expect(EnhancedEventEmitter).toHaveBeenCalled();
     expect(EventCatalog).toHaveBeenCalled();

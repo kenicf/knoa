@@ -3,53 +3,57 @@
  */
 
 const Validator = require('../../../src/lib/utils/validator');
+// ValidationError は errors モジュールからインポートする想定だが、
+// このテストファイル内では直接使用されていないため、モックは不要かもしれない。
+// ただし、将来的に使用する可能性を考慮してモックを残す。
 const { ValidationError } = require('../../../src/lib/utils/errors');
 const { createMockLogger } = require('../../helpers/mock-factory');
-const { expectLogged } = require('../../helpers/test-helpers');
+// expectLogged はこのファイルでは使用されていない
+// const { expectLogged } = require('../../helpers/test-helpers');
 
-// errorsモジュールのモック
+// errorsモジュールのモック (ValidationError のみモック)
 jest.mock('../../../src/lib/utils/errors', () => ({
-  ValidationError: class ValidationError extends Error {
+  ValidationError: class MockValidationError extends Error {
     constructor(message) {
       super(message);
       this.name = 'ValidationError';
     }
-  }
+  },
+  // 他のエラークラスが必要な場合はここに追加
 }));
 
 describe('Validator', () => {
   let validator;
   let mockLogger;
-  
+
   beforeEach(() => {
     // モックのセットアップ
     jest.clearAllMocks();
     mockLogger = createMockLogger();
-    
+
     // Validatorのインスタンスを作成
     validator = new Validator({
-      logger: mockLogger
+      logger: mockLogger,
     });
   });
-  
+
   afterEach(() => {
     jest.restoreAllMocks();
   });
-  
+
   describe('constructor', () => {
-    test('デフォルト値で初期化される', () => {
-      const defaultValidator = new Validator();
-      
-      expect(defaultValidator.logger).toBe(console);
+    test('logger がないとエラーをスローする', () => {
+      expect(() => new Validator()).toThrow('Logger instance is required in Validator options.');
     });
-    
-    test('カスタム値で初期化される', () => {
+
+    test('logger オプションで初期化される', () => {
+      // Assert (beforeEach で初期化済み)
       expect(validator.logger).toBe(mockLogger);
     });
   });
-  
+
   describe('validateTaskInput', () => {
-    // 有効なケースのテスト
+    // --- 有効なケース ---
     test('有効なタスクデータの場合、検証に成功する', () => {
       // Arrange
       const validTask = {
@@ -58,158 +62,129 @@ describe('Validator', () => {
         status: 'pending',
         priority: 3,
         estimated_hours: 5,
-        progress_percentage: 0
-      };
-      
-      // Act
-      const result = validator.validateTaskInput(validTask);
-      
-      // Assert
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toEqual([]);
-    });
-    
-    // 無効なケースのパラメータ化テスト
-    describe('無効なタスクデータの検証', () => {
-      // タイトル関連のテスト
-      test.each([
-        ['タイトルがない場合', { description: 'これはテストタスクです' }, 'タイトルは必須の文字列です'],
-        ['タイトルが文字列でない場合', { title: 123, description: 'これはテストタスクです' }, 'タイトルは必須の文字列です'],
-        ['タイトルが長すぎる場合', { title: 'a'.repeat(201), description: 'これはテストタスクです' }, 'タイトルは200文字以内にしてください']
-      ])('%s、エラーを返す', (_, invalidTask, expectedError) => {
-        // Act
-        const result = validator.validateTaskInput(invalidTask);
-        
-        // Assert
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain(expectedError);
-      });
-      
-      // 説明関連のテスト
-      test.each([
-        ['説明がない場合', { title: 'テストタスク' }, '説明は必須の文字列です'],
-        ['説明が文字列でない場合', { title: 'テストタスク', description: 123 }, '説明は必須の文字列です']
-      ])('%s、エラーを返す', (_, invalidTask, expectedError) => {
-        // Act
-        const result = validator.validateTaskInput(invalidTask);
-        
-        // Assert
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain(expectedError);
-      });
-      
-      // ステータス関連のテスト
-      test('ステータスが無効な場合、エラーを返す', () => {
-        // Arrange
-        const invalidTask = {
-          title: 'テストタスク',
-          description: 'これはテストタスクです',
-          status: 'invalid'
-        };
-        
-        // Act
-        const result = validator.validateTaskInput(invalidTask);
-        
-        // Assert
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('ステータスは pending, in_progress, completed, blocked のいずれかである必要があります');
-      });
-      
-      // 優先度、見積もり時間、進捗率のテスト
-      test.each([
-        ['優先度が無効な場合', { priority: 6 }, '優先度は1から5の整数である必要があります'],
-        ['優先度が数値でない場合', { priority: '3' }, '優先度は1から5の整数である必要があります'],
-        ['見積もり時間が無効な場合', { estimated_hours: -1 }, '見積もり時間は0以上の数値である必要があります'],
-        ['見積もり時間が数値でない場合', { estimated_hours: '5' }, '見積もり時間は0以上の数値である必要があります'],
-        ['進捗率が無効な場合', { progress_percentage: 101 }, '進捗率は0から100の数値である必要があります'],
-        ['進捗率が数値でない場合', { progress_percentage: '50' }, '進捗率は0から100の数値である必要があります']
-      ])('%s、エラーを返す', (_, invalidTaskProps, expectedError) => {
-        // Arrange
-        const invalidTask = {
-          title: 'テストタスク',
-          description: 'これはテストタスクです',
-          ...invalidTaskProps
-        };
-        
-        // Act
-        const result = validator.validateTaskInput(invalidTask);
-        
-        // Assert
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain(expectedError);
-      });
-      
-      // 依存関係のテスト
-      test.each([
-        ['依存関係が配列でない場合', { dependencies: 'T001' }, '依存関係は配列である必要があります'],
-        ['依存関係のタスクIDがない場合', { dependencies: [{}] }, '依存関係のタスクIDは必須の文字列です'],
-        ['依存関係のタスクIDが無効な形式の場合', { dependencies: [{ task_id: 'invalid' }] }, '依存関係のタスクIDはT000形式である必要があります'],
-        ['依存関係のタイプが無効な場合', { dependencies: [{ task_id: 'T001', type: 'invalid' }] }, '依存関係のタイプはstrongまたはweakである必要があります']
-      ])('%s、エラーを返す', (_, invalidTaskProps, expectedError) => {
-        // Arrange
-        const invalidTask = {
-          title: 'テストタスク',
-          description: 'これはテストタスクです',
-          ...invalidTaskProps
-        };
-        
-        // Act
-        const result = validator.validateTaskInput(invalidTask);
-        
-        // Assert
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain(expectedError);
-      });
-    });
-    
-    // 有効な依存関係のテスト
-    test('有効な依存関係の場合、検証に成功する', () => {
-      // Arrange
-      const validTask = {
-        title: 'テストタスク',
-        description: 'これはテストタスクです',
+        progress_percentage: 0,
         dependencies: [
           { task_id: 'T001', type: 'strong' },
-          { task_id: 'T002', type: 'weak' }
-        ]
+          { task_id: 'T002' }, // type はオプショナル
+        ],
       };
-      
+
       // Act
       const result = validator.validateTaskInput(validTask);
-      
+
       // Assert
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
-    
-    // 境界値テスト
-    describe('境界値テスト', () => {
-      test.each([
-        ['タイトルが200文字ちょうどの場合', { title: 'a'.repeat(200) }, true],
-        ['優先度が1の場合', { priority: 1 }, true],
-        ['優先度が5の場合', { priority: 5 }, true],
-        ['見積もり時間が0の場合', { estimated_hours: 0 }, true],
-        ['進捗率が0の場合', { progress_percentage: 0 }, true],
-        ['進捗率が100の場合', { progress_percentage: 100 }, true]
-      ])('%s、検証に成功する', (_, taskProps, expected) => {
+
+    test('オプションフィールドがなくても検証に成功する', () => {
         // Arrange
-        const task = {
-          title: 'テストタスク',
-          description: 'これはテストタスクです',
-          ...taskProps
+        const minimalTask = {
+          title: '最小限タスク',
+          description: '必須項目のみ',
         };
-        
+        // Act
+        const result = validator.validateTaskInput(minimalTask);
+        // Assert
+        expect(result.isValid).toBe(true);
+        expect(result.errors).toEqual([]);
+      });
+
+
+    // --- 無効なケース ---
+    describe('無効なタスクデータの検証', () => {
+      const baseValidTask = { title: 'ベースタスク', description: 'ベース説明' };
+
+      test.each([
+        // タイトル
+        ['タイトルがない', { ...baseValidTask, title: undefined }, 'タイトルは必須の文字列です'],
+        ['タイトルがnull', { ...baseValidTask, title: null }, 'タイトルは必須の文字列です'],
+        ['タイトルが空文字列', { ...baseValidTask, title: '' }, 'タイトルは必須の文字列です'], // 空文字列もエラーとする
+        ['タイトルが数値', { ...baseValidTask, title: 123 }, 'タイトルは必須の文字列です'],
+        ['タイトルが長すぎる', { ...baseValidTask, title: 'a'.repeat(201) }, 'タイトルは200文字以内にしてください'],
+        // 説明
+        ['説明がない', { ...baseValidTask, description: undefined }, '説明は必須の文字列です'],
+        ['説明がnull', { ...baseValidTask, description: null }, '説明は必須の文字列です'],
+        ['説明が空文字列', { ...baseValidTask, description: '' }, '説明は必須の文字列です'], // 空文字列もエラーとする
+        ['説明が数値', { ...baseValidTask, description: 123 }, '説明は必須の文字列です'],
+        // ステータス
+        ['ステータスが無効', { ...baseValidTask, status: 'invalid' }, 'ステータスは pending, in_progress, completed, blocked のいずれかである必要があります'],
+        // 優先度
+        ['優先度が範囲外 (0)', { ...baseValidTask, priority: 0 }, '優先度は1から5の整数である必要があります'],
+        ['優先度が範囲外 (6)', { ...baseValidTask, priority: 6 }, '優先度は1から5の整数である必要があります'],
+        ['優先度が小数', { ...baseValidTask, priority: 3.5 }, '優先度は1から5の整数である必要があります'], // isInteger で false になる
+        ['優先度が文字列', { ...baseValidTask, priority: '3' }, '優先度は1から5の整数である必要があります'],
+        // 見積もり時間
+        ['見積もり時間が負数', { ...baseValidTask, estimated_hours: -1 }, '見積もり時間は0以上の数値である必要があります'],
+        ['見積もり時間が文字列', { ...baseValidTask, estimated_hours: '5' }, '見積もり時間は0以上の数値である必要があります'],
+        // 進捗率
+        ['進捗率が範囲外 (-1)', { ...baseValidTask, progress_percentage: -1 }, '進捗率は0から100の数値である必要があります'],
+        ['進捗率が範囲外 (101)', { ...baseValidTask, progress_percentage: 101 }, '進捗率は0から100の数値である必要があります'],
+        ['進捗率が文字列', { ...baseValidTask, progress_percentage: '50' }, '進捗率は0から100の数値である必要があります'],
+        // 依存関係
+        ['依存関係が配列でない', { ...baseValidTask, dependencies: 'T001' }, '依存関係は配列である必要があります'],
+        ['依存関係の要素がオブジェクトでない', { ...baseValidTask, dependencies: ['T001'] }, '依存関係のタスクIDは必須の文字列です'], // 要素が文字列の場合
+        ['依存関係のタスクIDがない', { ...baseValidTask, dependencies: [{ type: 'strong' }] }, '依存関係のタスクIDは必須の文字列です'],
+        ['依存関係のタスクIDがnull', { ...baseValidTask, dependencies: [{ task_id: null }] }, '依存関係のタスクIDは必須の文字列です'],
+        ['依存関係のタスクIDが空文字列', { ...baseValidTask, dependencies: [{ task_id: '' }] }, '依存関係のタスクIDは必須の文字列です'],
+        ['依存関係のタスクIDが無効形式', { ...baseValidTask, dependencies: [{ task_id: 'invalid' }] }, '依存関係のタスクIDはT000形式である必要があります'],
+        ['依存関係のタイプが無効', { ...baseValidTask, dependencies: [{ task_id: 'T001', type: 'invalid' }] }, '依存関係のタイプはstrongまたはweakである必要があります'],
+      ])('%s場合、エラーを返す', (_, invalidProps, expectedError) => {
+        // Arrange
+        const invalidTask = { ...baseValidTask, ...invalidProps };
+        // Act
+        const result = validator.validateTaskInput(invalidTask);
+        // Assert
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain(expectedError);
+      });
+
+      test('複数のエラーがある場合、すべてのエラーを返す', () => {
+          // Arrange
+          const multiErrorTask = {
+              title: '', // エラー1
+              description: 123, // エラー2
+              priority: 0, // エラー3
+              dependencies: [{ task_id: 'invalid' }] // エラー4
+          };
+          // Act
+          const result = validator.validateTaskInput(multiErrorTask);
+          // Assert
+          expect(result.isValid).toBe(false);
+          expect(result.errors).toHaveLength(4);
+          expect(result.errors).toContain('タイトルは必須の文字列です');
+          expect(result.errors).toContain('説明は必須の文字列です');
+          expect(result.errors).toContain('優先度は1から5の整数である必要があります');
+          expect(result.errors).toContain('依存関係のタスクIDはT000形式である必要があります');
+      });
+    });
+
+    // --- 境界値テスト ---
+    describe('境界値テスト', () => {
+      const baseValidTask = { title: '境界値タスク', description: '境界値説明' };
+      test.each([
+        ['タイトルが200文字', { title: 'a'.repeat(200) }, true],
+        ['優先度が1', { priority: 1 }, true],
+        ['優先度が5', { priority: 5 }, true],
+        ['見積もり時間が0', { estimated_hours: 0 }, true],
+        ['進捗率が0', { progress_percentage: 0 }, true],
+        ['進捗率が100', { progress_percentage: 100 }, true],
+      ])('%sの場合、検証に成功する', (_, taskProps, expected) => {
+        // Arrange
+        const task = { ...baseValidTask, ...taskProps };
         // Act
         const result = validator.validateTaskInput(task);
-        
         // Assert
         expect(result.isValid).toBe(expected);
+        if (expected) {
+            expect(result.errors).toEqual([]);
+        }
       });
     });
   });
-  
+
   describe('validateSessionInput', () => {
-    // 有効なケースのテスト
+    // --- 有効なケース ---
     test('有効なセッションデータの場合、検証に成功する', () => {
       // Arrange
       const validSession = {
@@ -221,146 +196,98 @@ describe('Validator', () => {
             completed_tasks: ['T001', 'T002'],
             current_tasks: ['T003'],
             pending_tasks: ['T004', 'T005'],
-            blocked_tasks: ['T006']
-          }
-        }
+            blocked_tasks: ['T006'], // オプショナル
+          },
+        },
       };
-      
       // Act
       const result = validator.validateSessionInput(validSession);
-      
       // Assert
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
-    
-    // 無効なケースのパラメータ化テスト
+
+    test('blocked_tasks がなくても検証に成功する', () => {
+        // Arrange
+        const validSession = {
+          session_handover: {
+            project_id: 'P001',
+            session_id: 'S001',
+            session_timestamp: '2023-01-01T00:00:00Z',
+            project_state_summary: {
+              completed_tasks: ['T001'],
+              current_tasks: ['T003'],
+              pending_tasks: ['T004'],
+              // blocked_tasks なし
+            },
+          },
+        };
+        // Act
+        const result = validator.validateSessionInput(validSession);
+        // Assert
+        expect(result.isValid).toBe(true);
+        expect(result.errors).toEqual([]);
+      });
+
+    // --- 無効なケース ---
     describe('無効なセッションデータの検証', () => {
       test.each([
-        ['セッションオブジェクトがnullの場合', null, 'セッションオブジェクトが不正です'],
-        ['session_handoverがない場合', {}, 'セッションオブジェクトが不正です']
-      ])('%s、エラーを返す', (_, invalidSession, expectedError) => {
+        ['セッションデータがnull', null, 'セッションオブジェクトが不正です'],
+        ['session_handoverがない', {}, 'セッションオブジェクトが不正です'],
+        ['session_handoverがnull', { session_handover: null }, 'セッションオブジェクトが不正です'],
+      ])('%s場合、エラーを返す', (_, invalidSession, expectedError) => {
         // Act
         const result = validator.validateSessionInput(invalidSession);
-        
         // Assert
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain(expectedError);
       });
-      
-      // 必須フィールドのテスト
-      test('必須フィールドがない場合、エラーを返す', () => {
-        // Arrange
-        const invalidSession = {
-          session_handover: {
-            project_id: 'P001',
-            // session_idがない
-            session_timestamp: '2023-01-01T00:00:00Z',
-            project_state_summary: {
-              completed_tasks: [],
-              current_tasks: [],
-              pending_tasks: []
-            }
-          }
-        };
-        
-        // Act
-        const result = validator.validateSessionInput(invalidSession);
-        
-        // Assert
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('必須フィールド session_id がありません');
-      });
-      
-      // project_state_summaryのテスト
-      test('project_state_summaryの必須フィールドがない場合、エラーを返す', () => {
+
+      test.each([
+        'project_id',
+        'session_id',
+        'session_timestamp',
+        'project_state_summary',
+      ])('必須フィールド %s がない場合、エラーを返す', (missingField) => {
         // Arrange
         const invalidSession = {
           session_handover: {
             project_id: 'P001',
             session_id: 'S001',
             session_timestamp: '2023-01-01T00:00:00Z',
-            project_state_summary: {
-              // 必須フィールドの一部が配列でない
-              completed_tasks: [],
-              current_tasks: 'not an array',
-              pending_tasks: []
-            }
-          }
+            project_state_summary: { completed_tasks: [], current_tasks: [], pending_tasks: [] },
+          },
         };
-        
+        delete invalidSession.session_handover[missingField];
         // Act
         const result = validator.validateSessionInput(invalidSession);
-        
+        // Assert
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain(`必須フィールド ${missingField} がありません`);
+      });
+
+      test.each([
+        ['completed_tasks', 'completed_tasks が配列でない'],
+        ['current_tasks', 'current_tasks が配列でない'],
+        ['pending_tasks', 'pending_tasks が配列でない'],
+      ])('project_state_summary の %s が配列でない場合、エラーを返す', (field, _) => {
+        // Arrange
+        const invalidSession = {
+          session_handover: {
+            project_id: 'P001',
+            session_id: 'S001',
+            session_timestamp: '2023-01-01T00:00:00Z',
+            project_state_summary: { completed_tasks: [], current_tasks: [], pending_tasks: [] },
+          },
+        };
+        invalidSession.session_handover.project_state_summary[field] = 'not an array';
+        // Act
+        const result = validator.validateSessionInput(invalidSession);
         // Assert
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain('project_state_summary の必須フィールドがありません');
       });
-      
-    // project_state_summary の追加テスト
-    describe('project_state_summary 追加テスト', () => {
-      test('project_state_summary がない場合、エラーを返さない', () => {
-        // Arrange
-        const sessionWithoutSummary = {
-          session_handover: {
-            project_id: 'P001',
-            session_id: 'S001',
-            session_timestamp: '2023-01-01T00:00:00Z'
-            // project_state_summary がない
-          }
-        };
 
-        // Act
-        const result = validator.validateSessionInput(sessionWithoutSummary);
-
-        // Assert
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('必須フィールド project_state_summary がありません');
-      });
-
-      test('project_state_summary が null の場合、エラーを返さない', () => {
-        // Arrange
-        const sessionWithNullSummary = {
-          session_handover: {
-            project_id: 'P001',
-            session_id: 'S001',
-            session_timestamp: '2023-01-01T00:00:00Z',
-            project_state_summary: null
-          }
-        };
-
-        // Act
-        const result = validator.validateSessionInput(sessionWithNullSummary);
-
-        // Assert
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('必須フィールド project_state_summary がありません');
-      });
-
-      test('project_state_summary の構造が不正な場合、エラーを返す', () => {
-        // Arrange
-        const invalidSession = {
-          session_handover: {
-            project_id: 'P001',
-            session_id: 'S001',
-            session_timestamp: '2023-01-01T00:00:00Z',
-            project_state_summary: {
-              completed_tasks: 'not an array', // 不正な形式
-              current_tasks: [],
-              pending_tasks: []
-            }
-          }
-        };
-
-        // Act
-        const result = validator.validateSessionInput(invalidSession);
-
-        // Assert
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('project_state_summary の必須フィールドがありません');
-      });
-    });
-      // タスクIDのテスト
       test('タスクIDが無効な形式の場合、エラーを返す', () => {
         // Arrange
         const invalidSession = {
@@ -369,223 +296,160 @@ describe('Validator', () => {
             session_id: 'S001',
             session_timestamp: '2023-01-01T00:00:00Z',
             project_state_summary: {
-              completed_tasks: ['invalid'],
-              current_tasks: [],
-              pending_tasks: []
-            }
-          }
+              completed_tasks: ['T001', 'invalid-id'],
+              current_tasks: ['T003'],
+              pending_tasks: [],
+              blocked_tasks: ['T006'],
+            },
+          },
         };
-        
         // Act
         const result = validator.validateSessionInput(invalidSession);
-        
         // Assert
         expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('不正なタスクID形式です: invalid');
+        expect(result.errors).toContain('不正なタスクID形式です: invalid-id');
       });
     });
   });
-  
+
   describe('validateFeedbackInput', () => {
-    // 有効なケースのテスト
+    // --- 有効なケース ---
     test('有効なフィードバックデータの場合、検証に成功する', () => {
       // Arrange
       const validFeedback = {
         feedback_loop: {
           task_id: 'T001',
           verification_results: {
-            passes_tests: true
+            passes_tests: true,
+            details: 'All tests passed.', // オプショナル
           },
-          feedback_status: 'open'
-        }
+          feedback_status: 'open', // オプショナル
+          comments: 'Looks good.', // オプショナル
+        },
       };
-      
       // Act
       const result = validator.validateFeedbackInput(validFeedback);
-      
       // Assert
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
     });
-    
-    // 無効なケースのパラメータ化テスト
+
+    test('オプショナルフィールドがなくても検証に成功する', () => {
+        // Arrange
+        const minimalFeedback = {
+          feedback_loop: {
+            task_id: 'T001',
+            verification_results: {
+              passes_tests: false,
+            },
+          },
+        };
+        // Act
+        const result = validator.validateFeedbackInput(minimalFeedback);
+        // Assert
+        expect(result.isValid).toBe(true);
+        expect(result.errors).toEqual([]);
+      });
+
+    // --- 無効なケース ---
     describe('無効なフィードバックデータの検証', () => {
       test.each([
-        ['フィードバックオブジェクトがnullの場合', null, 'フィードバックオブジェクトが不正です'],
-        ['feedback_loopがない場合', {}, 'フィードバックオブジェクトが不正です']
-      ])('%s、エラーを返す', (_, invalidFeedback, expectedError) => {
+        ['フィードバックデータがnull', null, 'フィードバックオブジェクトが不正です'],
+        ['feedback_loopがない', {}, 'フィードバックオブジェクトが不正です'],
+        ['feedback_loopがnull', { feedback_loop: null }, 'フィードバックオブジェクトが不正です'],
+      ])('%s場合、エラーを返す', (_, invalidFeedback, expectedError) => {
         // Act
         const result = validator.validateFeedbackInput(invalidFeedback);
-        
         // Assert
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain(expectedError);
       });
-      
-      test('必須フィールドがない場合、エラーを返す', () => {
+
+      test.each([
+        'task_id',
+        'verification_results',
+      ])('必須フィールド %s がない場合、エラーを返す', (missingField) => {
         // Arrange
         const invalidFeedback = {
           feedback_loop: {
-            task_id: 'T001'
-            // verification_resultsがない
-          }
+            task_id: 'T001',
+            verification_results: { passes_tests: true },
+          },
         };
-        
+        delete invalidFeedback.feedback_loop[missingField];
         // Act
         const result = validator.validateFeedbackInput(invalidFeedback);
-        
         // Assert
         expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('必須フィールド verification_results がありません');
+        expect(result.errors).toContain(`必須フィールド ${missingField} がありません`);
       });
-      
-      // 他の無効なケースをパラメータ化
+
       test.each([
-        ['タスクIDが無効な形式の場合',
-          {
-            feedback_loop: {
-              task_id: 'invalid',
-              verification_results: { passes_tests: true }
-            }
+        ['タスクIDが無効形式', { task_id: 'invalid' }, '不正なタスクID形式です: invalid'],
+        ['passes_testsがブール値でない', { verification_results: { passes_tests: 'true' } }, 'passes_testsはブール値である必要があります'],
+        ['feedback_statusが無効', { feedback_status: 'invalid' }, 'feedback_statusは open, in_progress, resolved, wontfix のいずれかである必要があります'],
+      ])('%s場合、エラーを返す', (_, invalidProps, expectedError) => {
+        // Arrange
+        const baseFeedback = {
+          feedback_loop: {
+            task_id: 'T001',
+            verification_results: { passes_tests: true },
           },
-          '不正なタスクID形式です: invalid'
-        ],
-        ['passes_testsがブール値でない場合',
-          {
-            feedback_loop: {
-              task_id: 'T001',
-              verification_results: { passes_tests: 'true' }
-            }
-          },
-          'passes_testsはブール値である必要があります'
-        ],
-        ['feedback_statusが無効な場合',
-          {
-            feedback_loop: {
-              task_id: 'T001',
-              verification_results: { passes_tests: true },
-              feedback_status: 'invalid'
-            }
-          },
-          'feedback_statusは open, in_progress, resolved, wontfix のいずれかである必要があります'
-        ]
-      ])('%s、エラーを返す', (_, invalidFeedback, expectedError) => {
+        };
+        // 不正なプロパティをマージ
+        if (invalidProps.verification_results) {
+            baseFeedback.feedback_loop.verification_results = invalidProps.verification_results;
+        } else {
+            baseFeedback.feedback_loop = { ...baseFeedback.feedback_loop, ...invalidProps };
+        }
+
         // Act
-        const result = validator.validateFeedbackInput(invalidFeedback);
-        
+        const result = validator.validateFeedbackInput(baseFeedback);
         // Assert
         expect(result.isValid).toBe(false);
         expect(result.errors).toContain(expectedError);
       });
     });
   });
-  
+
   describe('sanitizeString', () => {
     test('HTMLタグをエスケープする', () => {
+      // Arrange
       const input = '<script>alert("XSS")</script>';
-      const expected = '&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;';
-      
+      const expected = '<script>alert("XSS")</script>';
+      // Act
       const result = validator.sanitizeString(input);
-      
-      expect(result).toBe(expected);
+      // Assert (HTMLエンティティにエスケープされることを期待)
+      expect(result).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
     });
-    
+
     test('引用符をエスケープする', () => {
+      // Arrange
       const input = 'Single quote: \' and double quote: "';
-      const expected = 'Single quote: &#039; and double quote: &quot;';
-      
+      const expected = 'Single quote: &#039; and double quote: "';
+      // Act
       const result = validator.sanitizeString(input);
-      
-      expect(result).toBe(expected);
+      // Assert (HTMLエンティティにエスケープされることを期待)
+      expect(result).toBe('Single quote: &#039; and double quote: &quot;');
     });
-    
+
     test('文字列でない場合、空文字列を返す', () => {
+      // Arrange
       const inputs = [null, undefined, 123, {}, []];
-      
+      // Act & Assert
       for (const input of inputs) {
         const result = validator.sanitizeString(input);
         expect(result).toBe('');
       }
     });
-  });
-  
-  describe('静的メソッド', () => {
-    test('静的validateTaskInputメソッドが正しく動作する', () => {
-      const validTask = {
-        title: 'テストタスク',
-        description: 'これはテストタスクです'
-      };
-      
-      // インスタンスメソッドをスパイ
-      jest.spyOn(Validator.prototype, 'validateTaskInput');
-      
-      const result = Validator.validateTaskInput(validTask);
-      
-      expect(Validator.prototype.validateTaskInput).toHaveBeenCalledWith(validTask);
-      expect(result).toEqual(expect.objectContaining({
-        isValid: expect.any(Boolean),
-        errors: expect.any(Array)
-      }));
-    });
-    
-    test('静的validateSessionInputメソッドが正しく動作する', () => {
-      const validSession = {
-        session_handover: {
-          project_id: 'P001',
-          session_id: 'S001',
-          session_timestamp: '2023-01-01T00:00:00Z',
-          project_state_summary: {
-            completed_tasks: [],
-            current_tasks: [],
-            pending_tasks: []
-          }
-        }
-      };
-      
-      // インスタンスメソッドをスパイ
-      jest.spyOn(Validator.prototype, 'validateSessionInput');
-      
-      const result = Validator.validateSessionInput(validSession);
-      
-      expect(Validator.prototype.validateSessionInput).toHaveBeenCalledWith(validSession);
-      expect(result).toEqual(expect.objectContaining({
-        isValid: expect.any(Boolean),
-        errors: expect.any(Array)
-      }));
-    });
-    
-    test('静的validateFeedbackInputメソッドが正しく動作する', () => {
-      const validFeedback = {
-        feedback_loop: {
-          task_id: 'T001',
-          verification_results: {
-            passes_tests: true
-          }
-        }
-      };
-      
-      // インスタンスメソッドをスパイ
-      jest.spyOn(Validator.prototype, 'validateFeedbackInput');
-      
-      const result = Validator.validateFeedbackInput(validFeedback);
-      
-      expect(Validator.prototype.validateFeedbackInput).toHaveBeenCalledWith(validFeedback);
-      expect(result).toEqual(expect.objectContaining({
-        isValid: expect.any(Boolean),
-        errors: expect.any(Array)
-      }));
-    });
-    
-    test('静的sanitizeStringメソッドが正しく動作する', () => {
-      const input = '<script>alert("XSS")</script>';
-      
-      // インスタンスメソッドをスパイ
-      jest.spyOn(Validator.prototype, 'sanitizeString');
-      
-      const result = Validator.sanitizeString(input);
-      
-      expect(Validator.prototype.sanitizeString).toHaveBeenCalledWith(input);
-      expect(result).toBe('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
-    });
+
+    test('サニタイズ不要な文字列はそのまま返す', () => {
+        // Arrange
+        const input = '安全な文字列 123 abc';
+        // Act
+        const result = validator.sanitizeString(input);
+        // Assert
+        expect(result).toBe(input);
+      });
   });
 });

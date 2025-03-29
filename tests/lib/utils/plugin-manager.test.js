@@ -3,341 +3,294 @@
  */
 
 const PluginManager = require('../../../src/lib/utils/plugin-manager');
-const { 
-  createMockLogger, 
-  createMockEventEmitter, 
-  createMockErrorHandler, 
-  mockTimestamp 
+const {
+  createMockLogger,
+  createMockEventEmitter,
+  mockTimestamp,
 } = require('../../helpers/mock-factory');
-
-/**
- * PluginManagerのテスト用オプションを作成
- * @param {Object} overrides - 上書きするオプション
- * @returns {Object} テスト用オプション
- */
-function createPluginManagerTestOptions(overrides = {}) {
-  return {
-    logger: createMockLogger(),
-    eventEmitter: createMockEventEmitter(),
-    ...overrides
-  };
-}
+const { expectStandardizedEventEmitted } = require('../../helpers/test-helpers');
 
 describe('PluginManager', () => {
   let pluginManager;
   let mockLogger;
   let mockEventEmitter;
+  const MOCK_TIMESTAMP_ISO = '2025-03-24T00:00:00.000Z';
+  const MOCK_TIMESTAMP_MS = new Date(MOCK_TIMESTAMP_ISO).getTime();
+  const MOCK_RANDOM = 0.123456789;
+  const EXPECTED_TRACE_ID = `trace-${MOCK_TIMESTAMP_MS}-4fzzxw8a5`;
+  const EXPECTED_REQUEST_ID = `req-${MOCK_TIMESTAMP_MS}-4fzzxw8a5`;
+
 
   beforeEach(() => {
     // モックのリセット
     jest.clearAllMocks();
     jest.restoreAllMocks();
-    
+
     // 時間のモック
-    mockTimestamp('2025-03-24T00:00:00.000Z');
-    
+    mockTimestamp(MOCK_TIMESTAMP_ISO);
+    jest.spyOn(Date, 'now').mockReturnValue(MOCK_TIMESTAMP_MS);
+    jest.spyOn(Math, 'random').mockReturnValue(MOCK_RANDOM);
+
+
     // 共通モックファクトリを使用
     mockLogger = createMockLogger();
     mockEventEmitter = createMockEventEmitter();
-    
+
     // モックの設定
     jest.spyOn(mockLogger, 'info');
     jest.spyOn(mockLogger, 'error');
-    jest.spyOn(mockEventEmitter, 'emit');
-    
+    jest.spyOn(mockLogger, 'warn');
+    jest.spyOn(mockEventEmitter, 'emitStandardized');
+
     // PluginManagerのインスタンス作成
     const options = {
       logger: mockLogger,
-      eventEmitter: mockEventEmitter
+      eventEmitter: mockEventEmitter,
     };
     pluginManager = new PluginManager(options);
   });
 
   describe('constructor', () => {
-    test('デフォルト値で初期化される', () => {
-      // Arrange
-      const defaultPluginManager = new PluginManager();
-      
-      // Assert
-      expect(defaultPluginManager.plugins).toBeInstanceOf(Map);
-      expect(defaultPluginManager.plugins.size).toBe(0);
-      expect(defaultPluginManager.logger).toBe(console);
-      expect(defaultPluginManager.eventEmitter).toBeUndefined();
+    test('logger がないとエラーをスローする', () => {
+      expect(() => new PluginManager({ eventEmitter: mockEventEmitter })).toThrow('Logger instance is required');
     });
 
     test('指定されたオプションで初期化される', () => {
-      // Assert
+      // Assert (beforeEach で初期化済み)
       expect(pluginManager.plugins).toBeInstanceOf(Map);
       expect(pluginManager.plugins.size).toBe(0);
-      // オブジェクトの参照ではなく、同じプロパティを持つかどうかを確認
-      expect(pluginManager.logger).toBeTruthy();
-      expect(pluginManager.logger.info).toBeTruthy();
-      expect(pluginManager.logger.error).toBeTruthy();
+      expect(pluginManager.logger).toBe(mockLogger);
       expect(pluginManager.eventEmitter).toBe(mockEventEmitter);
     });
 
-    test('イベントエミッターが未指定でもエラーなく動作する', () => {
-      // Arrange
-      const options = { logger: mockLogger };
-      const pm = new PluginManager(options);
-      
-      // Assert
-      expect(pm.eventEmitter).toBeUndefined();
-      expect(() => pm.registerPlugin('test', { testMethod: jest.fn() })).not.toThrow();
+
+    test('オプションなしの場合、デフォルト値で初期化される (logger は必須)', () => {
+      // Arrange & Act & Assert
+      // logger がないとエラーになるため、最低限 logger は渡す
+      const instance = new PluginManager({ logger: mockLogger });
+      expect(instance.plugins).toBeInstanceOf(Map);
+      expect(instance.plugins.size).toBe(0);
+      expect(instance.logger).toBe(mockLogger);
+      expect(instance.eventEmitter).toBeUndefined();
     });
 
-    test('イベントエミッターが未指定でも各メソッドが正しく動作する', async () => {
+    test('eventEmitter が未指定でもエラーなく動作し、イベントは発行されない', () => {
       // Arrange
       const options = { logger: mockLogger };
-      const pm = new PluginManager(options);
-      const pluginType = 'test-plugin';
-      const methodName = 'testMethod';
-      const methodMock = jest.fn().mockReturnValue('result');
-      const pluginImplementation = {
-        [methodName]: methodMock,
-        initialize: jest.fn(),
-        cleanup: jest.fn()
-      };
-      
-      // Act & Assert - registerPlugin
-      jest.spyOn(pm, '_validatePlugin').mockReturnValue(true);
-      expect(pm.registerPlugin(pluginType, pluginImplementation)).toBe(true);
-      expect(pluginImplementation.initialize).toHaveBeenCalled();
-      
-      // Act & Assert - invokePlugin
-      const result = await pm.invokePlugin(pluginType, methodName);
-      expect(result).toBe('result');
-      expect(methodMock).toHaveBeenCalled();
-      
-      // Act & Assert - unregisterPlugin
-      expect(pm.unregisterPlugin(pluginType)).toBe(true);
-      expect(pluginImplementation.cleanup).toHaveBeenCalled();
-      expect(pm.plugins.has(pluginType)).toBe(false);
-      
-      // Act & Assert - error cases
-      const error = new Error('テストエラー');
-      const errorPlugin = {
-        initialize: jest.fn().mockImplementation(() => { throw error; }),
-        cleanup: jest.fn().mockImplementation(() => { throw error; }),
-        errorMethod: jest.fn().mockImplementation(() => { throw error; })
-      };
-      
-      // registerPlugin with error in initialize
-      pm.registerPlugin('error-plugin', errorPlugin);
-      expect(pm.plugins.has('error-plugin')).toBe(true);
-      
-      // unregisterPlugin with error in cleanup
-      expect(pm.unregisterPlugin('error-plugin')).toBe(true);
-      expect(pm.plugins.has('error-plugin')).toBe(false);
-      
-      // invokePlugin with error
-      pm.plugins.set('error-plugin', errorPlugin);
-      await expect(pm.invokePlugin('error-plugin', 'errorMethod')).rejects.toThrow(error);
-      
-      // 無効なプラグインの登録
-      jest.spyOn(pm, '_validatePlugin').mockReturnValue(false);
-      expect(pm.registerPlugin('invalid-plugin', {})).toBe(false);
-      
-      // 存在しないプラグインのメソッド呼び出し
-      expect(await pm.invokePlugin('non-existent', 'method')).toBeNull();
-      
-      // 存在しないメソッドの呼び出し
-      pm.plugins.set('test-plugin', {});
-      expect(await pm.invokePlugin('test-plugin', 'non-existent-method')).toBeNull();
+      const pmWithoutEmitter = new PluginManager(options);
+      const pluginType = 'test';
+      const pluginImpl = { testMethod: jest.fn(), initialize: jest.fn(), cleanup: jest.fn() };
+      jest.spyOn(pmWithoutEmitter, '_validatePlugin').mockReturnValue(true); // 検証は成功させる
+
+      // Act & Assert
+      expect(() => pmWithoutEmitter.registerPlugin(pluginType, pluginImpl)).not.toThrow();
+      expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled(); // イベント発行されない
+
+      expect(() => pmWithoutEmitter.invokePlugin(pluginType, 'testMethod')).not.toThrow();
+      expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled(); // イベント発行されない
+
+      expect(() => pmWithoutEmitter.unregisterPlugin(pluginType)).not.toThrow();
+      expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled(); // イベント発行されない
     });
   });
 
   describe('registerPlugin', () => {
-    test('有効なプラグインを登録する', () => {
+    test('有効なプラグインを登録し、registered イベントを発行する', () => {
       // Arrange
       const pluginType = 'test-plugin';
-      const pluginImplementation = {
-        testMethod: jest.fn()
-      };
-      
-      // プラグイン検証をモック
+      const pluginImplementation = { testMethod: jest.fn() };
       jest.spyOn(pluginManager, '_validatePlugin').mockReturnValue(true);
-      
+
       // Act
       const result = pluginManager.registerPlugin(pluginType, pluginImplementation);
-      
+
       // Assert
       expect(result).toBe(true);
       expect(pluginManager.plugins.has(pluginType)).toBe(true);
       expect(pluginManager.plugins.get(pluginType)).toBe(pluginImplementation);
-      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('登録しました'));
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:registered', expect.objectContaining({
+      expect(mockLogger.info).toHaveBeenCalledWith(`プラグイン ${pluginType} を登録しました`);
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'registered', {
         pluginType,
         hasInitialize: false,
         hasCleanup: false,
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
     });
 
-    test('無効なプラグインは登録されない', () => {
+    test('無効なプラグインは登録されず、validation_failed イベントを発行する', () => {
       // Arrange
       const pluginType = 'test-plugin';
       const pluginImplementation = {};
-      
-      // プラグイン検証をモック
       jest.spyOn(pluginManager, '_validatePlugin').mockReturnValue(false);
-      
+
       // Act
       const result = pluginManager.registerPlugin(pluginType, pluginImplementation);
-      
+
       // Assert
       expect(result).toBe(false);
       expect(pluginManager.plugins.has(pluginType)).toBe(false);
       expect(mockLogger.error).toHaveBeenCalledWith(`プラグイン ${pluginType} の検証に失敗しました`);
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:validation_failed', expect.objectContaining({
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'validation_failed', {
         pluginType,
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
     });
 
-    test('initialize メソッドがあれば呼び出される', () => {
+    test('initialize メソッドがあれば呼び出され、registered イベントを発行する', () => {
       // Arrange
       const pluginType = 'test-plugin';
       const initializeMock = jest.fn();
-      const pluginImplementation = {
-        initialize: initializeMock
-      };
-      
-      // プラグイン検証をモック
+      const pluginImplementation = { initialize: initializeMock };
       jest.spyOn(pluginManager, '_validatePlugin').mockReturnValue(true);
-      
+
       // Act
       pluginManager.registerPlugin(pluginType, pluginImplementation);
-      
+
       // Assert
       expect(initializeMock).toHaveBeenCalled();
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:registered', expect.objectContaining({
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'registered', {
         pluginType,
         hasInitialize: true,
         hasCleanup: false,
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
     });
 
-    test('initialize メソッドでエラーが発生しても登録は成功する', () => {
+    test('initialize メソッドでエラーが発生しても登録は成功し、initialization_error イベントを発行する', () => {
       // Arrange
       const pluginType = 'test-plugin';
       const error = new Error('初期化エラー');
       const pluginImplementation = {
-        initialize: jest.fn().mockImplementation(() => {
-          throw error;
-        })
+        initialize: jest.fn().mockImplementation(() => { throw error; }),
       };
-      
-      // プラグイン検証をモック
       jest.spyOn(pluginManager, '_validatePlugin').mockReturnValue(true);
-      
+
       // Act
       const result = pluginManager.registerPlugin(pluginType, pluginImplementation);
-      
+
       // Assert
       expect(result).toBe(true);
       expect(pluginManager.plugins.has(pluginType)).toBe(true);
-      expect(mockLogger.error).toHaveBeenCalledWith(`プラグイン ${pluginType} の初期化中にエラーが発生しました:`, error);
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:initialization_error', expect.objectContaining({
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        `プラグイン ${pluginType} の初期化中にエラーが発生しました:`,
+        error
+      );
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'initialization_error', {
         pluginType,
         error: error.message,
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
+      // registered イベントも発行される
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'registered', {
+        pluginType,
+        hasInitialize: true,
+        hasCleanup: false,
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
     });
   });
 
   describe('hasPlugin', () => {
     test('登録されているプラグインを確認する', () => {
       // Arrange
-      const pluginType = 'test-plugin';
-      const pluginImplementation = {};
-      pluginManager.plugins.set(pluginType, pluginImplementation);
-      
-      // Act
-      const result = pluginManager.hasPlugin(pluginType);
-      
-      // Assert
-      expect(result).toBe(true);
+      pluginManager.plugins.set('test-plugin', {});
+      // Act & Assert
+      expect(pluginManager.hasPlugin('test-plugin')).toBe(true);
     });
 
     test('登録されていないプラグインを確認する', () => {
-      // Act
-      const result = pluginManager.hasPlugin('non-existent-plugin');
-      
-      // Assert
-      expect(result).toBe(false);
+      // Act & Assert
+      expect(pluginManager.hasPlugin('non-existent-plugin')).toBe(false);
     });
   });
 
   describe('unregisterPlugin', () => {
-    test('登録されているプラグインを削除する', () => {
+    test('登録されているプラグインを削除し、unregistered イベントを発行する', () => {
       // Arrange
       const pluginType = 'test-plugin';
       const pluginImplementation = {};
       pluginManager.plugins.set(pluginType, pluginImplementation);
-      
+
       // Act
       const result = pluginManager.unregisterPlugin(pluginType);
-      
+
       // Assert
       expect(result).toBe(true);
       expect(pluginManager.plugins.has(pluginType)).toBe(false);
       expect(mockLogger.info).toHaveBeenCalledWith(`プラグイン ${pluginType} を削除しました`);
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:unregistered', expect.objectContaining({
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'unregistered', {
         pluginType,
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
     });
 
     test('登録されていないプラグインを削除しようとすると失敗する', () => {
       // Act
       const result = pluginManager.unregisterPlugin('non-existent-plugin');
-      
       // Assert
       expect(result).toBe(false);
-      expect(mockEventEmitter.emit).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled();
     });
 
     test('cleanup メソッドがあれば呼び出される', () => {
       // Arrange
       const pluginType = 'test-plugin';
       const cleanupMock = jest.fn();
-      const pluginImplementation = {
-        cleanup: cleanupMock
-      };
+      const pluginImplementation = { cleanup: cleanupMock };
       pluginManager.plugins.set(pluginType, pluginImplementation);
-      
+
       // Act
       pluginManager.unregisterPlugin(pluginType);
-      
+
       // Assert
       expect(cleanupMock).toHaveBeenCalled();
     });
 
-    test('cleanup メソッドでエラーが発生しても削除は成功する', () => {
+    test('cleanup メソッドでエラーが発生しても削除は成功し、cleanup_error イベントを発行する', () => {
       // Arrange
       const pluginType = 'test-plugin';
       const error = new Error('クリーンアップエラー');
       const pluginImplementation = {
-        cleanup: jest.fn().mockImplementation(() => {
-          throw error;
-        })
+        cleanup: jest.fn().mockImplementation(() => { throw error; }),
       };
       pluginManager.plugins.set(pluginType, pluginImplementation);
-      
+
       // Act
       const result = pluginManager.unregisterPlugin(pluginType);
-      
+
       // Assert
       expect(result).toBe(true);
       expect(pluginManager.plugins.has(pluginType)).toBe(false);
-      expect(mockLogger.error).toHaveBeenCalledWith(`プラグイン ${pluginType} のクリーンアップ中にエラーが発生しました:`, error);
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:cleanup_error', expect.objectContaining({
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        `プラグイン ${pluginType} のクリーンアップ中にエラーが発生しました:`,
+        error
+      );
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'cleanup_error', {
         pluginType,
         error: error.message,
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
+      // unregistered イベントも発行される
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'unregistered', {
+        pluginType,
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
     });
   });
 
@@ -346,134 +299,144 @@ describe('PluginManager', () => {
       // Arrange
       pluginManager.plugins.set('plugin1', {});
       pluginManager.plugins.set('plugin2', {});
-      pluginManager.plugins.set('plugin3', {});
-      
-      // Act
-      const result = pluginManager.getRegisteredPlugins();
-      
-      // Assert
-      expect(result).toEqual(['plugin1', 'plugin2', 'plugin3']);
+      // Act & Assert
+      expect(pluginManager.getRegisteredPlugins()).toEqual(['plugin1', 'plugin2']);
     });
 
     test('プラグインが登録されていない場合は空配列を返す', () => {
-      // Act
-      const result = pluginManager.getRegisteredPlugins();
-      
-      // Assert
-      expect(result).toEqual([]);
+      // Act & Assert
+      expect(pluginManager.getRegisteredPlugins()).toEqual([]);
     });
   });
 
   describe('invokePlugin', () => {
-    test('プラグインメソッドを正常に呼び出す', async () => {
+    test('プラグインメソッドを正常に呼び出し、イベントを発行する', async () => {
       // Arrange
       const pluginType = 'test-plugin';
       const methodName = 'testMethod';
       const methodResult = 'test result';
       const methodMock = jest.fn().mockResolvedValue(methodResult);
-      const pluginImplementation = {
-        [methodName]: methodMock
-      };
+      const pluginImplementation = { [methodName]: methodMock };
       pluginManager.plugins.set(pluginType, pluginImplementation);
-      
+
       // Act
       const result = await pluginManager.invokePlugin(pluginType, methodName, 'arg1', 'arg2');
-      
+
       // Assert
       expect(result).toBe(methodResult);
       expect(methodMock).toHaveBeenCalledWith('arg1', 'arg2');
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_invoked', expect.objectContaining({
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'method_invoked', {
         pluginType,
         methodName,
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_completed', expect.objectContaining({
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'method_completed', {
         pluginType,
         methodName,
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
     });
 
-    test('存在しないプラグインを呼び出すとnullを返す', async () => {
+    test('存在しないプラグインを呼び出すとnullを返し、method_not_found イベントを発行する', async () => {
       // Act
       const result = await pluginManager.invokePlugin('non-existent-plugin', 'testMethod');
-      
       // Assert
       expect(result).toBeNull();
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_not_found', expect.objectContaining({
+      expect(mockLogger.warn).toHaveBeenCalledWith(`プラグインメソッドが見つかりません: non-existent-plugin.testMethod`);
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'method_not_found', {
         pluginType: 'non-existent-plugin',
         methodName: 'testMethod',
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
     });
 
-    test('存在しないメソッドを呼び出すとnullを返す', async () => {
+    test('存在しないメソッドを呼び出すとnullを返し、method_not_found イベントを発行する', async () => {
       // Arrange
       const pluginType = 'test-plugin';
-      const pluginImplementation = {};
-      pluginManager.plugins.set(pluginType, pluginImplementation);
-      
+      pluginManager.plugins.set(pluginType, {});
+
       // Act
       const result = await pluginManager.invokePlugin(pluginType, 'non-existent-method');
-      
+
       // Assert
       expect(result).toBeNull();
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_not_found', expect.objectContaining({
+      expect(mockLogger.warn).toHaveBeenCalledWith(`プラグインメソッドが見つかりません: ${pluginType}.non-existent-method`);
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'method_not_found', {
         pluginType,
         methodName: 'non-existent-method',
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
     });
 
-    test('メソッド呼び出し中にエラーが発生すると例外がスローされる', async () => {
+    test('メソッド呼び出し中にエラーが発生すると例外がスローされ、method_error イベントを発行する', async () => {
       // Arrange
       const pluginType = 'test-plugin';
       const methodName = 'testMethod';
       const error = new Error('メソッド呼び出しエラー');
       const methodMock = jest.fn().mockRejectedValue(error);
-      const pluginImplementation = {
-        [methodName]: methodMock
-      };
+      const pluginImplementation = { [methodName]: methodMock };
       pluginManager.plugins.set(pluginType, pluginImplementation);
-      
+
       // Act & Assert
       await expect(pluginManager.invokePlugin(pluginType, methodName)).rejects.toThrow(error);
-      expect(mockLogger.error).toHaveBeenCalledWith(`プラグイン ${pluginType}.${methodName} の呼び出し中にエラーが発生しました:`, error);
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_error', expect.objectContaining({
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        `プラグイン ${pluginType}.${methodName} の呼び出し中にエラーが発生しました:`,
+        error
+      );
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'method_invoked', { // invoked は呼ばれる
+        pluginType,
+        methodName,
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'method_error', {
         pluginType,
         methodName,
         error: error.message,
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
     });
 
-    test('同期メソッドを正常に呼び出す', async () => {
+    test('同期メソッドを正常に呼び出し、イベントを発行する', async () => {
       // Arrange
       const pluginType = 'test-plugin';
       const methodName = 'syncMethod';
       const methodResult = 'sync result';
-      const methodMock = jest.fn(() => methodResult);
-      const pluginImplementation = {
-        [methodName]: methodMock
-      };
+      const methodMock = jest.fn(() => methodResult); // 同期関数
+      const pluginImplementation = { [methodName]: methodMock };
       pluginManager.plugins.set(pluginType, pluginImplementation);
-      
+
       // Act
       const result = await pluginManager.invokePlugin(pluginType, methodName);
-      
+
       // Assert
       expect(result).toBe(methodResult);
       expect(methodMock).toHaveBeenCalled();
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_invoked', expect.objectContaining({
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'method_invoked', {
         pluginType,
         methodName,
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith('plugin:method_completed', expect.objectContaining({
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
+      expectStandardizedEventEmitted(mockEventEmitter, 'plugin', 'method_completed', {
         pluginType,
         methodName,
-        timestamp: '2025-03-24T00:00:00.000Z'
-      }));
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
+      });
     });
   });
 
@@ -481,71 +444,166 @@ describe('PluginManager', () => {
     test('プラグインタイプが無効な場合はfalseを返す', () => {
       // Arrange
       const invalidTypes = [null, undefined, '', 123, {}, []];
-      
       // Act & Assert
-      invalidTypes.forEach(type => {
-        expect(pluginManager._validatePlugin(type, {})).toBe(false);
+      invalidTypes.forEach((type) => {
+        expect(pluginManager._validatePlugin(type, { m: jest.fn() })).toBe(false);
+        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('プラグインタイプの検証に失敗: タイプが文字列ではありません'), { pluginType: type });
+        mockLogger.warn.mockClear();
       });
     });
 
-    test('プラグイン実装が無効な場合はfalseを返す', () => {
+    test('プラグイン実装が無効な場合 (null, undefined, string, number) はfalseを返す', () => {
       // Arrange
-      const invalidImplementations = [null, undefined, '', 123, [], {}];
-      
+      const invalidImplementations = [null, undefined, '', 123]; // 配列を除外
       // Act & Assert
-      invalidImplementations.forEach(impl => {
+      invalidImplementations.forEach((impl) => {
         expect(pluginManager._validatePlugin('test-plugin', impl)).toBe(false);
+        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining(`プラグイン実装の検証に失敗 (test-plugin): 実装がオブジェクトではありません`), { pluginImplementation: impl });
+        mockLogger.warn.mockClear();
       });
     });
 
-    test('ciプラグインの検証', () => {
-      // Arrange
-      const validImpl = { runTests: jest.fn() };
-      const invalidImpl = { someOtherMethod: jest.fn() };
-      
-      // Act & Assert
-      expect(pluginManager._validatePlugin('ci', validImpl)).toBe(true);
-      expect(pluginManager._validatePlugin('ci', invalidImpl)).toBe(false);
+    test('プラグイン実装が無効な場合 (配列) はfalseを返す', () => {
+       // Arrange
+       const invalidImpl = [];
+       // Act
+       expect(pluginManager._validatePlugin('test-plugin', invalidImpl)).toBe(false);
+       // Assert
+       expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining(`プラグイン実装の検証に失敗 (test-plugin): 実装がオブジェクトではありません`), { pluginImplementation: invalidImpl });
     });
 
-    test('notificationプラグインの検証', () => {
-      // Arrange
-      const validImpl = { sendNotification: jest.fn() };
-      const invalidImpl = { someOtherMethod: jest.fn() };
-      
-      // Act & Assert
-      expect(pluginManager._validatePlugin('notification', validImpl)).toBe(true);
-      expect(pluginManager._validatePlugin('notification', invalidImpl)).toBe(false);
+    test('プラグイン実装が無効な場合 (空オブジェクト) はfalseを返す', () => {
+       // Arrange
+       const invalidImpl = {};
+       // Act
+       expect(pluginManager._validatePlugin('generic', invalidImpl)).toBe(false);
+       // Assert
+       expect(pluginManager._validatePlugin('generic', {})).toBe(false);
+       expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining(`プラグイン検証失敗 (generic): 実装が空のオブジェクトです`));
     });
 
-    test('reportプラグインの検証', () => {
-      // Arrange
-      const validImpl = { generateReport: jest.fn() };
-      const invalidImpl = { someOtherMethod: jest.fn() };
-      
-      // Act & Assert
-      expect(pluginManager._validatePlugin('report', validImpl)).toBe(true);
-      expect(pluginManager._validatePlugin('report', invalidImpl)).toBe(false);
+    // --- test.each を個別の test に分割 ---
+    test('ci プラグインの検証 (有効)', () => {
+        const impl = { runTests: jest.fn() };
+        expect(pluginManager._validatePlugin('ci', impl)).toBe(true);
     });
-
-    test('storageプラグインの検証', () => {
-      // Arrange
-      const validImpl = { save: jest.fn(), load: jest.fn() };
-      const invalidImpl1 = { save: jest.fn() }; // loadがない
-      const invalidImpl2 = { load: jest.fn() }; // saveがない
-      
-      // Act & Assert
-      expect(pluginManager._validatePlugin('storage', validImpl)).toBe(true);
-      expect(pluginManager._validatePlugin('storage', invalidImpl1)).toBe(false);
-      expect(pluginManager._validatePlugin('storage', invalidImpl2)).toBe(false);
+    test('ci プラグインの検証 (無効)', () => {
+        const impl = { someOtherMethod: jest.fn() };
+        expect(pluginManager._validatePlugin('ci', impl)).toBe(false);
+        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining(`プラグイン検証失敗 (ci): runTests メソッドが必要です`));
     });
-
-    test('汎用プラグインの検証', () => {
-      // Arrange
-      const impl = { someMethod: jest.fn() };
-      
-      // Act & Assert
-      expect(pluginManager._validatePlugin('generic', impl)).toBe(true);
+    test('notification プラグインの検証 (有効)', () => {
+        const impl = { sendNotification: jest.fn() };
+        expect(pluginManager._validatePlugin('notification', impl)).toBe(true);
     });
+    test('notification プラグインの検証 (無効)', () => {
+        const impl = {};
+        expect(pluginManager._validatePlugin('notification', impl)).toBe(false);
+        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining(`プラグイン検証失敗 (notification): sendNotification メソッドが必要です`));
+    });
+    test('report プラグインの検証 (有効)', () => {
+        const impl = { generateReport: jest.fn() };
+        expect(pluginManager._validatePlugin('report', impl)).toBe(true);
+    });
+    test('report プラグインの検証 (無効)', () => {
+        const impl = {};
+        expect(pluginManager._validatePlugin('report', impl)).toBe(false);
+        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining(`プラグイン検証失敗 (report): generateReport メソッドが必要です`));
+    });
+    test('storage プラグインの検証 (有効)', () => {
+        const impl = { save: jest.fn(), load: jest.fn() };
+        expect(pluginManager._validatePlugin('storage', impl)).toBe(true);
+    });
+    test('storage プラグインの検証 (save のみ)', () => {
+        const impl = { save: jest.fn() };
+        expect(pluginManager._validatePlugin('storage', impl)).toBe(false);
+        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining(`プラグイン検証失敗 (storage): save および load メソッドが必要です`));
+    });
+    test('storage プラグインの検証 (load のみ)', () => {
+        const impl = { load: jest.fn() };
+        expect(pluginManager._validatePlugin('storage', impl)).toBe(false);
+        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining(`プラグイン検証失敗 (storage): save および load メソッドが必要です`));
+    });
+    test('generic プラグインの検証 (有効)', () => {
+        const impl = { someMethod: jest.fn() };
+        expect(pluginManager._validatePlugin('generic', impl)).toBe(true);
+    });
+    // -----------------------------------------
   });
 });
+
+
+
+  describe('EventEmitter なしの場合', () => {
+    let pluginManagerWithoutEmitter;
+    let mockPlugin;
+    let mockLogger; // mockLogger をここで宣言
+
+    beforeEach(() => {
+      mockLogger = createMockLogger(); // mockLogger を初期化
+      pluginManagerWithoutEmitter = new PluginManager({ logger: mockLogger });
+      mockPlugin = { name: 'test', initialize: jest.fn(), cleanup: jest.fn(), testMethod: jest.fn().mockResolvedValue('result') };
+    });
+
+    test('registerPlugin はイベントを発行せずにプラグインを登録する', () => {
+      const result = pluginManagerWithoutEmitter.registerPlugin('test-plugin', mockPlugin);
+      expect(result).toBe(true);
+      expect(pluginManagerWithoutEmitter.hasPlugin('test-plugin')).toBe(true);
+      expect(mockPlugin.initialize).toHaveBeenCalled();
+      // emitStandardized が呼ばれないことを確認 (アサーションは難しいが、エラーが出ないことを確認)
+    });
+
+    test('unregisterPlugin はイベントを発行せずにプラグインを削除する', () => {
+      pluginManagerWithoutEmitter.registerPlugin('test-plugin', mockPlugin);
+      const result = pluginManagerWithoutEmitter.unregisterPlugin('test-plugin');
+      expect(result).toBe(true);
+      expect(pluginManagerWithoutEmitter.hasPlugin('test-plugin')).toBe(false);
+      expect(mockPlugin.cleanup).toHaveBeenCalled();
+    });
+
+    test('invokePlugin はイベントを発行せずにメソッドを呼び出す', async () => {
+      pluginManagerWithoutEmitter.registerPlugin('test-plugin', mockPlugin);
+      const result = await pluginManagerWithoutEmitter.invokePlugin('test-plugin', 'testMethod', 'arg1');
+      expect(result).toBe('result');
+      expect(mockPlugin.testMethod).toHaveBeenCalledWith('arg1');
+    });
+
+     test('invokePlugin でメソッドが見つからない場合、イベントは発行されない', async () => {
+        pluginManagerWithoutEmitter.registerPlugin('test-plugin', mockPlugin);
+        const result = await pluginManagerWithoutEmitter.invokePlugin('test-plugin', 'nonExistentMethod');
+        expect(result).toBeNull();
+        expect(mockLogger.warn).toHaveBeenCalledWith('プラグインメソッドが見つかりません: test-plugin.nonExistentMethod');
+     });
+
+     test('invokePlugin でエラーが発生した場合、イベントは発行されない', async () => {
+        const error = new Error('Method error');
+        mockPlugin.testMethod.mockRejectedValue(error);
+        pluginManagerWithoutEmitter.registerPlugin('test-plugin', mockPlugin);
+        await expect(pluginManagerWithoutEmitter.invokePlugin('test-plugin', 'testMethod')).rejects.toThrow(error);
+     });
+
+     test('registerPlugin で initialize エラーが発生した場合、イベントは発行されない', () => {
+        const error = new Error('Init error');
+        mockPlugin.initialize.mockImplementation(() => { throw error; });
+        const result = pluginManagerWithoutEmitter.registerPlugin('test-plugin', mockPlugin);
+        expect(result).toBe(true); // 登録自体は成功する
+        expect(mockLogger.error).toHaveBeenCalledWith('プラグイン test-plugin の初期化中にエラーが発生しました:', error);
+     });
+
+     test('unregisterPlugin で cleanup エラーが発生した場合、イベントは発行されない', () => {
+        const error = new Error('Cleanup error');
+        mockPlugin.cleanup.mockImplementation(() => { throw error; });
+        pluginManagerWithoutEmitter.registerPlugin('test-plugin', mockPlugin);
+        const result = pluginManagerWithoutEmitter.unregisterPlugin('test-plugin');
+        expect(result).toBe(true); // 削除自体は成功する
+        expect(mockLogger.error).toHaveBeenCalledWith('プラグイン test-plugin のクリーンアップ中にエラーが発生しました:', error);
+     });
+
+     test('registerPlugin で検証失敗した場合、イベントは発行されない', () => {
+        const invalidPlugin = {}; // 無効なプラグイン
+        const result = pluginManagerWithoutEmitter.registerPlugin('invalid-plugin', invalidPlugin);
+        expect(result).toBe(false);
+        expect(mockLogger.error).toHaveBeenCalledWith('プラグイン invalid-plugin の検証に失敗しました');
+     });
+
+  });

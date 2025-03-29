@@ -145,7 +145,38 @@
 <a name='L80'></a><a href='#L80'>80</a>
 <a name='L81'></a><a href='#L81'>81</a>
 <a name='L82'></a><a href='#L82'>82</a>
-<a name='L83'></a><a href='#L83'>83</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L83'></a><a href='#L83'>83</a>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a>
+<a name='L99'></a><a href='#L99'>99</a>
+<a name='L100'></a><a href='#L100'>100</a>
+<a name='L101'></a><a href='#L101'>101</a>
+<a name='L102'></a><a href='#L102'>102</a>
+<a name='L103'></a><a href='#L103'>103</a>
+<a name='L104'></a><a href='#L104'>104</a>
+<a name='L105'></a><a href='#L105'>105</a>
+<a name='L106'></a><a href='#L106'>106</a>
+<a name='L107'></a><a href='#L107'>107</a>
+<a name='L108'></a><a href='#L108'>108</a>
+<a name='L109'></a><a href='#L109'>109</a>
+<a name='L110'></a><a href='#L110'>110</a>
+<a name='L111'></a><a href='#L111'>111</a>
+<a name='L112'></a><a href='#L112'>112</a>
+<a name='L113'></a><a href='#L113'>113</a>
+<a name='L114'></a><a href='#L114'>114</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -211,6 +242,36 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -225,11 +286,12 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
  * イベント名の定数定義
- * 
+ *
  * 新旧のイベント名のマッピングを提供します。
  * イベント駆動アーキテクチャの標準化と後方互換性をサポートします。
  */
@@ -242,9 +304,15 @@ const EVENT_NAMES = <span class="cstat-no" title="statement not covered" >{</spa
   TASK: {
     CREATED: { new: 'task:task_created', old: 'task:created' },
     UPDATED: { new: 'task:task_updated', old: 'task:updated' },
-    PROGRESS_UPDATED: { new: 'task:task_progress_updated', old: 'task:progress' },
+    PROGRESS_UPDATED: {
+      new: 'task:task_progress_updated',
+      old: 'task:progress',
+    },
     GIT_COMMIT_ADDED: { new: 'task:git_commit_added', old: 'task:commit' },
-    TASKS_INITIALIZED: { new: 'task:tasks_initialized', old: 'task:initialized' }
+    TASKS_INITIALIZED: {
+      new: 'task:tasks_initialized',
+      old: 'task:initialized',
+    },
   },
   SESSION: {
     CREATED: { new: 'session:session_created', old: 'session:started' },
@@ -252,40 +320,64 @@ const EVENT_NAMES = <span class="cstat-no" title="statement not covered" >{</spa
     ENDED: { new: 'session:session_ended', old: 'session:ended' },
     TASK_ADDED: { new: 'session:task_added', old: 'session:task:added' },
     TASK_REMOVED: { new: 'session:task_removed', old: 'session:task:removed' },
-    GIT_COMMIT_ADDED: { new: 'session:git_commit_added', old: 'session:commit:added' }
+    GIT_COMMIT_ADDED: {
+      new: 'session:git_commit_added',
+      old: 'session:commit:added',
+    },
   },
   FEEDBACK: {
     CREATED: { new: 'feedback:feedback_created', old: 'feedback:created' },
-    TEST_RESULTS_COLLECTED: { new: 'feedback:test_results_collected', old: 'feedback:test:collected' },
-    PRIORITIZED: { new: 'feedback:feedback_prioritized', old: 'feedback:prioritized' },
-    STATUS_UPDATED: { new: 'feedback:status_updated', old: 'feedback:status:updated' },
-    INTEGRATED_WITH_SESSION: { new: 'feedback:integrated_with_session', old: 'feedback:integrated:session' },
-    INTEGRATED_WITH_TASK: { new: 'feedback:integrated_with_task', old: 'feedback:integrated:task' }
+    TEST_RESULTS_COLLECTED: {
+      new: 'feedback:test_results_collected',
+      old: 'feedback:test:collected',
+    },
+    PRIORITIZED: {
+      new: 'feedback:feedback_prioritized',
+      old: 'feedback:prioritized',
+    },
+    STATUS_UPDATED: {
+      new: 'feedback:status_updated',
+      old: 'feedback:status:updated',
+    },
+    INTEGRATED_WITH_SESSION: {
+      new: 'feedback:integrated_with_session',
+      old: 'feedback:integrated:session',
+    },
+    INTEGRATED_WITH_TASK: {
+      new: 'feedback:integrated_with_task',
+      old: 'feedback:integrated:task',
+    },
   },
   STATE: {
     CHANGED: { new: 'state:state_changed', old: 'state:changed' },
-    TRANSITION: { new: 'state:state_transition', old: 'state:transition' }
+    TRANSITION: { new: 'state:state_transition', old: 'state:transition' },
   },
   SYSTEM: {
     INITIALIZED: { new: 'system:initialized', old: 'system:init' },
-    SHUTDOWN: { new: 'system:shutdown', old: 'system:exit' }
+    SHUTDOWN: { new: 'system:shutdown', old: 'system:exit' },
   },
   STORAGE: {
     FILE_READ: { new: 'storage:file_read', old: 'storage:file:read' },
     FILE_WRITE: { new: 'storage:file_write', old: 'storage:file:write' },
-    FILE_DELETE: { new: 'storage:file_delete', old: 'storage:file:delete' }
+    FILE_DELETE: { new: 'storage:file_delete', old: 'storage:file:delete' },
   },
   INTEGRATION: {
-    MANAGER_INITIALIZED: { new: 'integration:manager_initialized', old: 'integration:manager:initialized' }
+    MANAGER_INITIALIZED: {
+      new: 'integration:manager_initialized',
+      old: 'integration:manager:initialized',
+    },
   },
   LOG: {
     MESSAGE_CREATED: { new: 'log:message_created', old: 'log:entry' },
-    ALERT_CREATED: { new: 'log:alert_created', old: 'log:alert' }
+    ALERT_CREATED: { new: 'log:alert_created', old: 'log:alert' },
   },
   CACHE: {
     ITEM_SET: { new: 'cache:item_set', old: 'cache:set' },
-    SYSTEM_INITIALIZED: { new: 'cache:system_initialized', old: 'cache:initialized' }
-  }
+    SYSTEM_INITIALIZED: {
+      new: 'cache:system_initialized',
+      old: 'cache:initialized',
+    },
+  },
 };
 &nbsp;
 /**
@@ -294,13 +386,13 @@ const EVENT_NAMES = <span class="cstat-no" title="statement not covered" >{</spa
  */
 function <span class="fstat-no" title="function not covered" >generateEventMap(</span>) {
   const eventMap = <span class="cstat-no" title="statement not covered" >{};</span>
-  
-<span class="cstat-no" title="statement not covered" >  Object.values(EVENT_NAMES).forEach(<span class="fstat-no" title="function not covered" >ca</span>tegory =&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    Object.values(category).forEach(<span class="fstat-no" title="function not covered" >ev</span>entPair =&gt; {</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >  Object.values(EVENT_NAMES).forEach(<span class="fstat-no" title="function not covered" >(c</span>ategory) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >    Object.values(category).forEach(<span class="fstat-no" title="function not covered" >(e</span>ventPair) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >      eventMap[eventPair.new] = eventPair.old;</span>
     });
   });
-  
+&nbsp;
 <span class="cstat-no" title="statement not covered" >  return eventMap;</span>
 }
 &nbsp;
@@ -308,15 +400,16 @@ const EVENT_MAP = <span class="cstat-no" title="statement not covered" >generate
 &nbsp;
 <span class="cstat-no" title="statement not covered" >module.exports = {</span>
   EVENT_NAMES,
-  EVENT_MAP
-};</pre></td></tr></table></pre>
+  EVENT_MAP,
+};
+&nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-03-26T22:38:58.263Z
+                at 2025-03-29T11:46:38.498Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

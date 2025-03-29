@@ -3,894 +3,428 @@
  */
 
 const CacheManager = require('../../../src/lib/utils/cache-manager');
-const { 
-  createMockLogger, 
+const {
+  createMockLogger,
   createMockEventEmitter,
-  mockTimestamp 
+  mockTimestamp,
 } = require('../../helpers/mock-factory');
-const { 
-  expectEventEmitted,
-  expectStandardizedEventEmitted
+const {
+  expectStandardizedEventEmitted,
 } = require('../../helpers/test-helpers');
 
 describe('CacheManager', () => {
   let cacheManager;
   let mockEventEmitter;
   let mockLogger;
-  let originalNodeEnv;
-  
+  const MOCK_TIMESTAMP_ISO = '2025-03-24T00:00:00.000Z';
+  const MOCK_TIMESTAMP_MS = new Date(MOCK_TIMESTAMP_ISO).getTime();
+
   beforeEach(() => {
-    // 環境変数のモック
-    originalNodeEnv = process.env.NODE_ENV;
-    
-    // イベントエミッターとロガーのモック
+    // モックのセットアップ
     mockEventEmitter = createMockEventEmitter();
     mockLogger = createMockLogger();
-    
-    // 日付・時間関連のモックを設定
-    mockTimestamp('2025-03-24T00:00:00.000Z');
-    const timestamp = new Date('2025-03-24T00:00:00.000Z').getTime();
-    jest.spyOn(Date, 'now').mockReturnValue(timestamp);
-    
+
+    // 時間関連のモック
+    mockTimestamp(MOCK_TIMESTAMP_ISO);
+    jest.spyOn(Date, 'now').mockReturnValue(MOCK_TIMESTAMP_MS);
+
     // CacheManagerのインスタンスを作成
     cacheManager = new CacheManager({
       eventEmitter: mockEventEmitter,
       logger: mockLogger,
-      ttlMs: 1000,
-      maxSize: 10
+      ttlMs: 1000, // テストしやすいように短く設定
+      maxSize: 10,
     });
-    
-    // モックをリセット
+
+    // モックのリセット (インスタンス作成後にリセット)
     jest.clearAllMocks();
+    // Date.now のモックは維持
+    jest.spyOn(Date, 'now').mockReturnValue(MOCK_TIMESTAMP_MS);
   });
-  
+
   afterEach(() => {
-    // 環境変数をリセット
-    process.env.NODE_ENV = originalNodeEnv;
     jest.restoreAllMocks();
   });
-  
+
   describe('constructor', () => {
-    test('デフォルト値で初期化される', () => {
-      // Arrange
-      const instance = new CacheManager();
-      
-      // Assert
-      expect(instance.ttlMs).toBe(300000);
-      expect(instance.maxSize).toBe(1000);
-      expect(instance.logger).toEqual(console);
-      expect(instance.cache).toBeInstanceOf(Map);
-      expect(instance.hitCount).toBe(0);
-      expect(instance.missCount).toBe(0);
+    test('logger がないとエラーをスローする', () => {
+      expect(() => new CacheManager({ eventEmitter: mockEventEmitter })).toThrow('Logger and EventEmitter instances are required');
     });
-    
+    test('eventEmitter がないとエラーをスローする', () => {
+      expect(() => new CacheManager({ logger: mockLogger })).toThrow('Logger and EventEmitter instances are required');
+    });
+
     test('カスタム値で初期化される', () => {
       // Arrange
       const customLogger = createMockLogger();
+      const customEventEmitter = createMockEventEmitter();
       const instance = new CacheManager({
         ttlMs: 2000,
         maxSize: 20,
-        logger: customLogger
+        logger: customLogger,
+        eventEmitter: customEventEmitter,
       });
-      
+
       // Assert
       expect(instance.ttlMs).toBe(2000);
       expect(instance.maxSize).toBe(20);
       expect(instance.logger).toBe(customLogger);
+      expect(instance.eventEmitter).toBe(customEventEmitter);
       expect(instance.cache).toBeInstanceOf(Map);
       expect(instance.hitCount).toBe(0);
       expect(instance.missCount).toBe(0);
     });
-    
-    test('emitStandardizedが利用可能な場合、標準化されたイベントを発行する', () => {
+
+    test('初期化時に system_initialized イベントを発行する', () => {
+      // Assert (beforeEach での呼び出しを検証)
+      expectStandardizedEventEmitted(
+          mockEventEmitter,
+          'cache',
+          'system_initialized',
+          {
+            ttlMs: 1000,
+            maxSize: 10,
+            timestamp: 'any', // タイムスタンプの存在と形式を検証
+          }
+        );
+    });
+
+
+    test('オプションなしの場合、デフォルト値で初期化される (logger, eventEmitter は必須)', () => {
       // Arrange & Act
-      new CacheManager({
-        eventEmitter: mockEventEmitter,
-        ttlMs: 2000,
-        maxSize: 20
-      });
-      
+      const instance = new CacheManager({ logger: mockLogger, eventEmitter: mockEventEmitter });
+
       // Assert
+      expect(instance.cache).toBeInstanceOf(Map);
+      expect(instance.ttlMs).toBe(300000); // デフォルトTTL
+      expect(instance.maxSize).toBe(1000); // デフォルトサイズ
+      expect(instance.hitCount).toBe(0);
+      expect(instance.missCount).toBe(0);
+      expect(instance.logger).toBe(mockLogger);
+      expect(instance.eventEmitter).toBe(mockEventEmitter);
+      // 初期化イベントも確認
       expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'system_initialized', {
-        ttlMs: 2000,
-        maxSize: 20
+        ttlMs: 300000,
+        maxSize: 1000,
+        timestamp: 'any',
+        traceId: expect.any(String),
+        requestId: expect.any(String),
       });
-    });
-    
-    test('emitStandardizedが利用できない場合、従来のイベントを発行する', () => {
-      // Arrange
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // Act
-      new CacheManager({
-        eventEmitter: mockEventEmitter,
-        ttlMs: 2000,
-        maxSize: 20
-      });
-      
-      // Assert
-      expectEventEmitted(mockEventEmitter, 'cache:initialized', {
-        ttlMs: 2000,
-        maxSize: 20,
-        timestamp: expect.any(String)
-      });
-    });
-    
-    test('開発環境では非推奨警告を表示する', () => {
-      // Arrange
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // 開発環境に設定
-      process.env.NODE_ENV = 'development';
-      
-      // コンソール警告をモック
-      const originalConsoleWarn = console.warn;
-      console.warn = jest.fn();
-      
-      // Act
-      new CacheManager({
-        eventEmitter: mockEventEmitter,
-        ttlMs: 2000,
-        maxSize: 20
-      });
-      
-      // Assert
-      expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining('非推奨のイベント名')
-      );
-      
-      // コンソール警告を元に戻す
-      console.warn = originalConsoleWarn;
-    });
-    
-    test('本番環境では非推奨警告を表示しない', () => {
-      // Arrange
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // 本番環境に設定
-      process.env.NODE_ENV = 'production';
-      
-      // コンソール警告をモック
-      const originalConsoleWarn = console.warn;
-      console.warn = jest.fn();
-      
-      // Act
-      new CacheManager({
-        eventEmitter: mockEventEmitter,
-        ttlMs: 2000,
-        maxSize: 20
-      });
-      
-      // Assert
-      expect(console.warn).not.toHaveBeenCalled();
-      
-      // コンソール警告を元に戻す
-      console.warn = originalConsoleWarn;
-    });
-    
-    test('イベントエミッターがない場合、イベントは発行されない', () => {
-      // Arrange & Act
-      new CacheManager({
-        ttlMs: 2000,
-        maxSize: 20
-      });
-      
-      // Assert
-      // エラーが発生しないことを確認
-      expect(mockEventEmitter.emit).not.toHaveBeenCalled();
-      expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled();
     });
   });
-  
+
   describe('get', () => {
-    test('キャッシュミス の場合、適切な値を返す', () => {
+    test('キャッシュミス の場合、nullを返し、item_missed イベントを発行する', () => {
       // Arrange
       const key = 'non-existent-key';
-      
+
       // Act
       const result = cacheManager.get(key);
-      
+
       // Assert
       expect(result).toBeNull();
       expect(cacheManager.missCount).toBe(1);
       expect(cacheManager.hitCount).toBe(0);
+      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_missed', { key, timestamp: 'any' });
     });
-    
-    test('キャッシュヒット の場合、適切な値を返す', () => {
+
+    test('キャッシュヒット の場合、値を返し、item_accessed イベントを発行する', () => {
       // Arrange
       const key = 'test-key';
       const value = 'test-value';
       cacheManager.set(key, value);
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
+      mockEventEmitter.emitStandardized.mockClear();
+
       // Act
       const result = cacheManager.get(key);
-      
+
       // Assert
       expect(result).toBe(value);
       expect(cacheManager.hitCount).toBe(1);
       expect(cacheManager.missCount).toBe(0);
-      
-      // イベントが発行されていることを確認
-      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_accessed', {
-        key
-      });
+      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_accessed', { key, timestamp: 'any' });
     });
 
-    test('emitStandardizedが利用できない場合、従来のイベントを発行する（get）', () => {
+    test('期限切れの場合、nullを返し、item_expired イベントを発行する', () => {
       // Arrange
       const key = 'test-key';
       const value = 'test-value';
-      cacheManager.set(key, value);
-      
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
+      const ttl = 500;
+      cacheManager.set(key, value, ttl);
+      mockEventEmitter.emitStandardized.mockClear();
+
+      // 時間を進める (Date.now のモックを更新)
+      const expiredTime = MOCK_TIMESTAMP_MS + ttl + 1; // TTL 経過後の時刻
+      jest.spyOn(Date, 'now').mockReturnValue(expiredTime);
+
       // Act
       const result = cacheManager.get(key);
-      
-      // Assert
-      expect(result).toBe(value);
-      expect(cacheManager.hitCount).toBe(1);
-      
-      // 従来のイベントが発行されていることを確認
-      expectEventEmitted(mockEventEmitter, 'cache:hit', {
-        key,
-        timestamp: expect.any(String)
-      });
-    });
-    
-    test('開発環境では非推奨警告を表示する（get）', () => {
-      // Arrange
-      const key = 'test-key';
-      const value = 'test-value';
-      cacheManager.set(key, value);
-      
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // 開発環境に設定
-      process.env.NODE_ENV = 'development';
-      
-      // コンソール警告をモック
-      const originalConsoleWarn = console.warn;
-      console.warn = jest.fn();
-      
-      // Act
-      const result = cacheManager.get(key);
-      
-      // Assert
-      expect(result).toBe(value);
-      expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining('非推奨のイベント名 cache:hit')
-      );
-      
-      // コンソール警告を元に戻す
-      console.warn = originalConsoleWarn;
-    });
-    
-    test('期限切れの場合、nullを返す', () => {
-      // Arrange
-      const key = 'test-key';
-      const value = 'test-value';
-      
-      // キャッシュに値を設定
-      cacheManager.cache.set(key, {
-        value,
-        timestamp: Date.now() - 2000, // 2秒前（期限切れ）
-        ttl: 1000 // 1秒
-      });
-      
-      // Act
-      const result = cacheManager.get(key);
-      
+
       // Assert
       expect(result).toBeNull();
-      expect(cacheManager.missCount).toBe(1);
+      expect(cacheManager.missCount).toBe(1); // 期限切れもミスとしてカウントされることを明示
       expect(cacheManager.hitCount).toBe(0);
-      
-      // キャッシュから削除されていることを確認
-      expect(cacheManager.cache.has(key)).toBe(false);
-    });
-    
-    test('イベントエミッターがない場合もエラーなく動作する', () => {
-      // Arrange
-      const key = 'test-key';
-      const value = 'test-value';
-      
-      // イベントエミッターを削除
-      cacheManager.eventEmitter = null;
-      
-      // キャッシュに値を設定
-      cacheManager.cache.set(key, {
-        value,
-        timestamp: Date.now(),
-        ttl: 1000
-      });
-      
-      // Act
-      const result = cacheManager.get(key);
-      
-      // Assert
-      expect(result).toBe(value);
-    });
-    
-    test('イベントエミッターがない場合、キャッシュミス時もエラーなく動作する', () => {
-      // Arrange
-      const key = 'non-existent-key';
-      
-      // イベントエミッターを削除
-      cacheManager.eventEmitter = null;
-      
-      // Act
-      const result = cacheManager.get(key);
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(cacheManager.missCount).toBe(1);
-    });
-    
-    test('イベントエミッターがない場合、期限切れ時もエラーなく動作する', () => {
-      // Arrange
-      const key = 'test-key';
-      const value = 'test-value';
-      
-      // イベントエミッターを削除
-      cacheManager.eventEmitter = null;
-      
-      // キャッシュに期限切れの値を設定
-      cacheManager.cache.set(key, {
-        value,
-        timestamp: Date.now() - 2000, // 2秒前（期限切れ）
-        ttl: 1000 // 1秒
-      });
-      
-      // Act
-      const result = cacheManager.get(key);
-      
-      // Assert
-      expect(result).toBeNull();
-      expect(cacheManager.missCount).toBe(1);
-      expect(cacheManager.cache.has(key)).toBe(false);
+      expect(cacheManager.cache.has(key)).toBe(false); // キャッシュから削除されていることを確認
+      // cache.delete が呼ばれたことの確認は、内部実装への依存度が高いため省略
+      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_expired', { key, ttl, timestamp: 'any' });
     });
   });
-  
+
   describe('set', () => {
-    test('キャッシュにデータを設定する', () => {
+    test('キャッシュにデータを設定し、item_set イベントを発行する', () => {
       // Arrange
       const key = 'test-key';
       const value = 'test-value';
-      
+
       // Act
       cacheManager.set(key, value);
-      
+
       // Assert
-      // キャッシュに値が設定されていることを確認
       expect(cacheManager.cache.has(key)).toBe(true);
       const cached = cacheManager.cache.get(key);
       expect(cached.value).toBe(value);
-      expect(cached.timestamp).toBe(Date.now());
+      expect(cached.timestamp).toBe(MOCK_TIMESTAMP_MS);
       expect(cached.ttl).toBe(1000);
-      
-      // イベントが発行されていることを確認
-      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_set', {
-        key,
-        ttl: 1000
-      });
+      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_set', { key, ttl: 1000, timestamp: 'any' });
     });
-    
-    test('カスタムTTLでデータを設定する', () => {
+
+    test('カスタムTTLでデータを設定し、item_set イベントを発行する', () => {
       // Arrange
       const key = 'test-key';
       const value = 'test-value';
       const customTtl = 5000;
-      
+
       // Act
       cacheManager.set(key, value, customTtl);
-      
+
       // Assert
       const cached = cacheManager.cache.get(key);
       expect(cached.ttl).toBe(customTtl);
-      
-      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_set', {
-        key,
-        ttl: customTtl
-      });
+      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_set', { key, ttl: customTtl, timestamp: 'any' });
     });
-    
-    test('キャッシュサイズが上限に達した場合、最も古いエントリを削除する', () => {
+
+    test('キャッシュサイズが上限に達した場合、最も古いエントリを削除し、item_evicted イベントを発行する', () => {
       // Arrange
-      // キャッシュサイズを小さく設定
       cacheManager.maxSize = 2;
-      
-      // 2つのエントリを追加
-      cacheManager.set('key1', 'value1');
-      
-      // 1秒後に2つ目のエントリを追加
-      const timestamp = Date.now() + 1000;
-      jest.spyOn(Date, 'now').mockReturnValue(timestamp);
-      cacheManager.set('key2', 'value2');
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
-      // Act
-      // 3つ目のエントリを追加（最も古いkey1が削除される）
-      const timestamp2 = Date.now() + 1000;
-      jest.spyOn(Date, 'now').mockReturnValue(timestamp2);
+      const initialTimestamp = MOCK_TIMESTAMP_MS;
+      cacheManager.set('key1', 'value1'); // 1つ目
+
+      const secondTimestamp = initialTimestamp + 100;
+      jest.spyOn(Date, 'now').mockReturnValue(secondTimestamp);
+      cacheManager.set('key2', 'value2'); // 2つ目
+      mockEventEmitter.emitStandardized.mockClear();
+
+      // Act: 3つ目を追加 (key1が削除されるはず)
+      const thirdTimestamp = secondTimestamp + 100;
+      jest.spyOn(Date, 'now').mockReturnValue(thirdTimestamp);
       cacheManager.set('key3', 'value3');
-      
+
       // Assert
+      expect(cacheManager.cache.size).toBe(2);
       expect(cacheManager.cache.has('key1')).toBe(false);
       expect(cacheManager.cache.has('key2')).toBe(true);
       expect(cacheManager.cache.has('key3')).toBe(true);
-      
-      // _evictOldestが呼ばれたことを確認
-      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_evicted', {
-        key: 'key1'
+      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_evicted', { key: 'key1', timestamp: 'any' });
+      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_set', { key: 'key3', ttl: 1000, timestamp: 'any' });
+    });
+
+    test('キャッシュサイズが上限ちょうどの場合、新しいエントリを追加し、最も古いエントリを削除する', () => {
+        // Arrange
+        cacheManager.maxSize = 2;
+        const initialTimestamp = MOCK_TIMESTAMP_MS;
+        cacheManager.set('key1', 'value1'); // 1つ目
+        const secondTimestamp = initialTimestamp + 100;
+        jest.spyOn(Date, 'now').mockReturnValue(secondTimestamp);
+        cacheManager.set('key2', 'value2'); // 2つ目 (これで上限)
+        mockEventEmitter.emitStandardized.mockClear();
+
+        // Act: 3つ目を追加 (key1が削除されるはず)
+        const thirdTimestamp = secondTimestamp + 100;
+        jest.spyOn(Date, 'now').mockReturnValue(thirdTimestamp);
+        cacheManager.set('key3', 'value3');
+
+        // Assert
+        expect(cacheManager.cache.size).toBe(2);
+        expect(cacheManager.cache.has('key1')).toBe(false);
+        expect(cacheManager.cache.has('key2')).toBe(true);
+        expect(cacheManager.cache.has('key3')).toBe(true);
+        expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_evicted', { key: 'key1', timestamp: 'any' });
+        expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_set', { key: 'key3', ttl: 1000, timestamp: 'any' });
       });
-    });
-    
-    test('emitStandardizedが利用できない場合、従来のイベントを発行する', () => {
-      // Arrange
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      const key = 'test-key';
-      const value = 'test-value';
-      
-      // Act
-      cacheManager.set(key, value);
-      
-      // Assert
-      expectEventEmitted(mockEventEmitter, 'cache:item_set', {
-        key,
-        ttl: 1000,
-        timestamp: expect.any(String)
-      });
-    });
-    
-    test('開発環境では非推奨警告を表示する（set）', () => {
-      // Arrange
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // 開発環境に設定
-      process.env.NODE_ENV = 'development';
-      
-      // コンソール警告をモック
-      const originalConsoleWarn = console.warn;
-      console.warn = jest.fn();
-      
-      const key = 'test-key';
-      const value = 'test-value';
-      
-      // Act
-      cacheManager.set(key, value);
-      
-      // Assert
-      expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining('非推奨のイベント名 cache:set')
-      );
-      
-      // コンソール警告を元に戻す
-      console.warn = originalConsoleWarn;
-    });
-    
-    test('イベントエミッターがない場合、set時もエラーなく動作する', () => {
-      // Arrange
-      const key = 'test-key';
-      const value = 'test-value';
-      
-      // イベントエミッターを削除
-      cacheManager.eventEmitter = null;
-      
-      // Act
-      cacheManager.set(key, value);
-      
-      // Assert
-      expect(cacheManager.cache.has(key)).toBe(true);
-      const cached = cacheManager.cache.get(key);
-      expect(cached.value).toBe(value);
-      expect(cached.timestamp).toBe(Date.now());
-      expect(cached.ttl).toBe(1000);
-    });
   });
-  
+
   describe('invalidate', () => {
-    test('文字列パターン に一致するキャッシュを無効化する', () => {
+    test('文字列パターン に一致するキャッシュを無効化し、items_invalidated イベントを発行する', () => {
       // Arrange
       cacheManager.set('user:123', 'user data');
       cacheManager.set('user:456', 'user data');
       cacheManager.set('product:789', 'product data');
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
-      // Act
-      cacheManager.invalidate('user:');
-      
-      // Assert
-      expect(cacheManager.cache.has('user:123')).toBe(false);
-      expect(cacheManager.cache.has('user:456')).toBe(false);
-      expect(cacheManager.cache.has('product:789')).toBe(true);
-      
-      // イベントが発行されていることを確認
-      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'items_invalidated', {
-        pattern: 'user:',
-        count: 2
-      });
-    });
-    
-    test('正規表現パターン に一致するキャッシュを無効化する', () => {
-      // Arrange
-      cacheManager.set('user:123', 'user data');
-      cacheManager.set('user:456', 'user data');
-      cacheManager.set('product:789', 'product data');
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
-      // Act
-      cacheManager.invalidate(/^user:/);
-      
-      // Assert
-      expect(cacheManager.cache.has('user:123')).toBe(false);
-      expect(cacheManager.cache.has('user:456')).toBe(false);
-      expect(cacheManager.cache.has('product:789')).toBe(true);
-      
-      // イベントが発行されていることを確認
-      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'items_invalidated', {
-        pattern: '/^user:/',
-        count: 2
-      });
-    });
-    
-    test('一致しないパターン に一致するキャッシュを無効化する', () => {
-      // Arrange
-      cacheManager.set('user:123', 'user data');
-      cacheManager.set('user:456', 'user data');
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
-      // Act
-      cacheManager.invalidate('product:');
-      
-      // Assert
-      expect(cacheManager.cache.has('user:123')).toBe(true);
-      expect(cacheManager.cache.has('user:456')).toBe(true);
-      
-      // イベントが発行されていることを確認
-      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'items_invalidated', {
-        pattern: 'product:',
-        count: 0
-      });
-    });
-    
-    test('emitStandardizedが利用できない場合、従来のイベントを発行する（invalidate）', () => {
-      // Arrange
-      cacheManager.set('user:123', 'user data');
-      cacheManager.set('user:456', 'user data');
-      
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
+      mockEventEmitter.emitStandardized.mockClear();
+
       // Act
       const count = cacheManager.invalidate('user:');
-      
+
       // Assert
       expect(count).toBe(2);
       expect(cacheManager.cache.has('user:123')).toBe(false);
       expect(cacheManager.cache.has('user:456')).toBe(false);
-      
-      // 従来のイベントが発行されていることを確認
-      expectEventEmitted(mockEventEmitter, 'cache:invalidated', {
-        pattern: 'user:',
-        count: 2,
-        timestamp: expect.any(String)
-      });
+      expect(cacheManager.cache.has('product:789')).toBe(true);
+      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'items_invalidated', { pattern: 'user:', count: 2, timestamp: 'any' });
     });
-    
-    test('開発環境では非推奨警告を表示する（invalidate）', () => {
+
+    test('正規表現パターン に一致するキャッシュを無効化し、items_invalidated イベントを発行する', () => {
       // Arrange
       cacheManager.set('user:123', 'user data');
-      
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // 開発環境に設定
-      process.env.NODE_ENV = 'development';
-      
-      // コンソール警告をモック
-      const originalConsoleWarn = console.warn;
-      console.warn = jest.fn();
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
+      cacheManager.set('user:456', 'user data');
+      cacheManager.set('product:789', 'product data');
+      mockEventEmitter.emitStandardized.mockClear();
+
       // Act
-      cacheManager.invalidate('user:');
-      
+      const count = cacheManager.invalidate(/^user:/);
+
       // Assert
-      expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining('非推奨のイベント名 cache:invalidated')
-      );
-      
-      // コンソール警告を元に戻す
-      console.warn = originalConsoleWarn;
-    });
-    
-    test('イベントエミッターがない場合もエラーなく動作する', () => {
-      // Arrange
-      cacheManager.set('user:123', 'user data');
-      
-      // イベントエミッターを削除
-      cacheManager.eventEmitter = null;
-      
-      // Act & Assert
-      expect(() => {
-        cacheManager.invalidate('user:');
-      }).not.toThrow();
-      
+      expect(count).toBe(2);
       expect(cacheManager.cache.has('user:123')).toBe(false);
+      expect(cacheManager.cache.has('user:456')).toBe(false);
+      expect(cacheManager.cache.has('product:789')).toBe(true);
+      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'items_invalidated', { pattern: '/^user:/', count: 2, timestamp: 'any' });
     });
-  });
-  
-  describe('clear', () => {
-    test('すべてのキャッシュをクリアする', () => {
+
+    test('一致しないパターン の場合、何も無効化せず、イベントも発行しない (count=0)', () => {
       // Arrange
-      cacheManager.set('key1', 'value1');
-      cacheManager.set('key2', 'value2');
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
+      cacheManager.set('user:123', 'user data');
+      mockEventEmitter.emitStandardized.mockClear();
+
       // Act
-      cacheManager.clear();
-      
+      const count = cacheManager.invalidate('product:');
+
       // Assert
-      expect(cacheManager.cache.size).toBe(0);
-      
-      // イベントが発行されていることを確認
-      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'cleared', {
-        count: 2
-      });
-    });
-    
-    test('キャッシュが空の場合、イベントは発行されない', () => {
-      // Arrange
-      // キャッシュは空
-      
-      // Act
-      cacheManager.clear();
-      
-      // Assert
+      expect(count).toBe(0);
+      expect(cacheManager.cache.has('user:123')).toBe(true);
       expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled();
     });
-    
-    test('emitStandardizedが利用できない場合、従来のイベントを発行する（clear）', () => {
+
+    test.each([null, undefined, 123, {}])('不正なパターン (%p) を渡した場合、警告ログを出力し 0 を返す', (invalidPattern) => {
+        // Arrange
+        cacheManager.set('user:123', 'user data');
+        mockEventEmitter.emitStandardized.mockClear();
+
+        // Act
+        const count = cacheManager.invalidate(invalidPattern);
+
+        // Assert
+        expect(count).toBe(0);
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+            'Invalid keyPattern provided to invalidate. Must be a string or RegExp.',
+            { keyPattern: invalidPattern }
+        );
+        expect(cacheManager.cache.has('user:123')).toBe(true); // キャッシュは変更されない
+        expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled(); // イベントは発行されない
+    });
+
+    test('RegExp コンストラクタでエラーになるパターンを渡した場合、エラーログを出力し 0 を返す', () => {
+       // Arrange
+       const invalidStringPattern = '[invalidRegex'; // 不正な正規表現文字列
+       cacheManager.set('user:123', 'user data');
+       mockEventEmitter.emitStandardized.mockClear();
+
+       // Act
+       const count = cacheManager.invalidate(invalidStringPattern);
+
+       // Assert
+       expect(count).toBe(0); // count が 0 であることを確認
+       // エラーログが出力されることを確認 (実装に合わせて修正)
+       expect(mockLogger.error).toHaveBeenCalledWith(
+          `キャッシュ無効化中にエラーが発生しました (パターン: ${invalidStringPattern})`,
+          expect.any(SyntaxError) // エラーオブジェクトのみが渡される
+       );
+       expect(cacheManager.cache.has('user:123')).toBe(true); // キャッシュは変更されない
+       expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled(); // イベントは発行されない
+    });
+  });
+
+  describe('clear', () => {
+    test('すべてのキャッシュをクリアし、cleared イベントを発行する', () => {
       // Arrange
       cacheManager.set('key1', 'value1');
       cacheManager.set('key2', 'value2');
-      
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
+      mockEventEmitter.emitStandardized.mockClear();
+
       // Act
       cacheManager.clear();
-      
+
       // Assert
       expect(cacheManager.cache.size).toBe(0);
-      
-      // 従来のイベントが発行されていることを確認
-      expectEventEmitted(mockEventEmitter, 'cache:cleared', {
-        size: 2,
-        timestamp: expect.any(String)
-      });
+      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'cleared', { count: 2, timestamp: 'any' });
     });
-    
-    test('開発環境では非推奨警告を表示する（clear）', () => {
-      // Arrange
-      cacheManager.set('key1', 'value1');
-      
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // 開発環境に設定
-      process.env.NODE_ENV = 'development';
-      
-      // コンソール警告をモック
-      const originalConsoleWarn = console.warn;
-      console.warn = jest.fn();
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
+
+    test('キャッシュが空の場合、イベントは発行されない', () => {
+      // Arrange (キャッシュは空)
+      mockEventEmitter.emitStandardized.mockClear();
+
       // Act
       cacheManager.clear();
-      
+
       // Assert
-      expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining('非推奨のイベント名 cache:cleared')
-      );
-      
-      // コンソール警告を元に戻す
-      console.warn = originalConsoleWarn;
-    });
-    
-    test('イベントエミッターがない場合もエラーなく動作する', () => {
-      // Arrange
-      cacheManager.set('key1', 'value1');
-      
-      // イベントエミッターを削除
-      cacheManager.eventEmitter = null;
-      
-      // Act & Assert
-      expect(() => {
-        cacheManager.clear();
-      }).not.toThrow();
-      
       expect(cacheManager.cache.size).toBe(0);
+      expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled();
     });
   });
-  
+
   describe('getStats', () => {
     test('キャッシュの統計情報を取得する', () => {
       // Arrange
       cacheManager.set('key1', 'value1');
       cacheManager.get('key1'); // ヒット
       cacheManager.get('key2'); // ミス
-      
+
       // Act
       const stats = cacheManager.getStats();
-      
+
       // Assert
-      expect(stats).toEqual({
-        size: 1,
-        maxSize: 10,
-        hitCount: 1,
-        missCount: 1,
-        hitRate: 0.5
-      });
+      expect(stats).toEqual({ size: 1, maxSize: 10, hitCount: 1, missCount: 1, hitRate: 0.5 });
     });
-    
+
     test('リクエストがない場合、ヒット率は0', () => {
       // Arrange
       cacheManager.set('key1', 'value1');
-      
+
       // Act
       const stats = cacheManager.getStats();
-      
+
       // Assert
       expect(stats.hitRate).toBe(0);
     });
   });
-  
+
   describe('_evictOldest', () => {
-    test('最も古いエントリを削除する', () => {
+    test('最も古いエントリを削除し、item_evicted イベントを発行する', () => {
       // Arrange
-      // 1つ目のエントリを追加
-      cacheManager.set('key1', 'value1');
-      
-      // 1秒後に2つ目のエントリを追加
-      const timestamp = Date.now() + 1000;
-      jest.spyOn(Date, 'now').mockReturnValue(timestamp);
-      cacheManager.set('key2', 'value2');
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
+      const initialTimestamp = MOCK_TIMESTAMP_MS;
+      cacheManager.set('key1', 'value1'); // 古い方
+      const secondTimestamp = initialTimestamp + 100;
+      jest.spyOn(Date, 'now').mockReturnValue(secondTimestamp);
+      cacheManager.set('key2', 'value2'); // 新しい方
+      mockEventEmitter.emitStandardized.mockClear();
+
       // Act
-      cacheManager._evictOldest();
-      
+      cacheManager._evictOldest(); // key1 が削除されるはず
+
       // Assert
       expect(cacheManager.cache.has('key1')).toBe(false);
       expect(cacheManager.cache.has('key2')).toBe(true);
-      
-      // イベントが発行されていることを確認
-      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_evicted', {
-        key: 'key1'
-      });
+      expectStandardizedEventEmitted(mockEventEmitter, 'cache', 'item_evicted', { key: 'key1', timestamp: 'any' });
     });
-    
-    test('キャッシュが空の場合、何も削除しない', () => {
-      // Arrange
-      // キャッシュは空
-      
+
+    test('キャッシュが空の場合、何も削除せず、イベントも発行しない', () => {
+      // Arrange (キャッシュは空)
+      mockEventEmitter.emitStandardized.mockClear();
+
       // Act
       cacheManager._evictOldest();
-      
+
       // Assert
       expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled();
-    });
-    
-    test('emitStandardizedが利用できない場合、従来のイベントを発行する（_evictOldest）', () => {
-      // Arrange
-      // 1つ目のエントリを追加
-      cacheManager.set('key1', 'value1');
-      
-      // 1秒後に2つ目のエントリを追加
-      const timestamp = Date.now() + 1000;
-      jest.spyOn(Date, 'now').mockReturnValue(timestamp);
-      cacheManager.set('key2', 'value2');
-      
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
-      // Act
-      cacheManager._evictOldest();
-      
-      // Assert
-      expect(cacheManager.cache.has('key1')).toBe(false);
-      expect(cacheManager.cache.has('key2')).toBe(true);
-      
-      // 従来のイベントが発行されていることを確認
-      expectEventEmitted(mockEventEmitter, 'cache:evicted', {
-        key: 'key1',
-        timestamp: expect.any(String)
-      });
-    });
-    
-    test('開発環境では非推奨警告を表示する（_evictOldest）', () => {
-      // Arrange
-      cacheManager.set('key1', 'value1');
-      
-      // emitStandardizedを削除
-      delete mockEventEmitter.emitStandardized;
-      
-      // 開発環境に設定
-      process.env.NODE_ENV = 'development';
-      
-      // コンソール警告をモック
-      const originalConsoleWarn = console.warn;
-      console.warn = jest.fn();
-      
-      // モックをリセット
-      jest.clearAllMocks();
-      
-      // Act
-      cacheManager._evictOldest();
-      
-      // Assert
-      expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining('非推奨のイベント名 cache:evicted')
-      );
-      
-      // コンソール警告を元に戻す
-      console.warn = originalConsoleWarn;
-    });
-    
-    test('イベントエミッターがない場合もエラーなく動作する', () => {
-      // Arrange
-      cacheManager.set('key1', 'value1');
-      
-      // イベントエミッターを削除
-      cacheManager.eventEmitter = null;
-      
-      // Act & Assert
-      expect(() => {
-        cacheManager._evictOldest();
-      }).not.toThrow();
-      
-      expect(cacheManager.cache.has('key1')).toBe(false);
     });
   });
 });

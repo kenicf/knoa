@@ -1,6 +1,6 @@
 /**
  * イベントカタログ
- * 
+ *
  * システム全体で使用されるイベントの定義と説明を管理します。
  * このファイルでは、標準的なイベントの定義を提供します。
  */
@@ -22,15 +22,15 @@ eventCatalog.registerEvent('task:created', {
     dependencies: 'タスクの依存関係',
     priority: 'タスクの優先度',
     estimated_hours: '見積もり時間',
-    progress_percentage: '進捗率'
+    progress_percentage: '進捗率',
   },
   examples: [
     `emitter.emitStandardized('task', 'created', { 
       id: 'T001', 
       title: '基本ディレクトリ構造の設計',
       status: 'pending'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('task:updated', {
@@ -40,7 +40,7 @@ eventCatalog.registerEvent('task:updated', {
     id: 'タスクID',
     updates: '更新内容',
     previous: '更新前の値',
-    current: '更新後の値'
+    current: '更新後の値',
   },
   examples: [
     `emitter.emitStandardized('task', 'updated', { 
@@ -48,8 +48,8 @@ eventCatalog.registerEvent('task:updated', {
       updates: { status: 'in_progress' },
       previous: { status: 'pending' },
       current: { status: 'in_progress' }
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('task:deleted', {
@@ -57,14 +57,14 @@ eventCatalog.registerEvent('task:deleted', {
   category: 'task',
   schema: {
     id: 'タスクID',
-    reason: '削除理由'
+    reason: '削除理由',
   },
   examples: [
     `emitter.emitStandardized('task', 'deleted', { 
       id: 'T001', 
       reason: '重複タスクのため削除'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('task:statusChanged', {
@@ -74,15 +74,15 @@ eventCatalog.registerEvent('task:statusChanged', {
     id: 'タスクID',
     previousStatus: '変更前のステータス',
     newStatus: '変更後のステータス',
-    timestamp: '変更日時'
+    timestamp: '変更日時',
   },
   examples: [
     `emitter.emitStandardized('task', 'statusChanged', { 
       id: 'T001', 
       previousStatus: 'pending',
       newStatus: 'in_progress'
-    });`
-  ]
+    });`,
+  ],
 });
 
 // セッション関連イベント
@@ -93,14 +93,14 @@ eventCatalog.registerEvent('session:started', {
     id: 'セッションID',
     timestamp: '開始時刻',
     project_id: 'プロジェクトID',
-    previous_session_id: '前回のセッションID'
+    previous_session_id: '前回のセッションID',
   },
   examples: [
     `emitter.emitStandardized('session', 'started', { 
       id: 'session-20250322-1',
       project_id: 'knoa'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('session:ended', {
@@ -110,15 +110,15 @@ eventCatalog.registerEvent('session:ended', {
     id: 'セッションID',
     timestamp: '終了時刻',
     duration: 'セッション時間（秒）',
-    completed_tasks: '完了したタスク'
+    completed_tasks: '完了したタスク',
   },
   examples: [
     `emitter.emitStandardized('session', 'ended', { 
       id: 'session-20250322-1',
       duration: 3600,
       completed_tasks: ['T001', 'T002']
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('session:handover', {
@@ -127,15 +127,15 @@ eventCatalog.registerEvent('session:handover', {
   schema: {
     from_session_id: '引継ぎ元セッションID',
     to_session_id: '引継ぎ先セッションID',
-    handover_data: '引継ぎデータ'
+    handover_data: '引継ぎデータ',
   },
   examples: [
     `emitter.emitStandardized('session', 'handover', { 
       from_session_id: 'session-20250322-1',
       to_session_id: 'session-20250322-2',
       handover_data: { current_focus: 'T011' }
-    });`
-  ]
+    });`,
+  ],
 });
 
 // フィードバック関連イベント
@@ -147,7 +147,7 @@ eventCatalog.registerEvent('feedback:collected', {
     task_id: 'タスクID',
     content: 'フィードバック内容',
     type: 'フィードバックタイプ',
-    severity: '重要度'
+    severity: '重要度',
   },
   examples: [
     `emitter.emitStandardized('feedback', 'collected', { 
@@ -156,8 +156,8 @@ eventCatalog.registerEvent('feedback:collected', {
       content: 'ディレクトリ構造が複雑すぎる',
       type: 'improvement',
       severity: 'medium'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('feedback:resolved', {
@@ -166,15 +166,15 @@ eventCatalog.registerEvent('feedback:resolved', {
   schema: {
     id: 'フィードバックID',
     resolution: '解決内容',
-    resolution_time: '解決にかかった時間'
+    resolution_time: '解決にかかった時間',
   },
   examples: [
     `emitter.emitStandardized('feedback', 'resolved', { 
       id: 'F001',
       resolution: 'ディレクトリ構造をシンプル化しました',
       resolution_time: 3600
-    });`
-  ]
+    });`,
+  ],
 });
 
 // Git関連イベント
@@ -186,7 +186,7 @@ eventCatalog.registerEvent('git:committed', {
     message: 'コミットメッセージ',
     author: '作者',
     files_changed: '変更されたファイル',
-    related_tasks: '関連タスク'
+    related_tasks: '関連タスク',
   },
   examples: [
     `emitter.emitStandardized('git', 'committed', { 
@@ -195,8 +195,8 @@ eventCatalog.registerEvent('git:committed', {
       author: 'AI Developer',
       files_changed: 5,
       related_tasks: ['T007']
-    });`
-  ]
+    });`,
+  ],
 });
 
 // ストレージ関連イベント
@@ -210,7 +210,7 @@ eventCatalog.registerEvent('storage:file_read_before', {
     filename: 'ファイル名',
     type: 'ファイルタイプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_read_before', {
@@ -219,8 +219,8 @@ eventCatalog.registerEvent('storage:file_read_before', {
       type: 'json',
       traceId: 'trace-1234567890',
       requestId: 'req-1234567890'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:file_read_after', {
@@ -234,7 +234,7 @@ eventCatalog.registerEvent('storage:file_read_after', {
     success: '成功したかどうか',
     error: 'エラー情報（失敗時）',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_read_after', {
@@ -244,8 +244,8 @@ eventCatalog.registerEvent('storage:file_read_after', {
       success: true,
       traceId: 'trace-1234567890',
       requestId: 'req-1234567890'
-    });`
-  ]
+    });`,
+  ],
 });
 
 // ファイル書き込み関連イベント
@@ -258,7 +258,7 @@ eventCatalog.registerEvent('storage:file_write_before', {
     filename: 'ファイル名',
     type: 'ファイルタイプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_write_before', {
@@ -267,8 +267,8 @@ eventCatalog.registerEvent('storage:file_write_before', {
       type: 'json',
       traceId: 'trace-1234567890',
       requestId: 'req-1234567890'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:file_write_after', {
@@ -282,7 +282,7 @@ eventCatalog.registerEvent('storage:file_write_after', {
     success: '成功したかどうか',
     error: 'エラー情報（失敗時）',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_write_after', {
@@ -292,8 +292,8 @@ eventCatalog.registerEvent('storage:file_write_after', {
       success: true,
       traceId: 'trace-1234567890',
       requestId: 'req-1234567890'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:fileCreated', {
@@ -302,15 +302,15 @@ eventCatalog.registerEvent('storage:fileCreated', {
   schema: {
     path: 'ファイルパス',
     size: 'ファイルサイズ',
-    content_type: 'コンテンツタイプ'
+    content_type: 'コンテンツタイプ',
   },
   examples: [
     `emitter.emitStandardized('storage', 'fileCreated', { 
       path: 'ai-context/tasks/T011-implementation-strategy.md',
       size: 24560,
       content_type: 'text/markdown'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:fileUpdated', {
@@ -320,7 +320,7 @@ eventCatalog.registerEvent('storage:fileUpdated', {
     path: 'ファイルパス',
     previous_size: '更新前のサイズ',
     new_size: '更新後のサイズ',
-    changes: '変更内容'
+    changes: '変更内容',
   },
   examples: [
     `emitter.emitStandardized('storage', 'fileUpdated', { 
@@ -328,8 +328,8 @@ eventCatalog.registerEvent('storage:fileUpdated', {
       previous_size: 4096,
       new_size: 4256,
       changes: { added_tasks: ['T011'] }
-    });`
-  ]
+    });`,
+  ],
 });
 
 // システム関連イベント
@@ -339,15 +339,15 @@ eventCatalog.registerEvent('system:initialized', {
   schema: {
     version: 'システムバージョン',
     components: '初期化されたコンポーネント',
-    startup_time: '起動時間（ミリ秒）'
+    startup_time: '起動時間（ミリ秒）',
   },
   examples: [
     `emitter.emitStandardized('system', 'initialized', { 
       version: '1.0.0',
       components: ['task', 'session', 'feedback'],
       startup_time: 1200
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('system:error', {
@@ -358,7 +358,7 @@ eventCatalog.registerEvent('system:error', {
     message: 'エラーメッセージ',
     component: 'エラーが発生したコンポーネント',
     stack: 'スタックトレース',
-    recoverable: '回復可能かどうか'
+    recoverable: '回復可能かどうか',
   },
   examples: [
     `emitter.emitStandardized('system', 'error', { 
@@ -366,8 +366,8 @@ eventCatalog.registerEvent('system:error', {
       message: 'タスクIDが無効です',
       component: 'task-manager',
       recoverable: true
-    });`
-  ]
+    });`,
+  ],
 });
 
 // ロガー関連イベント
@@ -381,7 +381,7 @@ eventCatalog.registerEvent('log:message_created', {
     context: 'コンテキスト情報',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('log', 'message_created', {
@@ -391,8 +391,8 @@ eventCatalog.registerEvent('log:message_created', {
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('log:alert_created', {
@@ -405,7 +405,7 @@ eventCatalog.registerEvent('log:alert_created', {
     context: 'コンテキスト情報',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('log', 'alert_created', {
@@ -415,8 +415,8 @@ eventCatalog.registerEvent('log:alert_created', {
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('log:transport_added', {
@@ -427,7 +427,7 @@ eventCatalog.registerEvent('log:transport_added', {
     type: 'トランスポートタイプ',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('log', 'transport_added', {
@@ -435,8 +435,8 @@ eventCatalog.registerEvent('log:transport_added', {
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('log:context_provider_added', {
@@ -447,7 +447,7 @@ eventCatalog.registerEvent('log:context_provider_added', {
     key: 'プロバイダキー',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('log', 'context_provider_added', {
@@ -455,8 +455,8 @@ eventCatalog.registerEvent('log:context_provider_added', {
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 
 // キャッシュ関連イベント
@@ -469,7 +469,7 @@ eventCatalog.registerEvent('cache:system_initialized', {
     maxSize: '最大キャッシュサイズ',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('cache', 'system_initialized', {
@@ -478,8 +478,8 @@ eventCatalog.registerEvent('cache:system_initialized', {
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('cache:item_set', {
@@ -491,7 +491,7 @@ eventCatalog.registerEvent('cache:item_set', {
     ttl: 'TTL（ミリ秒）',
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
-    requestId: 'リクエストID'
+    requestId: 'リクエストID',
   },
   examples: [
     `emitter.emitStandardized('cache', 'item_set', {
@@ -500,8 +500,8 @@ eventCatalog.registerEvent('cache:item_set', {
       timestamp: '2025-03-23T05:32:05.412Z',
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m'
-    });`
-  ]
+    });`,
+  ],
 });
 
 // イベント駆動アーキテクチャ関連イベント
@@ -511,15 +511,15 @@ eventCatalog.registerEvent('event:registered', {
   schema: {
     name: 'イベント名',
     category: 'カテゴリ',
-    description: '説明'
+    description: '説明',
   },
   examples: [
     `emitter.emitStandardized('event', 'registered', {
       name: 'task:created',
       category: 'task',
       description: '新しいタスクが作成されたときに発行されます'
-    });`
-  ]
+    });`,
+  ],
 });
 
 // StorageServiceの標準化されたイベント
@@ -534,7 +534,7 @@ eventCatalog.registerEvent('storage:file_read_before', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_read_before', {
@@ -545,8 +545,8 @@ eventCatalog.registerEvent('storage:file_read_before', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:file_read_after', {
@@ -562,7 +562,7 @@ eventCatalog.registerEvent('storage:file_read_after', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_read_after', {
@@ -574,8 +574,8 @@ eventCatalog.registerEvent('storage:file_read_after', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:file_write_before', {
@@ -589,7 +589,7 @@ eventCatalog.registerEvent('storage:file_write_before', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_write_before', {
@@ -600,8 +600,8 @@ eventCatalog.registerEvent('storage:file_write_before', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:file_write_after', {
@@ -617,7 +617,7 @@ eventCatalog.registerEvent('storage:file_write_after', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_write_after', {
@@ -629,8 +629,8 @@ eventCatalog.registerEvent('storage:file_write_after', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:file_update_before', {
@@ -644,7 +644,7 @@ eventCatalog.registerEvent('storage:file_update_before', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_update_before', {
@@ -655,8 +655,8 @@ eventCatalog.registerEvent('storage:file_update_before', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:file_update_after', {
@@ -672,7 +672,7 @@ eventCatalog.registerEvent('storage:file_update_after', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_update_after', {
@@ -684,8 +684,8 @@ eventCatalog.registerEvent('storage:file_update_after', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:directory_list_before', {
@@ -698,7 +698,7 @@ eventCatalog.registerEvent('storage:directory_list_before', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'directory_list_before', {
@@ -708,8 +708,8 @@ eventCatalog.registerEvent('storage:directory_list_before', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:directory_list_after', {
@@ -725,7 +725,7 @@ eventCatalog.registerEvent('storage:directory_list_after', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'directory_list_after', {
@@ -737,8 +737,8 @@ eventCatalog.registerEvent('storage:directory_list_after', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:file_delete_before', {
@@ -751,7 +751,7 @@ eventCatalog.registerEvent('storage:file_delete_before', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_delete_before', {
@@ -761,8 +761,8 @@ eventCatalog.registerEvent('storage:file_delete_before', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('storage:file_delete_after', {
@@ -777,7 +777,7 @@ eventCatalog.registerEvent('storage:file_delete_after', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('storage', 'file_delete_after', {
@@ -788,8 +788,8 @@ eventCatalog.registerEvent('storage:file_delete_after', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'storage'
-    });`
-  ]
+    });`,
+  ],
 });
 
 // TaskManagerの標準化されたイベント
@@ -805,7 +805,7 @@ eventCatalog.registerEvent('task:task_created', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('task', 'task_created', {
@@ -816,8 +816,8 @@ eventCatalog.registerEvent('task:task_created', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'task'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('task:task_updated', {
@@ -832,7 +832,7 @@ eventCatalog.registerEvent('task:task_updated', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('task', 'task_updated', {
@@ -844,8 +844,8 @@ eventCatalog.registerEvent('task:task_updated', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'task'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('task:task_deleted', {
@@ -858,7 +858,7 @@ eventCatalog.registerEvent('task:task_deleted', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('task', 'task_deleted', {
@@ -868,8 +868,8 @@ eventCatalog.registerEvent('task:task_deleted', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'task'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('task:status_changed', {
@@ -883,7 +883,7 @@ eventCatalog.registerEvent('task:status_changed', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('task', 'status_changed', {
@@ -894,8 +894,8 @@ eventCatalog.registerEvent('task:status_changed', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'task'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('task:system_initialized', {
@@ -906,7 +906,7 @@ eventCatalog.registerEvent('task:system_initialized', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('task', 'system_initialized', {
@@ -914,8 +914,8 @@ eventCatalog.registerEvent('task:system_initialized', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'task'
-    });`
-  ]
+    });`,
+  ],
 });
 
 // SessionManagerの標準化されたイベント
@@ -929,7 +929,7 @@ eventCatalog.registerEvent('session:session_started', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('session', 'session_started', {
@@ -939,8 +939,8 @@ eventCatalog.registerEvent('session:session_started', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'session'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('session:session_ended', {
@@ -954,7 +954,7 @@ eventCatalog.registerEvent('session:session_ended', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('session', 'session_ended', {
@@ -965,8 +965,8 @@ eventCatalog.registerEvent('session:session_ended', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'session'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('session:handover_created', {
@@ -980,7 +980,7 @@ eventCatalog.registerEvent('session:handover_created', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('session', 'handover_created', {
@@ -991,8 +991,8 @@ eventCatalog.registerEvent('session:handover_created', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'session'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('session:system_initialized', {
@@ -1003,7 +1003,7 @@ eventCatalog.registerEvent('session:system_initialized', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('session', 'system_initialized', {
@@ -1011,8 +1011,8 @@ eventCatalog.registerEvent('session:system_initialized', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'session'
-    });`
-  ]
+    });`,
+  ],
 });
 
 // FeedbackManagerの標準化されたイベント
@@ -1029,7 +1029,7 @@ eventCatalog.registerEvent('feedback:feedback_collected', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('feedback', 'feedback_collected', {
@@ -1042,8 +1042,8 @@ eventCatalog.registerEvent('feedback:feedback_collected', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'feedback'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('feedback:feedback_resolved', {
@@ -1057,7 +1057,7 @@ eventCatalog.registerEvent('feedback:feedback_resolved', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('feedback', 'feedback_resolved', {
@@ -1068,8 +1068,8 @@ eventCatalog.registerEvent('feedback:feedback_resolved', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'feedback'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('feedback:system_initialized', {
@@ -1080,7 +1080,7 @@ eventCatalog.registerEvent('feedback:system_initialized', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('feedback', 'system_initialized', {
@@ -1088,8 +1088,8 @@ eventCatalog.registerEvent('feedback:system_initialized', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'feedback'
-    });`
-  ]
+    });`,
+  ],
 });
 
 // IntegrationManagerの標準化されたイベント
@@ -1103,7 +1103,7 @@ eventCatalog.registerEvent('integration:system_initialized', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('integration', 'system_initialized', {
@@ -1113,8 +1113,8 @@ eventCatalog.registerEvent('integration:system_initialized', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'integration'
-    });`
-  ]
+    });`,
+  ],
 });
 
 eventCatalog.registerEvent('integration:workflow_initialized', {
@@ -1128,7 +1128,7 @@ eventCatalog.registerEvent('integration:workflow_initialized', {
     timestamp: 'タイムスタンプ',
     traceId: 'トレースID',
     requestId: 'リクエストID',
-    component: 'コンポーネント名'
+    component: 'コンポーネント名',
   },
   examples: [
     `emitter.emitStandardized('integration', 'workflow_initialized', {
@@ -1139,8 +1139,8 @@ eventCatalog.registerEvent('integration:workflow_initialized', {
       traceId: 'trace-1742707925413-ujbwba8zz',
       requestId: 'req-1742707925413-b0240qt7m',
       component: 'integration'
-    });`
-  ]
+    });`,
+  ],
 });
 
 module.exports = eventCatalog;

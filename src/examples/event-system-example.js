@@ -1,11 +1,14 @@
 /**
  * イベントシステムの使用例
- * 
+ *
  * このファイルでは、イベントシステムの基本的な使い方と
  * イベント駆動アーキテクチャの実装例を示します。
  */
 
-const { EnhancedEventEmitter, EventCatalog } = require('../lib/core/event-system');
+const {
+  EnhancedEventEmitter,
+  EventCatalog,
+} = require('../lib/core/event-system');
 const eventCatalog = require('../lib/core/event-catalog');
 const { EventMigrationHelper } = require('../lib/core/event-migration-helper');
 
@@ -14,7 +17,7 @@ const logger = {
   debug: (...args) => console.log('[DEBUG]', ...args),
   info: (...args) => console.log('[INFO]', ...args),
   warn: (...args) => console.log('[WARN]', ...args),
-  error: (...args) => console.log('[ERROR]', ...args)
+  error: (...args) => console.log('[ERROR]', ...args),
 };
 
 // イベントエミッターの作成
@@ -22,7 +25,7 @@ const eventEmitter = new EnhancedEventEmitter({
   debugMode: true,
   keepHistory: true,
   historyLimit: 100,
-  logger
+  logger,
 });
 
 // イベントカタログを設定
@@ -31,7 +34,7 @@ eventEmitter.setCatalog(eventCatalog);
 // 移行ヘルパーの作成
 const migrationHelper = new EventMigrationHelper(eventEmitter, {
   debugMode: true,
-  logger
+  logger,
 });
 
 // ===== 従来のクラスベースの実装 =====
@@ -44,7 +47,7 @@ class TaskManager {
     this.tasks = new Map();
     this.nextId = 1;
   }
-  
+
   /**
    * タスクを作成
    * @param {Object} data - タスクデータ
@@ -58,15 +61,15 @@ class TaskManager {
       description: data.description || '',
       status: data.status || 'pending',
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     };
-    
+
     this.tasks.set(id, task);
     logger.info(`タスク作成: ${id} - ${task.title}`);
-    
+
     return task;
   }
-  
+
   /**
    * タスクを更新
    * @param {string} id - タスクID
@@ -77,25 +80,27 @@ class TaskManager {
     if (!this.tasks.has(id)) {
       throw new Error(`タスク ${id} が見つかりません`);
     }
-    
+
     const task = this.tasks.get(id);
     const previousStatus = task.status;
-    
+
     // 更新を適用
     Object.assign(task, updates, {
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     });
-    
+
     logger.info(`タスク更新: ${id} - ${task.title}`);
-    
+
     // ステータスが変更された場合
     if (previousStatus !== task.status) {
-      logger.info(`タスクステータス変更: ${id} - ${previousStatus} → ${task.status}`);
+      logger.info(
+        `タスクステータス変更: ${id} - ${previousStatus} → ${task.status}`
+      );
     }
-    
+
     return task;
   }
-  
+
   /**
    * タスクを削除
    * @param {string} id - タスクID
@@ -105,13 +110,13 @@ class TaskManager {
     if (!this.tasks.has(id)) {
       throw new Error(`タスク ${id} が見つかりません`);
     }
-    
+
     this.tasks.delete(id);
     logger.info(`タスク削除: ${id}`);
-    
+
     return true;
   }
-  
+
   /**
    * タスクを取得
    * @param {string} id - タスクID
@@ -121,10 +126,10 @@ class TaskManager {
     if (!this.tasks.has(id)) {
       throw new Error(`タスク ${id} が見つかりません`);
     }
-    
+
     return this.tasks.get(id);
   }
-  
+
   /**
    * すべてのタスクを取得
    * @returns {Array<Object>} タスクの配列
@@ -142,7 +147,7 @@ class SessionManager {
     this.sessions = new Map();
     this.currentSession = null;
   }
-  
+
   /**
    * セッションを開始
    * @param {Object} data - セッションデータ
@@ -156,17 +161,17 @@ class SessionManager {
       start_time: new Date().toISOString(),
       end_time: null,
       status: 'active',
-      ...data
+      ...data,
     };
-    
+
     this.sessions.set(id, session);
     this.currentSession = session;
-    
+
     logger.info(`セッション開始: ${id}`);
-    
+
     return session;
   }
-  
+
   /**
    * セッションを終了
    * @param {string} id - セッションID
@@ -176,20 +181,20 @@ class SessionManager {
     if (!this.sessions.has(id)) {
       throw new Error(`セッション ${id} が見つかりません`);
     }
-    
+
     const session = this.sessions.get(id);
     session.end_time = new Date().toISOString();
     session.status = 'completed';
-    
+
     if (this.currentSession && this.currentSession.id === id) {
       this.currentSession = null;
     }
-    
+
     logger.info(`セッション終了: ${id}`);
-    
+
     return session;
   }
-  
+
   /**
    * 現在のセッションを取得
    * @returns {Object|null} 現在のセッション
@@ -207,13 +212,13 @@ const taskMethodToEventMap = {
   updateTask: 'task:updated',
   deleteTask: 'task:deleted',
   getTask: 'task:accessed',
-  getAllTasks: 'task:listAccessed'
+  getAllTasks: 'task:listAccessed',
 };
 
 const sessionMethodToEventMap = {
   startSession: 'session:started',
   endSession: 'session:ended',
-  getCurrentSession: 'session:accessed'
+  getCurrentSession: 'session:accessed',
 };
 
 // 移行ラッパーの作成
@@ -236,39 +241,41 @@ const wrappedSessionManager = migrationHelper.createMigrationWrapper(
 // タスク作成イベントのリスナー
 eventEmitter.on('task:created', (data) => {
   logger.info(`[EVENT] タスク作成イベント受信: ${data.id} - ${data.title}`);
-  
+
   // 他のコンポーネントに通知
   eventEmitter.emitStandardized('notification', 'created', {
     type: 'task',
     message: `新しいタスク「${data.title}」が作成されました`,
-    task_id: data.id
+    task_id: data.id,
   });
 });
 
 // タスク更新イベントのリスナー
 eventEmitter.on('task:updated', (data) => {
   logger.info(`[EVENT] タスク更新イベント受信: ${data.id}`);
-  
+
   // ステータス変更の検出
   if (data.updates && data.updates.status) {
     eventEmitter.emitStandardized('task', 'statusChanged', {
       id: data.id,
       previousStatus: data.result ? data.result.status : 'unknown',
-      newStatus: data.updates.status
+      newStatus: data.updates.status,
     });
   }
 });
 
 // タスクステータス変更イベントのリスナー
 eventEmitter.on('task:statusChanged', (data) => {
-  logger.info(`[EVENT] タスクステータス変更イベント受信: ${data.id} - ${data.previousStatus} → ${data.newStatus}`);
-  
+  logger.info(
+    `[EVENT] タスクステータス変更イベント受信: ${data.id} - ${data.previousStatus} → ${data.newStatus}`
+  );
+
   // ステータスが「completed」に変更された場合
   if (data.newStatus === 'completed') {
     eventEmitter.emitStandardized('notification', 'created', {
       type: 'task_completed',
       message: `タスク ${data.id} が完了しました`,
-      task_id: data.id
+      task_id: data.id,
     });
   }
 });
@@ -276,24 +283,24 @@ eventEmitter.on('task:statusChanged', (data) => {
 // セッション開始イベントのリスナー
 eventEmitter.on('session:started', (data) => {
   logger.info(`[EVENT] セッション開始イベント受信: ${data.id}`);
-  
+
   // システム初期化イベントを発行
   eventEmitter.emitStandardized('system', 'initialized', {
     component: 'session',
     session_id: data.id,
-    startup_time: 100
+    startup_time: 100,
   });
 });
 
 // セッション終了イベントのリスナー
 eventEmitter.on('session:ended', (data) => {
   logger.info(`[EVENT] セッション終了イベント受信: ${data.id}`);
-  
+
   // セッション統計情報を計算
   const startTime = new Date(data.result.start_time);
   const endTime = new Date(data.result.end_time);
   const duration = (endTime - startTime) / 1000; // 秒単位
-  
+
   logger.info(`セッション統計: 期間=${duration}秒`);
 });
 
@@ -318,18 +325,18 @@ eventEmitter.on('notification:*', (data, eventName) => {
 const task1 = wrappedTaskManager.createTask({
   title: 'イベントシステムの実装',
   description: 'イベント駆動アーキテクチャを実装する',
-  status: 'in_progress'
+  status: 'in_progress',
 });
 
 // タスクの更新
 wrappedTaskManager.updateTask(task1.id, {
-  status: 'completed'
+  status: 'completed',
 });
 
 // セッションの開始
 const session = wrappedSessionManager.startSession({
   project_id: 'knoa',
-  user_id: 'user-001'
+  user_id: 'user-001',
 });
 
 // セッションの終了
@@ -340,7 +347,7 @@ try {
   eventEmitter.emitCataloged('system:initialized', {
     version: '1.0.0',
     components: ['task', 'session', 'feedback'],
-    startup_time: 1200
+    startup_time: 1200,
   });
 } catch (error) {
   logger.error(`カタログイベント発行エラー: ${error.message}`);
@@ -370,5 +377,5 @@ module.exports = {
   eventEmitter,
   taskManager: wrappedTaskManager,
   sessionManager: wrappedSessionManager,
-  migrationHelper
+  migrationHelper,
 };

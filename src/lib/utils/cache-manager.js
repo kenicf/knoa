@@ -1,8 +1,11 @@
 /**
  * キャッシュ管理クラス
- * 
+ *
  * パフォーマンスを向上させるためのキャッシュ機能を提供します。
  */
+
+// TODO: Step 5 で emitStandardizedEvent ヘルパーを利用するか検討
+// const { emitStandardizedEvent } = require('./event-helpers');
 
 /**
  * キャッシュマネージャークラス
@@ -11,50 +14,37 @@ class CacheManager {
   /**
    * コンストラクタ
    * @param {Object} options - オプション
+   * @param {Object} options.logger - ロガーインスタンス (必須)
+   * @param {Object} options.eventEmitter - イベントエミッターインスタンス (必須)
+   * @param {number} [options.ttlMs=300000] - デフォルトTTL (ミリ秒)
+   * @param {number} [options.maxSize=1000] - 最大キャッシュサイズ
    */
   constructor(options = {}) {
-    // 依存関係の設定
-    this.logger = options.logger || console;
+    // 依存関係の設定 (必須化)
+    if (!options.logger || !options.eventEmitter) {
+      throw new Error(
+        'Logger and EventEmitter instances are required in CacheManager options.'
+      );
+    }
+    this.logger = options.logger;
     this.eventEmitter = options.eventEmitter;
-    
+
     // キャッシュ設定
     this.cache = new Map();
     this.ttlMs = options.ttlMs || 300000; // デフォルト5分
     this.maxSize = options.maxSize || 1000; // 最大キャッシュサイズ
     this.hitCount = 0;
     this.missCount = 0;
-    
+
     // キャッシュ初期化イベント
-    if (this.eventEmitter) {
-      const timestamp = new Date().toISOString();
-      const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      // 新しい標準化されたイベント名を使用
-      if (typeof this.eventEmitter.emitStandardized === 'function') {
-        this.eventEmitter.emitStandardized('cache', 'system_initialized', {
-          ttlMs: this.ttlMs,
-          maxSize: this.maxSize,
-          timestamp,
-          traceId,
-          requestId
-        });
-      } else {
-        // 後方互換性のため
-        this.eventEmitter.emit('cache:initialized', {
-          ttlMs: this.ttlMs,
-          maxSize: this.maxSize,
-          timestamp
-        });
-        
-        // 開発環境では警告を表示
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('非推奨のイベント名 cache:initialized が使用されています。代わりに cache:system_initialized を使用してください。');
-        }
-      }
-    }
+    // emitStandardized を直接呼び出すように変更
+    this.eventEmitter.emitStandardized('cache', 'system_initialized', {
+      ttlMs: this.ttlMs,
+      maxSize: this.maxSize,
+      // timestamp, traceId, requestId は emitStandardized 内で付与される想定
+    });
   }
-  
+
   /**
    * キャッシュからデータを取得
    * @param {string} key - キー
@@ -64,58 +54,38 @@ class CacheManager {
     const cached = this.cache.get(key);
     if (!cached) {
       this.missCount++;
-      
-      if (this.eventEmitter) {
-        this.eventEmitter.emit('cache:miss', { key });
-      }
-      
+
+      // cache:miss イベントを標準化
+      this.eventEmitter.emitStandardized('cache', 'item_missed', { key });
+
       return null;
     }
-    
-    // TTLチェック
-    if (Date.now() - cached.timestamp > this.ttlMs) {
+
+    // TTLチェック (エントリ固有のTTLを使用)
+    if (Date.now() - cached.timestamp > cached.ttl) {
       this.cache.delete(key);
       this.missCount++;
-      
-      if (this.eventEmitter) {
-        this.eventEmitter.emit('cache:expired', { key, ttl: this.ttlMs });
-      }
-      
+
+      // cache:expired イベントを標準化
+      this.eventEmitter.emitStandardized('cache', 'item_expired', {
+        key,
+        ttl: cached.ttl, // エントリ固有のTTLを使用
+      });
+
       return null;
     }
-    
+
     this.hitCount++;
-    
-    if (this.eventEmitter) {
-      const timestamp = new Date().toISOString();
-      const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      // 新しい標準化されたイベント名を使用
-      if (typeof this.eventEmitter.emitStandardized === 'function') {
-        this.eventEmitter.emitStandardized('cache', 'item_accessed', {
-          key,
-          timestamp,
-          traceId,
-          requestId
-        });
-      } else {
-        // 後方互換性のため
-        this.eventEmitter.emit('cache:hit', {
-          key,
-          timestamp
-        });
-        
-        // 開発環境では警告を表示
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('非推奨のイベント名 cache:hit が使用されています。代わりに cache:item_accessed を使用してください。');
-        }
-      }
-    }
-    
+
+    // cache:hit イベントを標準化 (item_accessed)
+    this.eventEmitter.emitStandardized('cache', 'item_accessed', {
+      key,
+      // timestamp, traceId, requestId は emitStandardized 内で付与される想定
+    });
+
     return cached.value;
   }
-  
+
   /**
    * キャッシュにデータを設定
    * @param {string} key - キー
@@ -127,143 +97,98 @@ class CacheManager {
     if (this.cache.size >= this.maxSize) {
       this._evictOldest();
     }
-    
+
     this.cache.set(key, {
       value,
       timestamp: Date.now(),
-      ttl
+      ttl,
     });
-    
-    if (this.eventEmitter) {
-      const timestamp = new Date().toISOString();
-      const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      // 新しい標準化されたイベント名を使用
-      if (typeof this.eventEmitter.emitStandardized === 'function') {
-        this.eventEmitter.emitStandardized('cache', 'item_set', {
-          key,
-          ttl,
-          timestamp,
-          traceId,
-          requestId
-        });
-      } else {
-        // 後方互換性のため
-        this.eventEmitter.emit('cache:item_set', {
-          key,
-          ttl,
-          timestamp
-        });
-        
-        // 開発環境では警告を表示
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('非推奨のイベント名 cache:set が使用されています。代わりに cache:item_set を使用してください。');
-        }
-      }
-    }
+
+    // cache:set イベントを標準化 (item_set)
+    this.eventEmitter.emitStandardized('cache', 'item_set', {
+      key,
+      ttl,
+      // timestamp, traceId, requestId は emitStandardized 内で付与される想定
+    });
   }
-  
+
   /**
    * 特定パターンに一致するキーのキャッシュを無効化
    * @param {string|RegExp} keyPattern - キーパターン
    * @returns {number} 無効化されたエントリ数
    */
   invalidate(keyPattern) {
-    let count = 0;
-    const pattern = keyPattern instanceof RegExp ? keyPattern : new RegExp(keyPattern);
-    
-    for (const key of this.cache.keys()) {
-      if (pattern.test(key)) {
-        this.cache.delete(key);
-        count++;
-      }
+    // keyPattern の型チェックを追加
+    if (typeof keyPattern !== 'string' && !(keyPattern instanceof RegExp)) {
+        this.logger.warn('Invalid keyPattern provided to invalidate. Must be a string or RegExp.', { keyPattern });
+        return 0;
     }
-    
-    if (this.eventEmitter) {
-      const timestamp = new Date().toISOString();
-      const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      // 新しい標準化されたイベント名を使用
-      if (typeof this.eventEmitter.emitStandardized === 'function') {
-        this.eventEmitter.emitStandardized('cache', 'items_invalidated', {
-          pattern: keyPattern.toString(),
-          count,
-          timestamp,
-          traceId,
-          requestId
-        });
-      } else {
-        // 後方互換性のため
-        this.eventEmitter.emit('cache:invalidated', {
-          pattern: keyPattern.toString(),
-          count,
-          timestamp
-        });
-        
-        // 開発環境では警告を表示
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('非推奨のイベント名 cache:invalidated が使用されています。代わりに cache:items_invalidated を使用してください。');
+
+    let count = 0;
+    try {
+      const pattern =
+        keyPattern instanceof RegExp ? keyPattern : new RegExp(keyPattern);
+
+      for (const key of this.cache.keys()) {
+        // pattern.test に文字列以外が渡される可能性を考慮 (より安全に)
+        if (typeof key === 'string' && pattern.test(key)) {
+          this.cache.delete(key);
+          count++;
         }
       }
+    } catch (error) {
+       // RegExp コンストラクタや test メソッドでエラーが発生した場合
+       this.logger.error(`キャッシュ無効化中にエラーが発生しました (パターン: ${keyPattern})`, error);
+       return 0; // エラー時は 0 を返す
     }
-    
+
+    if (count > 0) {
+      // cache:invalidated イベントを標準化 (items_invalidated)
+      // keyPattern が安全に文字列化できる場合のみ pattern プロパティを設定
+      const patternString = (typeof keyPattern === 'string' || keyPattern instanceof RegExp) ? keyPattern.toString() : '[Invalid Pattern]';
+      this.eventEmitter.emitStandardized('cache', 'items_invalidated', {
+        pattern: patternString,
+        count,
+        // timestamp, traceId, requestId は emitStandardized 内で付与される想定
+      });
+    }
+
     return count;
   }
-  
+
   /**
    * すべてのキャッシュをクリア
    */
   clear() {
     const size = this.cache.size;
     this.cache.clear();
-    
-    if (size > 0 && this.eventEmitter) {
-      const timestamp = new Date().toISOString();
-      const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      // 新しい標準化されたイベント名を使用
-      if (typeof this.eventEmitter.emitStandardized === 'function') {
-        this.eventEmitter.emitStandardized('cache', 'cleared', {
-          count: size,
-          timestamp,
-          traceId,
-          requestId
-        });
-      } else {
-        // 後方互換性のため
-        this.eventEmitter.emit('cache:cleared', {
-          size,
-          timestamp
-        });
-        
-        // 開発環境では警告を表示
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('非推奨のイベント名 cache:cleared が使用されています。代わりに cache:cleared を使用してください。');
-        }
-      }
+
+    if (size > 0) {
+      // cache:cleared イベントを標準化
+      this.eventEmitter.emitStandardized('cache', 'cleared', {
+        count: size,
+        // timestamp, traceId, requestId は emitStandardized 内で付与される想定
+      });
     }
   }
-  
+
   /**
    * キャッシュの統計情報を取得
    * @returns {Object} 統計情報
    */
   getStats() {
     const totalRequests = this.hitCount + this.missCount;
-    const hitRate = totalRequests > 0 ? (this.hitCount / totalRequests) : 0;
-    
+    const hitRate = totalRequests > 0 ? this.hitCount / totalRequests : 0;
+
     return {
       size: this.cache.size,
       maxSize: this.maxSize,
       hitCount: this.hitCount,
       missCount: this.missCount,
-      hitRate: hitRate
+      hitRate: hitRate,
     };
   }
-  
+
   /**
    * 最も古いエントリを削除
    * @private
@@ -271,43 +196,22 @@ class CacheManager {
   _evictOldest() {
     let oldestKey = null;
     let oldestTime = Infinity;
-    
+
     for (const [key, entry] of this.cache.entries()) {
       if (entry.timestamp < oldestTime) {
         oldestTime = entry.timestamp;
         oldestKey = key;
       }
     }
-    
+
     if (oldestKey) {
       this.cache.delete(oldestKey);
-      
-      if (this.eventEmitter) {
-        const timestamp = new Date().toISOString();
-        const traceId = `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        // 新しい標準化されたイベント名を使用
-        if (typeof this.eventEmitter.emitStandardized === 'function') {
-          this.eventEmitter.emitStandardized('cache', 'item_evicted', {
-            key: oldestKey,
-            timestamp,
-            traceId,
-            requestId
-          });
-        } else {
-          // 後方互換性のため
-          this.eventEmitter.emit('cache:evicted', {
-            key: oldestKey,
-            timestamp
-          });
-          
-          // 開発環境では警告を表示
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('非推奨のイベント名 cache:evicted が使用されています。代わりに cache:item_evicted を使用してください。');
-          }
-        }
-      }
+
+      // cache:evicted イベントを標準化 (item_evicted)
+      this.eventEmitter.emitStandardized('cache', 'item_evicted', {
+        key: oldestKey,
+        // timestamp, traceId, requestId は emitStandardized 内で付与される想定
+      });
     }
   }
 }

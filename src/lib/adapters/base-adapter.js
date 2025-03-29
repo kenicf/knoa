@@ -1,6 +1,6 @@
 /**
  * アダプターベースクラス
- * 
+ *
  * すべてのアダプターの基底クラスとして機能し、共通の機能を提供します。
  */
 
@@ -22,13 +22,13 @@ class BaseAdapter {
     if (!manager) {
       throw new Error('Manager is required');
     }
-    
+
     this.manager = manager;
     this.logger = options.logger || console;
     this.errorHandler = options.errorHandler;
     this.eventEmitter = options.eventEmitter;
   }
-  
+
   /**
    * 操作コンテキストを作成
    * @param {string} operation - 操作名
@@ -40,14 +40,17 @@ class BaseAdapter {
     if (!this.eventEmitter) {
       return null;
     }
-    
-    return this.eventEmitter.createContext({
-      component: this.constructor.name,
-      operation,
-      ...metadata
-    }, parentContext);
+
+    return this.eventEmitter.createContext(
+      {
+        component: this.constructor.name,
+        operation,
+        ...metadata,
+      },
+      parentContext
+    );
   }
-  
+
   /**
    * エラー処理メソッド
    * @param {Error} error - エラーオブジェクト
@@ -66,8 +69,8 @@ class BaseAdapter {
         context: {
           component: this.constructor.name,
           operation,
-          ...details
-        }
+          ...details,
+        },
       });
       error = wrappedError;
     }
@@ -76,19 +79,31 @@ class BaseAdapter {
     if (this.errorHandler && typeof this.errorHandler.handle === 'function') {
       return this.errorHandler.handle(error, this.constructor.name, operation, {
         context: context ? context.id : null,
-        ...details
+        ...details,
       });
     }
-    
+
     // エラーイベントを発行
     if (this.eventEmitter) {
-      const component = this.constructor.name.replace('Adapter', '').toLowerCase();
-      this.eventEmitter.emitError(error, component, operation, context, details);
+      const component = this.constructor.name
+        .replace('Adapter', '')
+        .toLowerCase();
+      this.eventEmitter.emitError(
+        error,
+        component,
+        operation,
+        context,
+        details
+      );
     } else {
       // イベントエミッターがない場合は直接ロガーに出力
-      this.logger.error(`Error in ${this.constructor.name}.${operation}:`, error, details);
+      this.logger.error(
+        `Error in ${this.constructor.name}.${operation}:`,
+        error,
+        details
+      );
     }
-    
+
     // 構造化されたエラー情報を返す
     return {
       error: true,
@@ -99,10 +114,11 @@ class BaseAdapter {
       timestamp: new Date().toISOString(),
       context: context ? context.id : null,
       recoverable: error.recoverable !== undefined ? error.recoverable : true,
-      details: typeof details === 'object' ? JSON.stringify(details) : String(details)
+      details:
+        typeof details === 'object' ? JSON.stringify(details) : String(details),
     };
   }
-  
+
   /**
    * パラメータ検証メソッド
    * @param {Object} params - 検証するパラメータ
@@ -114,14 +130,14 @@ class BaseAdapter {
     if (!params) {
       throw new ValidationError('Parameters are required');
     }
-    
+
     for (const param of required) {
       if (params[param] === undefined) {
         throw new ValidationError(`Parameter '${param}' is required`);
       }
     }
   }
-  
+
   /**
    * イベントを発行（修正版）
    * @param {string} component - コンポーネント名
@@ -131,82 +147,114 @@ class BaseAdapter {
    * @param {boolean} [bridgeOldEvents=true] - 古いイベント名もサポートするかどうか
    * @protected
    */
-  _emitEvent(component, action, data = {}, context = null, bridgeOldEvents = true) {
+  _emitEvent(
+    component,
+    action,
+    data = {},
+    context = null,
+    bridgeOldEvents = true
+  ) {
     if (!this.eventEmitter) {
       return;
     }
-    
+
     // コンテキストにエラーがある場合はイベント発行をスキップ
     if (context && context.hasError()) {
       if (this.eventEmitter.debugMode) {
-        this.logger.debug(`イベント ${component}:${action} はコンテキスト ${context.id} でエラーが発生しているためスキップされました`);
+        this.logger.debug(
+          `イベント ${component}:${action} はコンテキスト ${context.id} でエラーが発生しているためスキップされました`
+        );
       }
       return;
     }
-    
+
     // グローバルなエラー状態をチェック
     if (this.eventEmitter.errorOccurred) {
       if (this.eventEmitter.debugMode) {
-        this.logger.debug(`イベント ${component}:${action} はエラー発生のためスキップされました`);
+        this.logger.debug(
+          `イベント ${component}:${action} はエラー発生のためスキップされました`
+        );
       }
       return;
     }
-    
+
     try {
       // イベント名の定数マッピングをインポート
       const { EVENT_MAP } = require('../../lib/core/event-constants');
-      
+
       // 標準化されたイベント名
       const standardEvent = `${component}:${action}`;
-      
+
       // コンテキスト情報をデータに追加
       const enhancedData = {
         ...data,
         _context: context ? context.id : null,
-        timestamp: data.timestamp || new Date().toISOString()
+        timestamp: data.timestamp || new Date().toISOString(),
       };
-      
+
       // コンテキスト付きイベント発行が利用可能な場合はそちらを使用
-      if (context && typeof this.eventEmitter.emitStandardizedWithContext === 'function') {
-        this.eventEmitter.emitStandardizedWithContext(component, action, enhancedData, context, { bridgeOldEvents });
+      if (
+        context &&
+        typeof this.eventEmitter.emitStandardizedWithContext === 'function'
+      ) {
+        this.eventEmitter.emitStandardizedWithContext(
+          component,
+          action,
+          enhancedData,
+          context,
+          { bridgeOldEvents }
+        );
       } else {
         // 標準化されたイベント発行
         this.eventEmitter.emit(standardEvent, enhancedData);
-        
+
         // グローバルイベントも発行
         this.eventEmitter.emit('event', {
           type: standardEvent,
-          ...enhancedData
+          ...enhancedData,
         });
       }
-      
+
       // 古いイベント名のサポート（オプション）
       if (bridgeOldEvents) {
         const oldEventName = EVENT_MAP[standardEvent];
-        
+
         if (oldEventName) {
           this.eventEmitter.emit(oldEventName, enhancedData);
-          
+
           // 警告ログを出力（開発環境のみ）
-          if (process.env.NODE_ENV === 'development' && this.eventEmitter.logger) {
-            this.eventEmitter.logger.warn(`非推奨のイベント名 ${oldEventName} が使用されています。代わりに ${standardEvent} を使用してください。`, {
-              oldEventName,
-              standardEvent,
-              timestamp: enhancedData.timestamp
-            });
+          if (
+            process.env.NODE_ENV === 'development' &&
+            this.eventEmitter.logger
+          ) {
+            this.eventEmitter.logger.warn(
+              `非推奨のイベント名 ${oldEventName} が使用されています。代わりに ${standardEvent} を使用してください。`,
+              {
+                oldEventName,
+                standardEvent,
+                timestamp: enhancedData.timestamp,
+              }
+            );
           }
         }
       }
     } catch (error) {
-      this.logger.warn(`イベント発行中にエラーが発生しました: ${component}:${action}`, error);
-      
+      this.logger.warn(
+        `イベント発行中にエラーが発生しました: ${component}:${action}`,
+        error
+      );
+
       // エラー処理
       if (context) {
-        this._handleError(error, `emit_${action}`, context, { component, action, data });
+        this._handleError(error, `emit_${action}`, context, {
+          component,
+          action,
+          data,
+        });
       }
     }
   }
-  
+
   /**
    * エラーイベントを発行
    * @param {Error} error - エラーオブジェクト
@@ -219,11 +267,19 @@ class BaseAdapter {
     if (!this.eventEmitter) {
       return;
     }
-    
-    const component = this.constructor.name.replace('Adapter', '').toLowerCase();
-    
+
+    const component = this.constructor.name
+      .replace('Adapter', '')
+      .toLowerCase();
+
     if (typeof this.eventEmitter.emitError === 'function') {
-      this.eventEmitter.emitError(error, component, operation, context, details);
+      this.eventEmitter.emitError(
+        error,
+        component,
+        operation,
+        context,
+        details
+      );
     } else {
       // 後方互換性のため
       const { emitErrorEvent } = require('../../lib/utils/error-helpers');
