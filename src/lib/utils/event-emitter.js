@@ -40,10 +40,9 @@ class EventEmitter extends EnhancedEventEmitter {
    * @param {string} component - コンポーネント名
    * @param {string} action - アクション名
    * @param {*} [data={}] - イベントデータ
-   * @param {Object} [options={}] - オプション (現在は未使用)
    * @returns {boolean} リスナーが呼び出されたかどうか
    */
-  emitStandardized(component, action, data = {}, options = {}) {
+  emitStandardized(component, action, data = {}) {
     const standardEvent = `${component}:${action}`;
     const timestamp = new Date().toISOString();
     // TODO: traceId, requestId を OperationContext などから取得する仕組みを検討
@@ -70,10 +69,9 @@ class EventEmitter extends EnhancedEventEmitter {
    * @param {string} component - コンポーネント名
    * @param {string} action - アクション名
    * @param {*} [data={}] - イベントデータ
-   * @param {Object} [options={}] - オプション (現在は未使用)
-   * @returns {Promise<boolean>} リスナーが呼び出されたかどうか
+   * @returns {Promise<boolean>} リスナーが呼び出されたかどうか (非同期)
    */
-  async emitStandardizedAsync(component, action, data = {}, options = {}) {
+  async emitStandardizedAsync(component, action, data = {}) {
     const standardEvent = `${component}:${action}`;
     const timestamp = new Date().toISOString();
     // TODO: traceId, requestId を OperationContext などから取得する仕組みを検討

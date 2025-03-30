@@ -240,6 +240,7 @@ class FeedbackValidator {
         errors.push('feedback_items は配列である必要があります');
       } else {
         for (let i = 0; i < loop.feedback_items.length; i++) {
+          // eslint-disable-next-line security/detect-object-injection -- 配列インデックスアクセスであり、i はループ内で安全に管理されているため抑制
           const item = loop.feedback_items[i];
 
           // 必須フィールドのチェック

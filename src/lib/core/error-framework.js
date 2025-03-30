@@ -342,7 +342,7 @@ class ErrorHandler {
    * @param {string} operation - エラーが発生した操作
    * @returns {Error} 処理されたエラー
    */
-  handle(error, component, operation) {
+  async handle(error, component, operation) {
     // アプリケーションエラーでなければラップする
     if (!(error instanceof ApplicationError)) {
       error = new ApplicationError(error.message, {

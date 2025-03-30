@@ -219,6 +219,7 @@ class TaskRepository extends Repository {
           Object.prototype.hasOwnProperty.call(this.progressStates, newState)
         ) {
           updatedTask.progress_percentage =
+            // eslint-disable-next-line security/detect-object-injection -- hasOwnProperty でキーの存在をチェック済みのため抑制
             this.progressStates[newState].default_percentage;
         } else {
           // newState が不正な場合はエラーにするか、デフォルト値を設定するか検討

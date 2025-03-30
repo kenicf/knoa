@@ -334,6 +334,7 @@ describe('Logger', () => {
         const logSpy = jest.spyOn(logger, 'log');
         const context = { key: 'value' };
         // Act
+        // eslint-disable-next-line security/detect-object-injection -- level は test.each から渡される安全なログレベル文字列のため抑制
         logger[level](message, context);
         // Assert
         expect(logSpy).toHaveBeenCalledWith(level, message, context);

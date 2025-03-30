@@ -330,6 +330,7 @@ describe('コア基盤コンポーネントの統合', () => {
     });
 
     // このテストはスキップする
+    // eslint-disable-next-line jest/no-disabled-tests -- 意図的にスキップされているが、将来的に有効化を検討すべき (TODO)
     test.skip('エラーハンドラーが回復戦略を実行する', () => {
       // 回復戦略を登録
       const testErrorHandler = new ErrorHandler(mockLogger, eventEmitter);

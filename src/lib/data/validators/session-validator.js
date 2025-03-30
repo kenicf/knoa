@@ -13,9 +13,7 @@ class SessionValidator {
    * コンストラクタ
    * @param {Object} options - オプション
    */
-  constructor(options = {}) {
-    // オプション
-  }
+  constructor() {}
 
   /**
    * セッションを検証する
@@ -210,6 +208,7 @@ class SessionValidator {
                 } else {
                   const taskPattern = /^T[0-9]{3}$/;
                   for (let j = 0; j < commit.related_tasks.length; j++) {
+                    // eslint-disable-next-line security/detect-object-injection -- 配列インデックスアクセスであり、j はループ内で安全に管理されているため抑制
                     const taskId = commit.related_tasks[j];
                     if (!taskPattern.test(taskId)) {
                       errors.push(
@@ -240,6 +239,7 @@ class SessionValidator {
             ];
             for (const field of numericFields) {
               if (
+                // eslint-disable-next-line security/detect-object-injection -- field は事前定義された安全なリスト由来のため抑制
                 handover.git_changes.summary[field] !== undefined &&
                 // eslint-disable-next-line security/detect-object-injection
                 (typeof handover.git_changes.summary[field] !== 'number' ||
@@ -262,6 +262,7 @@ class SessionValidator {
         errors.push('current_challenges は配列である必要があります');
       } else {
         for (let i = 0; i < handover.current_challenges.length; i++) {
+          // eslint-disable-next-line security/detect-object-injection -- 配列インデックスアクセスであり、i はループ内で安全に管理されているため抑制
           const challenge = handover.current_challenges[i];
 
           // 必須フィールドのチェック
@@ -339,6 +340,7 @@ class SessionValidator {
         errors.push('action_items は配列である必要があります');
       } else {
         for (let i = 0; i < handover.action_items.length; i++) {
+          // eslint-disable-next-line security/detect-object-injection -- 配列インデックスアクセスであり、i はループ内で安全に管理されているため抑制
           const item = handover.action_items[i];
 
           // 必須フィールドのチェック

@@ -140,6 +140,7 @@ class Validator {
       'project_state_summary',
     ];
     for (const field of requiredFields) {
+      // eslint-disable-next-line security/detect-object-injection -- field は事前定義された安全なリスト由来のため抑制
       if (!handover[field]) {
         errors.push(`必須フィールド ${field} がありません`);
       }
@@ -197,6 +198,7 @@ class Validator {
     // 必須フィールドのチェック
     const requiredFields = ['task_id', 'verification_results'];
     for (const field of requiredFields) {
+      // eslint-disable-next-line security/detect-object-injection -- field は事前定義された安全なリスト由来のため抑制
       if (!loop[field]) {
         errors.push(`必須フィールド ${field} がありません`);
       }

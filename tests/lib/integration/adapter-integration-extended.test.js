@@ -15,8 +15,6 @@ const { EnhancedEventEmitter } = require('../../../src/lib/core/event-system');
 describe('拡張アダプター統合テスト', () => {
   let eventEmitter;
   let taskAdapter;
-  let sessionAdapter;
-  let feedbackAdapter;
   let stateAdapter;
   let integrationAdapter;
   let mockLogger;
@@ -174,16 +172,6 @@ describe('拡張アダプター統合テスト', () => {
 
     // アダプターの作成
     taskAdapter = new TaskManagerAdapter(mockTaskManager, {
-      eventEmitter,
-      logger: mockLogger,
-    });
-
-    sessionAdapter = new SessionManagerAdapter(mockSessionManager, {
-      eventEmitter,
-      logger: mockLogger,
-    });
-
-    feedbackAdapter = new FeedbackManagerAdapter(mockFeedbackManager, {
       eventEmitter,
       logger: mockLogger,
     });

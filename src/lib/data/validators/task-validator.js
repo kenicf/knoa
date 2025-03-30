@@ -185,6 +185,7 @@ class TaskValidator {
       errors.push('epicsは配列である必要があります');
     } else {
       for (let i = 0; i < hierarchy.epics.length; i++) {
+        // eslint-disable-next-line security/detect-object-injection -- 配列インデックスアクセスであり、i はループ内で安全に管理されているため抑制
         const epic = hierarchy.epics[i];
 
         // epic_idの検証
@@ -206,6 +207,7 @@ class TaskValidator {
           errors.push(`epic[${i}]のstoriesは配列である必要があります`);
         } else {
           for (let j = 0; j < epic.stories.length; j++) {
+            // eslint-disable-next-line security/detect-object-injection -- 配列インデックスアクセスであり、j はループ内で安全に管理されているため抑制
             const storyId = epic.stories[j];
 
             // story_idの検証
@@ -225,6 +227,7 @@ class TaskValidator {
       errors.push('storiesは配列である必要があります');
     } else {
       for (let i = 0; i < hierarchy.stories.length; i++) {
+        // eslint-disable-next-line security/detect-object-injection -- 配列インデックスアクセスであり、i はループ内で安全に管理されているため抑制
         const story = hierarchy.stories[i];
 
         // story_idの検証

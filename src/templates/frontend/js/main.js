@@ -8,8 +8,6 @@
 
 // 初期化処理
 document.addEventListener('DOMContentLoaded', function () {
-  console.log('ページが読み込まれました');
-
   // イベントリスナーの設定
   setupEventListeners();
 });

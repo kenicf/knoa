@@ -57,21 +57,27 @@ function expectStandardizedEventEmitted(
         key === 'path' &&
         // eslint-disable-next-line security/detect-object-injection
         typeof expectedData[key] === 'string' &&
+        // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、typeof チェックのみのため安全と判断
         typeof callData[key] === 'string'
       ) {
         // パスの場合は正規化して比較
         // パスの場合は正規化して比較
         const normalizePath = (path) => path.replace(/\\/g, '/');
+        // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、パス比較のため安全と判断
         return normalizePath(callData[key]).includes(
+          // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、パス比較のため安全と判断
           normalizePath(expectedData[key])
         );
       }
 
+      // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、instanceof チェックのため安全と判断
       if (expectedData[key] instanceof RegExp) {
+        // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、RegExp.test の引数として渡すため安全と判断
         return expectedData[key].test(callData[key]);
       }
 
       return (
+        // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、JSON.stringify で比較するため安全と判断
         JSON.stringify(callData[key]) === JSON.stringify(expectedData[key])
       );
     });
@@ -96,6 +102,7 @@ function expectStandardizedEventEmitted(
  * @param {string} message - 期待されるログメッセージ
  */
 function expectLogged(logger, level, message) {
+  // eslint-disable-next-line security/detect-object-injection -- level はテストコード内で指定される安全なログレベル文字列のため抑制
   expect(logger[level]).toHaveBeenCalledWith(
     expect.stringContaining(message),
     expect.any(Object)

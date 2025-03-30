@@ -218,6 +218,7 @@ class Repository {
         return acc;
       }, {});
       const updatedEntity = { ...collection[index], ...safeData, id };
+
       // eslint-disable-next-line security/detect-object-injection
       collection[index] = updatedEntity;
       entities[`${this.entityName}s`] = collection;

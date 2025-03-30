@@ -10,6 +10,7 @@ const {
 } = require('../../helpers/mock-factory');
 const {
   expectStandardizedEventEmitted,
+  expectLogged,
 } = require('../../helpers/test-helpers');
 
 describe('error-helpers', () => {
@@ -153,6 +154,20 @@ describe('error-helpers', () => {
           mockContext,
           details
         );
+        // Assert
+        expectStandardizedEventEmitted(mockEventEmitter, 'app', 'error', {
+          component,
+          operation,
+          errorCode: expectedCode, // test.each で定義された期待されるコード
+          errorMessage: error.message,
+          errorStack: expect.any(String),
+          details,
+          context: mockContext,
+          timestamp: 'any',
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        });
+        expectLogged(mockLogger, 'error', `Error in ${component}.${operation}`);
 
         // Assert
         expectStandardizedEventEmitted(mockEventEmitter, 'app', 'error', {

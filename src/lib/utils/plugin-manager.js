@@ -127,6 +127,7 @@ class PluginManager {
     if (
       !plugin ||
       !Object.prototype.hasOwnProperty.call(plugin, methodName) ||
+      // eslint-disable-next-line security/detect-object-injection -- hasOwnProperty でキーの存在をチェック済みのため抑制
       typeof plugin[methodName] !== 'function'
     ) {
       if (

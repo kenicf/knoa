@@ -382,6 +382,7 @@ describe('Validator', () => {
             },
           },
         };
+        // eslint-disable-next-line security/detect-object-injection -- missingField は test.each から渡される安全なフィールド名のため抑制
         delete invalidSession.session_handover[missingField];
         // Act
         const result = validator.validateSessionInput(invalidSession);
@@ -412,6 +413,7 @@ describe('Validator', () => {
               },
             },
           };
+          // eslint-disable-next-line security/detect-object-injection -- field は test.each から渡される安全なフィールド名のため抑制
           invalidSession.session_handover.project_state_summary[field] =
             'not an array';
           // Act
@@ -519,6 +521,7 @@ describe('Validator', () => {
               verification_results: { passes_tests: true },
             },
           };
+          // eslint-disable-next-line security/detect-object-injection -- missingField は test.each から渡される安全なフィールド名のため抑制
           delete invalidFeedback.feedback_loop[missingField];
           // Act
           const result = validator.validateFeedbackInput(invalidFeedback);

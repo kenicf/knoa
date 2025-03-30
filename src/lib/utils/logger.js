@@ -252,6 +252,17 @@ class Logger {
       });
       return;
     }
+    // 安全でないキーをチェック
+    if (key === '__proto__' || key === 'constructor') {
+      this.warn('Attempted to add context provider with unsafe key', { key });
+      if (this.errorHandler) {
+        this.errorHandler.handle(
+          new Error(`Unsafe key provided for context provider: ${key}`)
+        );
+      }
+      return; // 安全でないキーの場合は追加しない
+    }
+
     this.contextProviders[key] = provider;
 
     if (

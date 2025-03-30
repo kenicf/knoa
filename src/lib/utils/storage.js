@@ -444,6 +444,7 @@ class StorageService {
 
       try {
         // O_EXCL フラグを使用してアトミックにファイルを作成・ロック試行
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- lockPath は内部で安全に導出されるため抑制
         fs.writeFileSync(lockPath, `${process.pid}:${Date.now()}`, {
           flag: 'wx',
         });
@@ -689,7 +690,7 @@ class StorageService {
       }
 
       // fs.rmSync を使用 (Node.js v14.14.0+)
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
+
       fs.rmSync(nativeDirPath, { recursive: recursive, force: recursive }); // force は recursive が true の場合のみ有効
 
       this._emitEvent('directory_delete_after', {
@@ -756,7 +757,6 @@ class StorageService {
       destPath = this._getNativeFilePath(destDir, destFile);
       // _ensureDirectoryExists は _getNativeFilePath 内で処理されるため不要
 
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       fs.copyFileSync(sourcePath, destPath);
 
       this._emitEvent('file_copy_after', {
@@ -896,12 +896,12 @@ class StorageService {
    * @returns {boolean} 成功したかどうか
    */
   ensureDirectoryExists(directory) {
-    const operationContext = { operation: 'ensureDirectoryExists', directory };
     try {
       const nativeDirPath = path.join(this.basePath, directory);
       this._ensureDirectoryExists(nativeDirPath);
       return true;
-    } catch (error) {
+    } catch (_error) {
+      // error -> _error
       // _ensureDirectoryExists 内でエラーがログ記録されるか、スローされる
       return false;
     }
