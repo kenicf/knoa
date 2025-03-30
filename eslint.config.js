@@ -86,7 +86,6 @@ module.exports = [
       'jest/expect-expect': 'warn',
     },
   },
-  ,
   // CLIツール用設定
   {
     files: ['src/cli/**/*.js'],
