@@ -463,6 +463,7 @@ class StorageService {
                 // const lockData = fs.readFileSync(lockPath, 'utf8');
                 // if (lockData.startsWith(`${process.pid}:`)) {
                 //   // eslint-disable-next-line security/detect-non-literal-fs-filename
+                // eslint-disable-next-line security/detect-non-literal-fs-filename -- lockPath は内部で安全に導出されるため抑制
                 fs.unlinkSync(lockPath);
                 // }
                 // eslint-disable-next-line security/detect-non-literal-fs-filename

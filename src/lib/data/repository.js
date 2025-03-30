@@ -217,6 +217,7 @@ class Repository {
         }
         return acc;
       }, {});
+      // eslint-disable-next-line security/detect-object-injection -- safeData で基本的なサニタイズ済みのため抑制
       const updatedEntity = { ...collection[index], ...safeData, id };
 
       // eslint-disable-next-line security/detect-object-injection

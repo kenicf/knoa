@@ -6,8 +6,6 @@
  */
 
 const TaskManagerAdapter = require('../../../src/lib/adapters/task-manager-adapter');
-const SessionManagerAdapter = require('../../../src/lib/adapters/session-manager-adapter');
-const FeedbackManagerAdapter = require('../../../src/lib/adapters/feedback-manager-adapter');
 const StateManagerAdapter = require('../../../src/lib/adapters/state-manager-adapter');
 const IntegrationManagerAdapter = require('../../../src/lib/adapters/integration-manager-adapter');
 const { EnhancedEventEmitter } = require('../../../src/lib/core/event-system');
@@ -66,39 +64,6 @@ describe('拡張アダプター統合テスト', () => {
           { id: 'T002', title: 'タスク2', status: 'pending' },
         ],
       })),
-    };
-
-    const mockSessionManager = {
-      createNewSession: jest.fn().mockImplementation(() => ({
-        session_handover: { session_id: 'S001' },
-      })),
-      addTaskToSession: jest.fn().mockImplementation((sessionId, taskId) => ({
-        session_handover: { session_id: sessionId },
-        tasks: [taskId],
-      })),
-      endSession: jest.fn().mockImplementation((sessionId) => ({
-        session_handover: { session_id: sessionId },
-        ended: true,
-        duration: 3600,
-      })),
-      getLatestSession: jest.fn().mockImplementation(() => ({
-        session_id: 'S001',
-        created_at: new Date().toISOString(),
-      })),
-    };
-
-    const mockFeedbackManager = {
-      createNewFeedback: jest.fn().mockImplementation((taskId, attempt) => ({
-        id: 'F001',
-        task_id: taskId,
-        attempt: attempt || 1,
-      })),
-      updateFeedbackStatus: jest
-        .fn()
-        .mockImplementation((feedback, newStatus) => ({
-          ...feedback,
-          status: newStatus,
-        })),
     };
 
     mockStateManager = {

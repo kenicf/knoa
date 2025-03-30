@@ -263,6 +263,7 @@ class Logger {
       return; // 安全でないキーの場合は追加しない
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- 事前のチェックで安全でないキーは除外済みのため抑制
     this.contextProviders[key] = provider;
 
     if (

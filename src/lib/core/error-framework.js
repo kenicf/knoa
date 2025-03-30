@@ -420,6 +420,7 @@ class ErrorHandler {
           }
 
           // 回復戦略を実行
+          // eslint-disable-next-line promise/no-promise-in-callback -- handle メソッドが async のため誤検知と判断
           const result = await Promise.resolve(
             strategy(error, component, operation)
           );
