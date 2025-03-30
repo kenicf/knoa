@@ -56,11 +56,9 @@ class StorageService {
 
     // ディレクトリが存在しない場合は作成
     // eslint-disable-next-line security/detect-non-literal-fs-filename
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     if (!fs.existsSync(dirPath)) {
       try {
         // recursive: true で親ディレクトリも作成
-        // eslint-disable-next-line security/detect-non-literal-fs-filename
         // eslint-disable-next-line security/detect-non-literal-fs-filename
         fs.mkdirSync(dirPath, { recursive: true });
         // path.normalize でOS標準のパス形式に変換してイベント発行
@@ -109,8 +107,6 @@ class StorageService {
       });
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(nativeFilePath)) {
         this._emitEvent('file_not_found', {
           path: nativeFilePath,
@@ -119,8 +115,6 @@ class StorageService {
         return null;
       }
 
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       const content = fs.readFileSync(nativeFilePath, 'utf8');
       const data = JSON.parse(content);
@@ -219,7 +213,6 @@ class StorageService {
       nativeFilePath = this._getNativeFilePath(directory, filename);
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(nativeFilePath)) {
         this._emitEvent('file_not_found', {
           path: nativeFilePath,
@@ -228,7 +221,6 @@ class StorageService {
         return null;
       }
 
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       const content = fs.readFileSync(nativeFilePath, 'utf8');
 
@@ -385,7 +377,6 @@ class StorageService {
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (fs.existsSync(nativeFilePath)) {
         fileExists = true;
-        // eslint-disable-next-line security/detect-non-literal-fs-filename
         // eslint-disable-next-line security/detect-non-literal-fs-filename
         const content = fs.readFileSync(nativeFilePath, 'utf8');
         data = JSON.parse(content);
@@ -588,7 +579,6 @@ class StorageService {
       nativeDirPath = path.join(this.basePath, directory);
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(nativeDirPath)) {
         this._emitEvent('directory_not_found', { directory });
         return [];
@@ -642,7 +632,6 @@ class StorageService {
       nativeFilePath = this._getNativeFilePath(directory, filename);
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(nativeFilePath)) {
         this._emitEvent('file_not_found', { directory, filename });
         return false;
@@ -693,7 +682,6 @@ class StorageService {
 
       nativeDirPath = path.join(this.basePath, directory);
 
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(nativeDirPath)) {
         this._emitEvent('directory_not_found', { directory });
