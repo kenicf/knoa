@@ -54,7 +54,10 @@ module.exports = [
       ...prettierConfig.rules, // Prettierと競合するESLintルールを無効化
       'prettier/prettier': 'warn', // Prettierのルール違反をESLintの警告として報告
       // プロジェクト固有のルール調整
-      'no-unused-vars': 'off',
+      'no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       'no-console': 'warn',
       // node/* ルールも一時的に削除
     },

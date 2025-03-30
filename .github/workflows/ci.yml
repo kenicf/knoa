@@ -2,9 +2,9 @@ name: Node.js CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
-    branches: [ "main" ]
+    branches: ['main']
 
 jobs:
   build-and-test:
@@ -15,27 +15,30 @@ jobs:
         node-version: [18.x, 20.x] # サポートするNode.jsバージョン
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm' # npmのキャッシュを有効化
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm' # npmのキャッシュを有効化
 
-    - name: Install dependencies
-      run: npm ci # package-lock.json に基づいて厳密にインストール
+      - name: Clean npm cache
+        run: npm cache clean --force
 
-    - name: Run linter (ESLint + Prettier)
-      # eslint.config.js で prettier/prettier ルールを有効にしたので、
-      # npm run lint でフォーマットチェックも兼ねる
-      run: npm run lint
+      - name: Install dependencies
+        run: npm ci # package-lock.json に基づいて厳密にインストール
 
-    - name: Run tests (Jest with coverage)
-      # package.json に test:ci スクリプトがあるのでそれを使用
-      run: npm run test:ci
+      - name: Run linter (ESLint + Prettier)
+        # eslint.config.js で prettier/prettier ルールを有効にしたので、
+        # npm run lint でフォーマットチェックも兼ねる
+        run: npm run lint
 
-    - name: Check for vulnerabilities
-      # high 以上の深刻度の脆弱性があれば失敗させる
-      run: npm audit --audit-level=high
+      - name: Run tests (Jest with coverage)
+        # package.json に test:ci スクリプトがあるのでそれを使用
+        run: npm run test:ci
+
+      - name: Check for vulnerabilities
+        # high 以上の深刻度の脆弱性があれば失敗させる
+        run: npm audit --audit-level=high
