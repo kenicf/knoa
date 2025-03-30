@@ -294,6 +294,7 @@ describe('Logger', () => {
           requestId: EXPECTED_REQUEST_ID,
         }
       );
+      expect(mockTransport.write).toHaveBeenCalled();
     });
 
     test.each([
@@ -362,6 +363,7 @@ describe('Logger', () => {
         traceId: 'trace-id',
         requestId: 'request-id',
       });
+      expect(mockEventEmitter.emitStandardized).toHaveBeenCalled();
     });
 
     test('context に ID がない場合でもイベントは発行される (ID は undefined になる)', () => {
@@ -383,6 +385,7 @@ describe('Logger', () => {
         traceId: undefined,
         requestId: undefined,
       });
+      expect(mockEventEmitter.emitStandardized).toHaveBeenCalled();
     });
 
     test('イベントエミッターがない場合、何も発行されない', () => {

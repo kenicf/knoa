@@ -208,6 +208,7 @@ describe('error-helpers', () => {
         details: {}, // details なしの場合
         _context: null,
       });
+      expect(mockLogger.error).toHaveBeenCalled();
     });
 
     test('コンテキストがある場合も適切に動作し、app:error イベントを発行し、setErrorを呼び出す', () => {
