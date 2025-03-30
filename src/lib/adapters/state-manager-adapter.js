@@ -6,7 +6,7 @@
 
 const { ValidationError } = require('../utils/errors');
 const BaseAdapter = require('./base-adapter');
-const { EVENT_NAMES } = require('../../lib/core/event-constants');
+// const { EVENT_NAMES } = require('../../lib/core/event-constants'); // 未使用のためコメントアウト
 
 /**
  * 状態管理アダプター
@@ -31,8 +31,8 @@ class StateManagerAdapter extends BaseAdapter {
    */
   getCurrentState(context = null) {
     try {
-      const operationContext =
-        context || this._createContext('getCurrentState');
+      // const operationContext = // 未使用のためコメントアウト
+      //   context || this._createContext('getCurrentState');
 
       const state = this.manager.getCurrentState();
 
@@ -140,8 +140,8 @@ class StateManagerAdapter extends BaseAdapter {
    */
   canTransitionTo(targetState, context = null) {
     try {
-      const operationContext =
-        context || this._createContext('canTransitionTo', { targetState });
+      // const operationContext = // 未使用のためコメントアウト
+      //   context || this._createContext('canTransitionTo', { targetState });
 
       this._validateParams({ targetState }, ['targetState']);
 
@@ -160,8 +160,8 @@ class StateManagerAdapter extends BaseAdapter {
    */
   getStateHistory(context = null) {
     try {
-      const operationContext =
-        context || this._createContext('getStateHistory');
+      // const operationContext = // 未使用のためコメントアウト
+      //   context || this._createContext('getStateHistory');
 
       return this.manager.getStateHistory();
     } catch (error) {
@@ -176,8 +176,8 @@ class StateManagerAdapter extends BaseAdapter {
    */
   getPreviousState(context = null) {
     try {
-      const operationContext =
-        context || this._createContext('getPreviousState');
+      // const operationContext = // 未使用のためコメントアウト
+      //   context || this._createContext('getPreviousState');
 
       return this.manager.getPreviousState();
     } catch (error) {

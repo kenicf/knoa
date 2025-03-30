@@ -30,9 +30,9 @@ class FeedbackManagerAdapter extends BaseAdapter {
    */
   validateFeedback(feedback, context = null) {
     try {
-      // コンテキストがない場合は作成
-      const operationContext =
-        context || this._createContext('validateFeedback', { feedback });
+      // コンテキストがない場合は作成 (operationContext はこのメソッドでは未使用)
+      // const operationContext =
+      //   context || this._createContext('validateFeedback', { feedback });
 
       const isValid = this.manager.validateFeedback(feedback);
       return { isValid, errors: [], warnings: [] };

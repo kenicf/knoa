@@ -4,8 +4,8 @@
  * セッション間の状態引継ぎを管理するためのユーティリティ関数群
  */
 
-// スキーマの読み込み
-const sessionSchema = require('../../schemas/session.schema.json');
+// スキーマの読み込み (現在は未使用)
+// const sessionSchema = require('../../schemas/session.schema.json');
 
 /**
  * セッション管理クラス

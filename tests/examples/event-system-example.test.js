@@ -2,10 +2,7 @@
  * イベントシステムの使用例のテスト
  */
 
-const {
-  EnhancedEventEmitter,
-  EventCatalog,
-} = require('../../src/lib/core/event-system');
+const { EnhancedEventEmitter } = require('../../src/lib/core/event-system'); // EventCatalog を削除
 const eventCatalog = require('../../src/lib/core/event-catalog');
 const {
   EventMigrationHelper,

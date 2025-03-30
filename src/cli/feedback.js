@@ -5,7 +5,6 @@
  * フィードバック管理ユーティリティを使用するためのコマンドラインインターフェース
  */
 
-const path = require('path');
 const fs = require('fs');
 
 // 依存性注入
@@ -315,10 +314,7 @@ async function main() {
       try {
         const feedback = feedbackManager.getFeedbackByTaskId(taskId);
         if (feedback) {
-          const updatedFeedback = feedbackManager.linkFeedbackToGitCommit(
-            feedback,
-            commitHash
-          );
+          feedbackManager.linkFeedbackToGitCommit(feedback, commitHash);
           console.log(
             `フィードバックにコミット ${commitHash} を関連付けました`
           );
@@ -350,10 +346,7 @@ async function main() {
       try {
         const feedback = feedbackManager.getFeedbackByTaskId(taskId);
         if (feedback) {
-          const updatedFeedback = feedbackManager.linkFeedbackToSession(
-            feedback,
-            sessionId
-          );
+          feedbackManager.linkFeedbackToSession(feedback, sessionId);
           console.log(
             `フィードバックにセッション ${sessionId} を関連付けました`
           );

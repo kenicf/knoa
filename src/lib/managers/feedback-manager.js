@@ -5,8 +5,8 @@
  * Gitコミットとの関連付け、履歴管理などの機能を提供します。
  */
 
-// スキーマの読み込み
-const feedbackSchema = require('../../schemas/feedback.schema.json');
+// スキーマの読み込み (現在は未使用)
+// const feedbackSchema = require('../../schemas/feedback.schema.json');
 
 // フィードバックの状態遷移の定義
 const FEEDBACK_STATE_TRANSITIONS = {

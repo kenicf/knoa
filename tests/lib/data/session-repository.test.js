@@ -5,7 +5,7 @@
 const {
   SessionRepository,
 } = require('../../../src/lib/data/session-repository');
-const { NotFoundError } = require('../../../src/lib/data/repository');
+// const { NotFoundError } = require('../../../src/lib/data/repository'); // 未使用のためコメントアウト
 const { createMockDependencies } = require('../../helpers/mock-factory');
 
 describe('SessionRepository', () => {

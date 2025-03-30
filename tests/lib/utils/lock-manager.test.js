@@ -224,7 +224,7 @@ describe('LockManager', () => {
       const timeout = 500;
       lockManager.maxRetries = 50; // デフォルト値に戻す
       jest.spyOn(lockManager, '_tryAcquireLock').mockReturnValue(false); // 常に失敗
-      const sleepSpy = jest.spyOn(lockManager, '_sleep').mockResolvedValue();
+      // const sleepSpy = jest.spyOn(lockManager, '_sleep').mockResolvedValue(); // 未使用のためコメントアウト
 
       // Act
       const acquirePromise = lockManager.acquireLock(
@@ -264,7 +264,7 @@ describe('LockManager', () => {
       const maxRetries = 3;
       lockManager.maxRetries = maxRetries;
       jest.spyOn(lockManager, '_tryAcquireLock').mockReturnValue(false); // 常に失敗
-      const sleepSpy = jest.spyOn(lockManager, '_sleep').mockResolvedValue();
+      // const sleepSpy = jest.spyOn(lockManager, '_sleep').mockResolvedValue(); // 未使用のためコメントアウト
 
       // Act & Assert
       await expect(

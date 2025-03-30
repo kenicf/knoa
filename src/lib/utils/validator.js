@@ -4,7 +4,7 @@
  * 入力検証、アクセス制御、データ保護などのセキュリティ機能を提供します。
  */
 
-const { ValidationError } = require('./errors');
+// const { ValidationError } = require('./errors'); // 未使用のためコメントアウト
 
 /**
  * バリデーターユーティリティクラス

@@ -86,4 +86,19 @@ module.exports = [
       'jest/expect-expect': 'warn',
     },
   },
+  ,
+  // CLIツール用設定
+  {
+    files: ['src/cli/**/*.js'],
+    rules: {
+      'no-console': 'off', // CLIではコンソール出力は許可
+    },
+  },
+  // サンプルコード用設定
+  {
+    files: ['src/examples/**/*.js'],
+    rules: {
+      'no-console': 'off', // サンプルコードではコンソール出力は許可
+    },
+  },
 ];

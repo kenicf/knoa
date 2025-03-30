@@ -48,6 +48,7 @@ function emitStandardizedEvent(eventEmitter, component, action, data = {}) {
         `emitStandardizedEvent requires an eventEmitter with emitStandardized method. Component: ${component}, Action: ${action}`
       );
     } else {
+      // eslint-disable-next-line no-console
       console.error(
         `emitStandardizedEvent requires an eventEmitter with emitStandardized method. Component: ${component}, Action: ${action}`
       );
@@ -91,6 +92,7 @@ function emitStandardizedEvent(eventEmitter, component, action, data = {}) {
       );
     } else {
       // ロガーがない場合のフォールバック
+      // eslint-disable-next-line no-console
       console.error(
         `イベント発行中にエラーが発生しました: ${component}:${action}`,
         error

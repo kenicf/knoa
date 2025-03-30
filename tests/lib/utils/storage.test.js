@@ -14,7 +14,7 @@ const {
   expectStandardizedEventEmitted,
 } = require('../../helpers/test-helpers');
 const path = require('path'); // path モジュールを直接使用
-const fs = require('fs'); // fs モジュールを直接使用 (モックされる)
+// const fs = require('fs'); // 未使用のためコメントアウト (モックされる)
 
 // fs モジュールをモック
 jest.mock('fs');
@@ -37,7 +37,7 @@ describe('StorageService', () => {
   let mockEventEmitter;
   let mockErrorHandler;
   let fsMock;
-  let pathMock;
+  // let pathMock; // 未使用のためコメントアウト
 
   const BASE_PATH = '/test/base/path';
   const TEST_DIR = 'test-dir';

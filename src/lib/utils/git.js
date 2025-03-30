@@ -117,7 +117,7 @@ class GitService {
     try {
       this._emitEvent('commit_get_between_before', { startCommit, endCommit });
 
-      const range = `${startCommit}..${endCommit}`;
+      // const range = `${startCommit}..${endCommit}`; // 未使用のためコメントアウト
       // simple-git の log を使用
       const log = await this.git.log({
         from: startCommit,

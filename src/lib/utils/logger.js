@@ -35,6 +35,7 @@ class Logger {
       {
         type: 'console',
         // console.log は ESLint で警告が出るため、本番環境では適切なトランスポートに置き換えるべき
+        // eslint-disable-next-line no-console
         write: (entry) => console.log(JSON.stringify(entry)),
       },
     ];
@@ -111,6 +112,7 @@ class Logger {
         transport.write(entry);
       } catch (error) {
         // ロガー自身の内部エラーは console.error で出力
+        // eslint-disable-next-line no-console
         console.error(
           `ログ出力中にエラーが発生しました(${transport.type}):`,
           error

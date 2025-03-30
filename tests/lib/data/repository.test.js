@@ -532,7 +532,7 @@ describe('Repository', () => {
       const ids = ['test1', 'test2'];
 
       // Mock delete method
-      jest.spyOn(repository, 'delete').mockImplementation(async (id) => true);
+      jest.spyOn(repository, 'delete').mockImplementation(async (_id) => true); // id -> _id
 
       const result = await repository.deleteMany(ids);
 

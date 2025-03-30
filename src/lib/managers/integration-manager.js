@@ -7,8 +7,8 @@
 
 const {
   ValidationError,
-  StateError,
-  DataConsistencyError,
+  // StateError, // 未使用のためコメントアウト
+  // DataConsistencyError, // 未使用のためコメントアウト
   LockTimeoutError,
 } = require('../../lib/utils/errors');
 
@@ -121,6 +121,7 @@ class IntegrationManager {
 
         // 開発環境では警告を表示
         if (process.env.NODE_ENV === 'development') {
+          // eslint-disable-next-line no-console
           console.warn(
             '非推奨のイベント名 integration:manager:initialized が使用されています。代わりに integration:system_initialized を使用してください。'
           );
@@ -206,15 +207,16 @@ class IntegrationManager {
               traceId,
               requestId,
             });
-
             // 開発環境では警告を表示
             if (process.env.NODE_ENV === 'development') {
+              // eslint-disable-next-line no-console
               console.warn(
                 '非推奨のイベント名 workflow:initialized が使用されています。代わりに integration:workflow_initialized を使用してください。'
               );
             }
           }
         }
+        // } // Remove extra closing brace
 
         return {
           project: projectInfo,
@@ -290,6 +292,7 @@ class IntegrationManager {
 
           // 開発環境では警告を表示
           if (process.env.NODE_ENV === 'development') {
+            // eslint-disable-next-line no-console
             console.warn(
               '非推奨のイベント名 session:started が使用されています。代わりに session:session_started を使用してください。'
             );
@@ -424,10 +427,11 @@ class IntegrationManager {
       // ロックの取得
       this.logger.debug('ロックの取得を試みます: sync:components');
       const lockerId = 'integration-manager';
-      const lockAcquired = await this.lockManager.acquireLock(
+      // const lockAcquired = // 未使用のためコメントアウト
+      await this.lockManager.acquireLock(
         'sync:components',
         lockerId,
-        5000
+        5000 // タイムアウトを5秒に設定
       );
       this.logger.debug('ロックの取得に成功しました: sync:components');
 

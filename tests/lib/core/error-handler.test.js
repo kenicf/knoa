@@ -7,10 +7,10 @@ const {
   ApplicationError,
   ValidationError,
   StateError,
-  DataConsistencyError,
+  // DataConsistencyError, // 未使用のためコメントアウト
   TimeoutError,
-  ConfigurationError,
-  DependencyError,
+  // ConfigurationError, // 未使用のためコメントアウト
+  // DependencyError, // 未使用のためコメントアウト
 } = require('../../../src/lib/core/error-handler');
 
 describe('拡張エラーハンドラー', () => {
@@ -50,7 +50,8 @@ describe('拡張エラーハンドラー', () => {
         recoveryAttempts: 5,
       };
 
-      const handler = new ErrorHandler(mockLogger, mockEventEmitter, options);
+      // const handler = // 未使用のためコメントアウト
+      new ErrorHandler(mockLogger, mockEventEmitter, options);
 
       // オプションが内部的に保存されていることを確認するテスト
       // 注: 実際の実装ではオプションの使用方法に応じてテストを調整する必要があります

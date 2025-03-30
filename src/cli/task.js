@@ -5,7 +5,6 @@
  * タスク管理ユーティリティを使用するためのコマンドラインインターフェース
  */
 
-const path = require('path');
 const fs = require('fs');
 const colors = require('colors/safe');
 

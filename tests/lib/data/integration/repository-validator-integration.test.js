@@ -2,7 +2,7 @@
  * リポジトリとバリデータの統合テスト
  */
 
-const { Repository } = require('../../../../src/lib/data/repository');
+// const { Repository } = require('../../../../src/lib/data/repository'); // 未使用のためコメントアウト
 const { TaskRepository } = require('../../../../src/lib/data/task-repository');
 const {
   SessionRepository,

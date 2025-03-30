@@ -6,7 +6,7 @@
  * 移行の進捗を追跡します。
  */
 
-const { EnhancedEventEmitter } = require('./event-system');
+// const { EnhancedEventEmitter } = require('./event-system'); // 未使用のためコメントアウト
 
 /**
  * イベント駆動アーキテクチャへの移行を支援するクラス
@@ -179,9 +179,12 @@ class EventMigrationHelper {
       // methodName が originalObject 自身のプロパティであり、かつ関数であることを確認
       if (
         Object.prototype.hasOwnProperty.call(originalObject, methodName) &&
+        // eslint-disable-next-line security/detect-object-injection
         typeof originalObject[methodName] === 'function'
       ) {
+        // eslint-disable-next-line security/detect-object-injection
         const originalMethod = originalObject[methodName];
+        // eslint-disable-next-line security/detect-object-injection
         wrapper[methodName] = function (...args) {
           // 直接メソッド呼び出しをログ
           self.logDirectCall(component, methodName, args);
@@ -198,6 +201,7 @@ class EventMigrationHelper {
             ) &&
             self.eventEmitter
           ) {
+            // eslint-disable-next-line security/detect-object-injection
             const eventName = methodToEventMap[methodName];
             // メソッド名からイベントデータを生成
             const eventData = {};
@@ -211,9 +215,11 @@ class EventMigrationHelper {
               const paramNames = self._guessParamNames(methodName, args);
               args.forEach((arg, index) => {
                 if (index < paramNames.length) {
+                  // eslint-disable-next-line security/detect-object-injection
                   const key = paramNames[index];
                   // 安全でないキーへの代入を防ぐ
                   if (key !== '__proto__' && key !== 'constructor') {
+                    // eslint-disable-next-line security/detect-object-injection
                     eventData[key] = arg;
                   }
                 }

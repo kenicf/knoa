@@ -5,10 +5,7 @@
  * イベント駆動アーキテクチャの実装例を示します。
  */
 
-const {
-  EnhancedEventEmitter,
-  EventCatalog,
-} = require('../lib/core/event-system');
+const { EnhancedEventEmitter } = require('../lib/core/event-system');
 const eventCatalog = require('../lib/core/event-catalog');
 const { EventMigrationHelper } = require('../lib/core/event-migration-helper');
 
@@ -358,7 +355,7 @@ const report = migrationHelper.generateMigrationReport();
 logger.info('移行レポート:', report);
 
 // 移行ガイドの生成
-const guide = migrationHelper.generateMigrationGuide();
+migrationHelper.generateMigrationGuide();
 logger.info('移行ガイド生成完了');
 
 // イベント履歴の取得

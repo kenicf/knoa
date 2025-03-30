@@ -191,13 +191,15 @@ function createMocks() {
 
   // モックのServiceContainerを作成
   const mockContainer = {
+    // eslint-disable-next-line security/detect-object-injection
     get: jest.fn((name) => mockAdapters[name]),
   };
 
   // モックのfs, path, colorsを作成
   const mockFs = {
     writeFileSync: jest.fn(),
-    readFileSync: jest.fn().mockImplementation((path, encoding) => {
+    readFileSync: jest.fn().mockImplementation((path, _encoding) => {
+      // encoding -> _encoding
       if (path.endsWith('.json')) {
         return JSON.stringify({
           id: 'mock-data',

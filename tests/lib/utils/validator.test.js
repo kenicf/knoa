@@ -6,7 +6,7 @@ const Validator = require('../../../src/lib/utils/validator');
 // ValidationError は errors モジュールからインポートする想定だが、
 // このテストファイル内では直接使用されていないため、モックは不要かもしれない。
 // ただし、将来的に使用する可能性を考慮してモックを残す。
-const { ValidationError } = require('../../../src/lib/utils/errors');
+// const { ValidationError } = require('../../../src/lib/utils/errors'); // 未使用のためコメントアウト
 const { createMockLogger } = require('../../helpers/mock-factory');
 // expectLogged はこのファイルでは使用されていない
 // const { expectLogged } = require('../../helpers/test-helpers');
@@ -294,9 +294,7 @@ describe('Validator', () => {
         const result = validator.validateTaskInput(task);
         // Assert
         expect(result.isValid).toBe(expected);
-        if (expected) {
-          expect(result.errors).toEqual([]);
-        }
+        expect(result.errors).toEqual([]); // expectedがtrueのケースのみなので、常にエラーがないことを期待
       });
     });
   });

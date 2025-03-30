@@ -196,6 +196,7 @@ class TaskRepository extends Repository {
           this.stateTransitions,
           currentState
         ) ||
+          // eslint-disable-next-line security/detect-object-injection
           !this.stateTransitions[currentState].includes(newState))
       ) {
         throw new Error(

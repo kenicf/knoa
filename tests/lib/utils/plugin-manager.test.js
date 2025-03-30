@@ -19,8 +19,8 @@ describe('PluginManager', () => {
   const MOCK_TIMESTAMP_ISO = '2025-03-24T00:00:00.000Z';
   const MOCK_TIMESTAMP_MS = new Date(MOCK_TIMESTAMP_ISO).getTime();
   const MOCK_RANDOM = 0.123456789;
-  const EXPECTED_TRACE_ID = `trace-${MOCK_TIMESTAMP_MS}-4fzzxw8a5`;
-  const EXPECTED_REQUEST_ID = `req-${MOCK_TIMESTAMP_MS}-4fzzxw8a5`;
+  // const EXPECTED_TRACE_ID = `trace-${MOCK_TIMESTAMP_MS}-4fzzxw8a5`; // 未使用のためコメントアウト
+  // const EXPECTED_REQUEST_ID = `req-${MOCK_TIMESTAMP_MS}-4fzzxw8a5`; // 未使用のためコメントアウト
 
   beforeEach(() => {
     // モックのリセット

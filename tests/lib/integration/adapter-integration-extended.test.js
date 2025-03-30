@@ -21,10 +21,10 @@ describe('拡張アダプター統合テスト', () => {
   let integrationAdapter;
   let mockLogger;
   let emittedEvents;
-  let mockTaskManager,
-    mockSessionManager,
-    mockFeedbackManager,
-    mockStateManager,
+  // let mockTaskManager, // 未使用のためコメントアウト
+  //   mockSessionManager, // 未使用のためコメントアウト
+  //   mockFeedbackManager, // 未使用のためコメントアウト
+  let mockStateManager, // mockStateManager と mockIntegrationManager は使用されている
     mockIntegrationManager;
 
   beforeEach(() => {

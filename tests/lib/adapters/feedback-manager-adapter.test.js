@@ -25,7 +25,8 @@ describe('FeedbackManagerAdapter', () => {
       })),
       collectTestResults: jest
         .fn()
-        .mockImplementation((taskId, testCommand, testTypes) => ({
+        .mockImplementation((taskId, _testCommand, _testTypes) => ({
+          // testCommand -> _testCommand, testTypes -> _testTypes
           task_id: taskId,
           results: [{ type: 'unit', passed: true }],
         })),
@@ -41,10 +42,10 @@ describe('FeedbackManagerAdapter', () => {
         })),
       integrateFeedbackWithSession: jest
         .fn()
-        .mockImplementation((feedbackId, sessionId) => true),
+        .mockImplementation((_feedbackId, _sessionId) => true), // feedbackId -> _feedbackId, sessionId -> _sessionId
       integrateFeedbackWithTask: jest
         .fn()
-        .mockImplementation((feedbackId, taskId) => true),
+        .mockImplementation((_feedbackId, _taskId) => true), // feedbackId -> _feedbackId, taskId -> _taskId
     };
 
     mockLogger = {

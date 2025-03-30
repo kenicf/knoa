@@ -130,7 +130,10 @@ class CacheManager {
     let count = 0;
     try {
       const pattern =
-        keyPattern instanceof RegExp ? keyPattern : new RegExp(keyPattern);
+        keyPattern instanceof RegExp
+          ? keyPattern
+          : // eslint-disable-next-line security/detect-non-literal-regexp
+            new RegExp(keyPattern);
 
       for (const key of this.cache.keys()) {
         // pattern.test に文字列以外が渡される可能性を考慮 (より安全に)

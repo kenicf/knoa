@@ -148,7 +148,8 @@ describe('イベント後方互換性', () => {
         })),
         removeTaskFromSession: jest
           .fn()
-          .mockImplementation((sessionId, taskId) => ({
+          .mockImplementation((sessionId, _taskId) => ({
+            // taskId -> _taskId
             session_handover: { session_id: sessionId },
             tasks: [],
           })),
@@ -231,7 +232,8 @@ describe('イベント後方互換性', () => {
         })),
         collectTestResults: jest
           .fn()
-          .mockImplementation((taskId, testCommand, testTypes) => ({
+          .mockImplementation((taskId, _testCommand, _testTypes) => ({
+            // testCommand -> _testCommand, testTypes -> _testTypes
             task_id: taskId,
             results: [{ type: 'unit', passed: true }],
           })),

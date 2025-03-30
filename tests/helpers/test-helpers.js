@@ -29,6 +29,7 @@ function expectStandardizedEventEmitted(
     if (call[0] !== component) return false;
 
     // アクションの比較（コロンとアンダースコアの違いを許容）
+    // eslint-disable-next-line security/detect-non-literal-regexp
     const actionRegex = new RegExp(`^${action.replace(/:/g, '[_:]')}$`);
     if (!actionRegex.test(call[1])) return false;
 
@@ -36,23 +37,29 @@ function expectStandardizedEventEmitted(
     const callData = call[2];
     return Object.keys(expectedData).every((key) => {
       // timestamp の検証を追加 (ISO形式文字列を期待)
+      // eslint-disable-next-line security/detect-object-injection
       if (key === 'timestamp' && typeof expectedData[key] === 'string') {
         // 期待値が 'any' の場合は型のみチェック
+        // eslint-disable-next-line security/detect-object-injection
         if (expectedData[key].toLowerCase() === 'any') {
           return (
+            // eslint-disable-next-line security/detect-object-injection
             typeof callData[key] === 'string' &&
+            // eslint-disable-next-line security/detect-object-injection
             !isNaN(Date.parse(callData[key]))
           );
         }
         // それ以外は厳密比較
+        // eslint-disable-next-line security/detect-object-injection
         return callData[key] === expectedData[key];
       }
-
       if (
         key === 'path' &&
+        // eslint-disable-next-line security/detect-object-injection
         typeof expectedData[key] === 'string' &&
         typeof callData[key] === 'string'
       ) {
+        // パスの場合は正規化して比較
         // パスの場合は正規化して比較
         const normalizePath = (path) => path.replace(/\\/g, '/');
         return normalizePath(callData[key]).includes(

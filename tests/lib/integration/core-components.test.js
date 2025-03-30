@@ -24,12 +24,12 @@ jest.mock('child_process', () => ({
 
 const fs = require('fs');
 const { execSync } = require('child_process');
-const path = require('path');
+// const path = require('path'); // 未使用のためコメントアウト
 
 // テスト対象のコンポーネント
 const {
   ApplicationError,
-  ValidationError,
+  // ValidationError, // 未使用のためコメントアウト
   StorageError,
   GitError,
   ErrorHandler,
@@ -137,7 +137,8 @@ describe('コア基盤コンポーネントの統合', () => {
       const originalWriteFile = storage.writeFile;
       storage.writeFile = jest
         .fn()
-        .mockImplementation((directory, filename, content) => {
+        .mockImplementation((directory, filename, _content) => {
+          // content -> _content
           eventEmitter.emit('storage:file_written', {
             path: `/test/base/path/${directory}/${filename}`,
             directory,

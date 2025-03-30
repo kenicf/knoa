@@ -220,6 +220,7 @@ class BaseAdapter {
       if (bridgeOldEvents) {
         // EVENT_MAP 自身がプロパティを持っているかを確認 (プロトタイプ汚染対策)
         if (Object.prototype.hasOwnProperty.call(EVENT_MAP, standardEvent)) {
+          // eslint-disable-next-line security/detect-object-injection
           const oldEventName = EVENT_MAP[standardEvent];
           this.eventEmitter.emit(oldEventName, enhancedData);
 

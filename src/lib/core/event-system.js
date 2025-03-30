@@ -69,9 +69,13 @@ class EnhancedEventEmitter {
 
     // ロガーの設定（デフォルトのロガーを提供）
     this.logger = logger || {
+      // eslint-disable-next-line no-console
       debug: console.debug.bind(console),
+      // eslint-disable-next-line no-console
       info: console.info.bind(console),
+      // eslint-disable-next-line no-console
       warn: console.warn.bind(console),
+      // eslint-disable-next-line no-console
       error: console.error.bind(console),
     };
 
@@ -94,6 +98,7 @@ class EnhancedEventEmitter {
       // ワイルドカードリスナーとして登録
       // 特殊文字をエスケープしてからワイルドカードを正規表現に変換
       const escapedEvent = event.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // eslint-disable-next-line security/detect-non-literal-regexp
       const pattern = new RegExp(
         '^' + escapedEvent.replace(/\\\*/g, '.*') + '$'
       );
@@ -227,6 +232,7 @@ class EnhancedEventEmitter {
               error
             );
           } else {
+            // eslint-disable-next-line no-console
             console.error(
               `イベントリスナー(${event})でエラーが発生しました:`,
               error
@@ -322,6 +328,7 @@ class EnhancedEventEmitter {
                   error
                 );
               } else {
+                // eslint-disable-next-line no-console
                 console.error(
                   `非同期イベントリスナー(${event})でエラーが発生しました:`,
                   error
@@ -362,6 +369,7 @@ class EnhancedEventEmitter {
                   error
                 );
               } else {
+                // eslint-disable-next-line no-console
                 console.error(
                   `非同期ワイルドカードリスナー(${pattern})でエラーが発生しました:`,
                   error

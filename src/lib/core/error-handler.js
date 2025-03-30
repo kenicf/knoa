@@ -27,9 +27,10 @@ class ErrorHandler {
    * コンストラクタ
    * @param {Object} logger - ロガーインスタンス（必須）
    * @param {Object} eventEmitter - イベントエミッターインスタンス（必須）
-   * @param {Object} options - 追加オプション
+   * @param {Object} _options - 追加オプション (現在は未使用)
    */
-  constructor(logger, eventEmitter, options = {}) {
+  constructor(logger, eventEmitter, _options = {}) {
+    // options -> _options
     if (!logger) {
       throw new Error('ErrorHandler requires a logger instance');
     }
@@ -68,7 +69,7 @@ class ErrorHandler {
   async handle(error, component, operation, options = {}) {
     const traceId = options.traceId || this._generateTraceId();
     const requestId = options.requestId || this._generateRequestId();
-    const timestamp = new Date().toISOString();
+    // const timestamp = new Date().toISOString(); // 未使用のためコメントアウト
 
     // アプリケーションエラーでなければラップする
     if (!(error instanceof ApplicationError)) {
@@ -342,7 +343,8 @@ class ErrorHandler {
    * エラーカウントを更新
    * @private
    */
-  _updateErrorCounts(error, component, operation) {
+  _updateErrorCounts(error, component, _operation) {
+    // operation -> _operation
     // エラータイプ別カウント
     const errorType = error.constructor.name;
     const errorTypeKey = `type:${errorType}`;

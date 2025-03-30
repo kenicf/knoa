@@ -103,17 +103,20 @@ describe('依存性注入パターンのパフォーマンス', () => {
       const logger = mockLogger;
       const eventEmitter = new EnhancedEventEmitter({ logger });
       const errorHandler = new ErrorHandler(logger, eventEmitter);
-      const storageService = new StorageService({
+      const _storageService = new StorageService({
+        // storageService -> _storageService
         logger,
         eventEmitter,
         errorHandler,
       });
-      const gitService = new GitService({
+      const _gitService = new GitService({
+        // gitService -> _gitService
         logger,
         eventEmitter,
         errorHandler,
       });
-      const integrationManager = new MockIntegrationManager({
+      const _integrationManager = new MockIntegrationManager({
+        // integrationManager -> _integrationManager
         taskManager: {},
         sessionManager: {},
         feedbackManager: {},
@@ -131,11 +134,11 @@ describe('依存性注入パターンのパフォーマンス', () => {
     const containerStartTime = performance.now();
 
     for (let i = 0; i < 1000; i++) {
-      const logger = container.get('logger');
-      const eventEmitter = container.get('eventEmitter');
-      const errorHandler = container.get('errorHandler');
-      const storageService = container.get('storageService');
-      const gitService = container.get('gitService');
+      const _logger = container.get('logger'); // logger -> _logger
+      const _eventEmitter = container.get('eventEmitter'); // eventEmitter -> _eventEmitter
+      const _errorHandler = container.get('errorHandler'); // errorHandler -> _errorHandler
+      const _storageService = container.get('storageService'); // storageService -> _storageService
+      const _gitService = container.get('gitService'); // gitService -> _gitService
     }
 
     const containerEndTime = performance.now();

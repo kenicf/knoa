@@ -3,7 +3,7 @@
  */
 
 const SessionManagerAdapter = require('../../../src/lib/adapters/session-manager-adapter');
-const { EnhancedEventEmitter } = require('../../../src/lib/core/event-system');
+// const { EnhancedEventEmitter } = require('../../../src/lib/core/event-system'); // 未使用のためコメントアウト
 const { ValidationError } = require('../../../src/lib/utils/errors'); // エラークラスは utils から取得
 const { createMockLogger } = require('../../helpers/mock-factory'); // Logger モックを使用
 const {
@@ -43,7 +43,8 @@ describe('SessionManagerAdapter', () => {
       })),
       removeTaskFromSession: jest
         .fn()
-        .mockImplementation((sessionId, taskId) => ({
+        .mockImplementation((sessionId, _taskId) => ({
+          // taskId -> _taskId
           session_handover: { session_id: sessionId },
           tasks: [],
         })),

@@ -74,8 +74,10 @@ function createMockErrorHandler(options = {}) {
   // モックハンドラー関数
   const mockHandle = jest
     .fn()
-    .mockImplementation((error, component, operation, context) => {
+    .mockImplementation((error, component, operation, _context) => {
+      // context -> _context
       // 操作に応じたデフォルト値を返す
+      // eslint-disable-next-line security/detect-object-injection
       return defaults[operation] !== undefined ? defaults[operation] : null;
     });
 

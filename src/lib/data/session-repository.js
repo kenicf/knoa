@@ -5,7 +5,7 @@
  * セッションの検索、状態管理、Git連携などの機能を提供します。
  */
 
-const { Repository, NotFoundError } = require('./repository');
+const { Repository } = require('./repository'); // NotFoundError を削除
 
 /**
  * セッションリポジトリクラス
@@ -61,7 +61,8 @@ class SessionRepository extends Repository {
         ) {
           return latestSession;
         }
-      } catch (error) {
+      } catch (_error) {
+        // error -> _error
         // getLatestSession のエラーを無視して履歴から検索を続行
       }
 

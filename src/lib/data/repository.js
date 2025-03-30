@@ -212,6 +212,7 @@ class Repository {
       // エンティティを更新 (安全でないキーを除外)
       const safeData = Object.keys(data).reduce((acc, key) => {
         if (key !== '__proto__' && key !== 'constructor') {
+          // eslint-disable-next-line security/detect-object-injection
           acc[key] = data[key];
         }
         return acc;

@@ -12,7 +12,7 @@ const Handlebars = require('handlebars');
 
 // コアコンポーネント
 const { ErrorHandler } = require('./error-handler');
-const { EnhancedEventEmitter, EventCatalog } = require('./event-system');
+const { EventCatalog } = require('./event-system'); // EnhancedEventEmitter を削除
 const EventMigrationHelper = require('./event-migration-helper');
 
 // ユーティリティ
@@ -80,7 +80,8 @@ function registerServices(container, config = {}) {
     });
   });
 
-  container.registerFactory('eventCatalog', (c) => {
+  container.registerFactory('eventCatalog', (_c) => {
+    // c -> _c
     return new EventCatalog();
   });
 

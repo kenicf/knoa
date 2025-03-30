@@ -6,7 +6,7 @@
 
 const { ValidationError } = require('../../lib/utils/errors');
 const BaseAdapter = require('./base-adapter');
-const { EVENT_NAMES } = require('../../lib/core/event-constants');
+// const { EVENT_NAMES } = require('../../lib/core/event-constants'); // 未使用のためコメントアウト
 
 /**
  * 統合マネージャーアダプター
@@ -358,8 +358,8 @@ class IntegrationManagerAdapter extends BaseAdapter {
    */
   async getWorkflowStatus(context = null) {
     try {
-      const operationContext =
-        context || this._createContext('getWorkflowStatus');
+      // const operationContext = // 未使用のためコメントアウト
+      //   context || this._createContext('getWorkflowStatus');
 
       const result = await this.manager.getWorkflowStatus();
 

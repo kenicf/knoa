@@ -46,6 +46,7 @@ function convertError(error) {
  */
 const migrationProxy = {
   ValidationError: function (message) {
+    // eslint-disable-next-line no-console
     console.warn(
       'Deprecated: Using old ValidationError. Please use the new error framework.'
     );
@@ -53,6 +54,7 @@ const migrationProxy = {
   },
 
   StateError: function (message) {
+    // eslint-disable-next-line no-console
     console.warn(
       'Deprecated: Using old StateError. Please use the new error framework.'
     );
@@ -60,6 +62,7 @@ const migrationProxy = {
   },
 
   DataConsistencyError: function (message) {
+    // eslint-disable-next-line no-console
     console.warn(
       'Deprecated: Using old DataConsistencyError. Please use the new error framework.'
     );
@@ -67,6 +70,7 @@ const migrationProxy = {
   },
 
   LockTimeoutError: function (message) {
+    // eslint-disable-next-line no-console
     console.warn(
       'Deprecated: Using old LockTimeoutError. Please use the new error framework.'
     );
@@ -121,9 +125,12 @@ function migrateClassMethods(classInstance, methodNames, options = {}) {
     // methodName が classInstance 自身のプロパティであり、かつ関数であることを確認
     if (
       Object.prototype.hasOwnProperty.call(classInstance, methodName) &&
+      // eslint-disable-next-line security/detect-object-injection
       typeof classInstance[methodName] === 'function'
     ) {
+      // eslint-disable-next-line security/detect-object-injection
       const originalMethod = classInstance[methodName];
+      // eslint-disable-next-line security/detect-object-injection
       classInstance[methodName] = migrateFunction(originalMethod, {
         component,
         operation: methodName,
