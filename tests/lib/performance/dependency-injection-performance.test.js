@@ -103,21 +103,20 @@ describe('依存性注入パターンのパフォーマンス', () => {
       const logger = mockLogger;
       const eventEmitter = new EnhancedEventEmitter({ logger });
       const errorHandler = new ErrorHandler(logger, eventEmitter);
-      // eslint-disable-next-line no-unused-vars -- パフォーマンス測定のためインスタンス生成のみ行う
       const _storageService = new StorageService({
         // storageService -> _storageService
         logger,
         eventEmitter,
         errorHandler,
       });
-      // eslint-disable-next-line no-unused-vars -- パフォーマンス測定のためインスタンス生成のみ行う
+
       const _gitService = new GitService({
         // gitService -> _gitService
         logger,
         eventEmitter,
         errorHandler,
       });
-      // eslint-disable-next-line no-unused-vars -- パフォーマンス測定のためインスタンス生成のみ行う
+
       const _integrationManager = new MockIntegrationManager({
         // integrationManager -> _integrationManager
         taskManager: {},
@@ -137,15 +136,14 @@ describe('依存性注入パターンのパフォーマンス', () => {
     const containerStartTime = performance.now();
 
     for (let i = 0; i < 1000; i++) {
-      // eslint-disable-next-line no-unused-vars -- パフォーマンス測定のためインスタンス取得のみ行う
       const _logger = container.get('logger'); // logger -> _logger
-      // eslint-disable-next-line no-unused-vars -- パフォーマンス測定のためインスタンス取得のみ行う
+
       const _eventEmitter = container.get('eventEmitter'); // eventEmitter -> _eventEmitter
-      // eslint-disable-next-line no-unused-vars -- パフォーマンス測定のためインスタンス取得のみ行う
+
       const _errorHandler = container.get('errorHandler'); // errorHandler -> _errorHandler
-      // eslint-disable-next-line no-unused-vars -- パフォーマンス測定のためインスタンス取得のみ行う
+
       const _storageService = container.get('storageService'); // storageService -> _storageService
-      // eslint-disable-next-line no-unused-vars -- パフォーマンス測定のためインスタンス取得のみ行う
+
       const _gitService = container.get('gitService'); // gitService -> _gitService
     }
 
