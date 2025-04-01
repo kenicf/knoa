@@ -1,397 +1,405 @@
 /**
- * integration.jsのテスト
+ * integration.js (リファクタリング版) のテスト
+ * 主にエントリーポイントとしての責務（DI、コマンド解析、Facade呼び出し、結果/エラー表示）を検証する
  */
-const { createMocks, captureConsole } = require('./helpers/cli-test-helper');
+const { captureConsole } = require('../helpers/test-helpers');
+const {
+  ApplicationError, // ApplicationError は constructor のチェックで使う可能性があるので残す
+  CliError,
+  ValidationError,
+} = require('../../src/lib/utils/errors'); // インポート元を変更
 
-// モジュールのモック
+// --- モックの設定 ---
+// integration.js が依存するモジュールをモック
+
+// integration モジュールをモックするが、main は実際の実装を使用する
+// integration.js のモック設定を見直し
+// initializeContainerAndComponents は実際の関数を使うようにし、
+// 必要に応じてテストケース内で spyOn を使用する
+// integration.js のモック設定を見直し
+// initializeContainerAndComponents と runCommand は実際の関数を使うようにし、
+// 必要に応じてテストケース内で spyOn を使用する
+// integration.js のモック設定を見直し
+// initializeContainerAndComponents, runCommand, parseArguments は実際の関数を使うようにし、
+// 必要に応じてテストケース内で spyOn を使用するか、内部依存 (yargs) をモックする
+// integration モジュール全体のモックは解除
+
 jest.mock('../../src/lib/core/service-container');
 jest.mock('../../src/lib/core/service-definitions');
 jest.mock('../../src/config');
-jest.mock('fs');
-jest.mock('path');
-jest.mock('colors/safe');
-jest.mock('yargs', () => {
-  return {
-    hideBin: jest.fn().mockReturnValue(['node', 'integration.js']),
-  };
-});
+jest.mock('../../src/cli/bootstrap'); // bootstrap 関数をモック
+jest.mock('../../src/cli/facade');
+// 他の Cli* クラスもモック (コンストラクタ呼び出し検証用)
+jest.mock('../../src/cli/workflow-manager');
+jest.mock('../../src/cli/session-manager');
+jest.mock('../../src/cli/task-manager');
+jest.mock('../../src/cli/feedback-handler');
+jest.mock('../../src/cli/report-generator');
+jest.mock('../../src/cli/status-viewer');
+// yargs のモックは削除し、parseArguments を spyOn でモックする方針に戻す
 
-describe('integration CLI', () => {
-  let mocks;
+jest.mock('../../src/cli/interactive-mode');
+jest.mock('../../src/cli/component-syncer');
+// display.js のモックを明示的に設定
+jest.mock('../../src/cli/display', () => ({
+  displayResult: jest.fn(),
+}));
+jest.mock('colors/safe');
+jest.mock('../../src/lib/utils/error-helpers', () => ({
+  emitErrorEvent: jest.fn(),
+}));
+// yargs のモックは parseArguments のテストで必要になる可能性があるため残す
+// ただし、main のテストでは直接使わない
+// jest.mock('yargs/yargs'); // yargs のモックは削除
+
+jest.mock('yargs/helpers', () => ({
+  hideBin: jest.fn((argv) => argv.slice(2)),
+}));
+
+// --- モック/テスト対象のインポート ---
+const ServiceContainer = require('../../src/lib/core/service-container');
+const { registerServices } = require('../../src/lib/core/service-definitions');
+const config = require('../../src/config'); // モックされた config
+const CliFacade = require('../../src/cli/facade');
+// 他の Cli* クラスもインポート (コンストラクタ呼び出し検証用)
+const CliWorkflowManager = require('../../src/cli/workflow-manager');
+const CliSessionManager = require('../../src/cli/session-manager');
+const CliTaskManager = require('../../src/cli/task-manager');
+const CliFeedbackHandler = require('../../src/cli/feedback-handler');
+const CliReportGenerator = require('../../src/cli/report-generator');
+const CliStatusViewer = require('../../src/cli/status-viewer');
+const CliInteractiveMode = require('../../src/cli/interactive-mode');
+const CliComponentSyncer = require('../../src/cli/component-syncer');
+const { displayResult } = require('../../src/cli/display'); // モックされた displayResult
+const colors = require('colors/safe');
+const {
+  createMockLogger,
+  createMockEventEmitter,
+  createMockStorageService,
+  createMockValidator,
+  createMockDependencies, // <--- 追加
+} = require('../helpers/mock-factory');
+const { emitErrorEvent } = require('../../src/lib/utils/error-helpers');
+
+// テスト対象の関数をインポート
+const integration = require('../../src/cli/integration'); // integration モジュール自体は必要
+const { bootstrap } = require('../../src/cli/bootstrap'); // bootstrap をインポート
+const {
+  main,
+  runCommand,
+  // initializeContainerAndComponents, // 削除
+  parseArguments,
+} = require('../../src/cli/integration');
+
+// --- テストスイート ---
+let originalProcessArgv;
+describe('Integration CLI Entry Point (Refactored)', () => {
+  let mockContainer;
+  let mockColors;
+  let mockCliFacadeInstance; // CliFacade のモックインスタンス
   let consoleCapture;
 
+  let mockExit;
+  let mockRequiredServices;
+  let mockLoggerInstance; // logger インスタンスを保持
+  originalProcessArgv = process.argv; // Save original argv
+  let mockArgv; // beforeEach 内で初期化
+  let mockYargsInstance; // beforeEach 内で初期化
+
   beforeEach(() => {
-    // モックの作成
-    mocks = createMocks();
+    // モジュールキャッシュをリセットして、doMock が確実に適用されるようにする
+    jest.resetModules();
 
-    // コンソール出力をキャプチャ
     consoleCapture = captureConsole();
+    mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {}); // ← 元に戻す
 
-    // ServiceContainerのモックを設定
-    const ServiceContainer = require('../../src/lib/core/service-container');
-    ServiceContainer.mockImplementation(() => mocks.container);
+    // 必要なサービスのモックを作成
+    mockLoggerInstance = createMockLogger(); // logger インスタンスを作成
 
-    const serviceDefinitions = require('../../src/lib/core/service-definitions');
-    serviceDefinitions.registerServices = jest.fn();
+    mockRequiredServices = {
+      logger: mockLoggerInstance,
+      eventEmitter: createMockEventEmitter(),
+      storageService: createMockStorageService(),
+      validator: createMockValidator(),
+      // アダプターのモックもここで定義（必要に応じてメソッドもモック）
+      integrationManagerAdapter: {
+        /* メソッドのモック */
+      },
+      sessionManagerAdapter: {
+        /* メソッドのモック */
+      },
+      taskManagerAdapter: {
+        /* メソッドのモック */
+      },
+      feedbackManagerAdapter: {
+        /* メソッドのモック */
+      },
+      stateManagerAdapter: {
+        /* メソッドのモック */
+      },
+    };
 
-    // fs, path, colorsのモックを設定
-    jest.mock('fs', () => mocks.fs);
-    jest.mock('path', () => mocks.path);
-    jest.mock('colors/safe', () => mocks.colors);
+    // モックの ServiceContainer を作成
+    mockContainer = {
+      get: jest.fn((serviceName) => {
+        if (mockRequiredServices[serviceName]) {
+          return mockRequiredServices[serviceName];
+        }
+        return undefined;
+      }),
+    };
 
-    // yargsのモックを設定
-    jest.mock('yargs', () => ({
-      hideBin: jest.fn().mockReturnValue([]),
-      usage: jest.fn().mockReturnThis(),
-      command: jest.fn().mockReturnThis(),
-      option: jest.fn().mockReturnThis(),
-      help: jest.fn().mockReturnThis(),
-      parse: jest.fn().mockReturnValue({}),
-    }));
+    // モックの colors オブジェクトを作成
+    mockColors = {
+      cyan: jest.fn((text) => text),
+      green: jest.fn((text) => text),
+      yellow: jest.fn((text) => text),
+      red: jest.fn((text) => text),
+      blue: jest.fn((text) => text),
+    };
+    Object.keys(mockColors).forEach((key) => {
+      colors[key] = mockColors[key];
+    });
 
-    // process.argvをリセット
-    process.argv = ['node', 'integration.js'];
+    // ServiceContainer のモック設定
+    ServiceContainer.mockImplementation(() => mockContainer);
+    registerServices.mockClear();
+
+    // CliFacade のモック設定
+    mockCliFacadeInstance = { execute: jest.fn() };
+    CliFacade.mockImplementation(() => mockCliFacadeInstance);
+
+    // 各 Cli* クラスのコンストラクタモックをクリア
+    CliWorkflowManager.mockClear();
+    CliSessionManager.mockClear();
+    CliTaskManager.mockClear();
+    CliFeedbackHandler.mockClear();
+    CliReportGenerator.mockClear();
+    CliStatusViewer.mockClear();
+    CliInteractiveMode.mockClear();
+    CliComponentSyncer.mockClear();
+
+    // モック関数のクリア
+    displayResult.mockClear();
+    emitErrorEvent.mockClear();
   });
 
   afterEach(() => {
-    // コンソール出力のリセット
+    process.argv = originalProcessArgv; // Restore original argv
     consoleCapture.restore();
-
-    // モジュールのモックをクリア
-    jest.resetModules();
+    mockExit.mockRestore(); // ← 元に戻す
+    jest.resetAllMocks();
   });
 
-  test('initコマンドでワークフローが初期化される', async () => {
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['init'],
+  // initializeContainerAndComponents のテストは bootstrap.test.js で行うため削除
+
+  // runCommand のテスト
+  test('指定されたコマンドと引数が CliFacade.execute に渡される', async () => {
+    const command = 'create-task';
+    const mockArgv = {
+      _: [command],
+      title: 'New Task',
+      description: 'Details',
+      priority: 1,
+    };
+    // runCommand に beforeEach で作成したモックインスタンスを渡す
+    await runCommand(mockArgv, mockCliFacadeInstance, mockLoggerInstance);
+
+    expect(mockCliFacadeInstance.execute).toHaveBeenCalledTimes(1);
+    expect(mockCliFacadeInstance.execute).toHaveBeenCalledWith(
+      command,
+      mockArgv
+    ); // 検証対象をモックインスタンスに変更
+  });
+
+  test('CliFacade.execute が成功し、結果がオブジェクトの場合、displayResult が呼ばれる', async () => {
+    const command = 'session-info';
+    const mockArgv = { _: [command], sessionId: 'S123' };
+    const mockResult = { id: 'S123', status: 'active' };
+    mockCliFacadeInstance.execute.mockResolvedValue(mockResult);
+    await runCommand(mockArgv, mockCliFacadeInstance, mockLoggerInstance);
+
+    expect(mockCliFacadeInstance.execute).toHaveBeenCalledWith(
+      command,
+      mockArgv
+    );
+    expect(displayResult).toHaveBeenCalledWith(command, mockResult);
+    expect(consoleCapture.errorMock).not.toHaveBeenCalled();
+    expect(mockExit).not.toHaveBeenCalled();
+  });
+
+  test('CliFacade.execute が成功し、結果が文字列の場合、displayResult が呼ばれる', async () => {
+    const command = 'export-session';
+    const mockArgv = { _: [command], sessionId: 'S123', path: 'export.json' };
+    const mockResult = 'export.json';
+    mockCliFacadeInstance.execute.mockResolvedValue(mockResult);
+    await runCommand(mockArgv, mockCliFacadeInstance, mockLoggerInstance);
+
+    expect(mockCliFacadeInstance.execute).toHaveBeenCalledWith(
+      command,
+      mockArgv
+    );
+    expect(displayResult).toHaveBeenCalledWith(command, mockResult);
+    expect(consoleCapture.errorMock).not.toHaveBeenCalled();
+    expect(mockExit).not.toHaveBeenCalled();
+  });
+
+  test('CliFacade.execute が成功し、結果が undefined の場合、displayResult が呼ばれる', async () => {
+    const command = 'sync';
+    const mockArgv = { _: [command] };
+    mockCliFacadeInstance.execute.mockResolvedValue(undefined);
+    await runCommand(mockArgv, mockCliFacadeInstance, mockLoggerInstance);
+
+    expect(mockCliFacadeInstance.execute).toHaveBeenCalledWith(
+      command,
+      mockArgv
+    );
+    expect(displayResult).toHaveBeenCalledWith(command, undefined);
+    expect(consoleCapture.errorMock).not.toHaveBeenCalled();
+    expect(mockExit).not.toHaveBeenCalled();
+  });
+
+  test('CliFacade.execute がエラーをスローした場合、エラーメッセージとコンテキストが表示され、exit(1)が呼ばれる', async () => {
+    const command = 'init';
+    const mockArgv = {
+      _: [command],
       projectId: 'P001',
-      request: 'テストリクエスト',
-    });
+      request: 'Fail Request',
+    };
+    const error = new Error('Facade execution failed');
+    error.context = { detail: 'some context' };
+    error.cause = new Error('Original cause');
+    mockCliFacadeInstance.execute.mockRejectedValue(error);
 
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
+    await runCommand(mockArgv, mockCliFacadeInstance, mockLoggerInstance);
 
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // ワークフローが初期化されることを確認
-    expect(
-      mocks.adapters.integrationManagerAdapter.initializeWorkflow
-    ).toHaveBeenCalled();
-    expect(consoleCapture.consoleOutput.join('\n')).toContain(
-      'ワークフローを初期化します'
+    expect(mockCliFacadeInstance.execute).toHaveBeenCalledWith(
+      command,
+      mockArgv
     );
+    expect(consoleCapture.errorMock).toHaveBeenCalledWith(
+      expect.stringContaining('エラーが発生しました:'),
+      expect.stringContaining('Facade execution failed')
+    );
+    expect(consoleCapture.errorMock).toHaveBeenCalledWith(
+      expect.stringContaining('詳細:'),
+      expect.stringContaining(JSON.stringify(error.context, null, 2))
+    );
+    expect(consoleCapture.errorMock).toHaveBeenCalledWith(
+      expect.stringContaining('原因:'),
+      expect.stringContaining('Original cause')
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 
-  test('startコマンドでセッションが開始される', async () => {
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['start'],
-      previousSessionId: 'S000',
-    });
+  test('interactive コマンドが CliFacade.execute に渡される', async () => {
+    const command = 'interactive';
+    const mockArgv = { _: [command] };
+    mockCliFacadeInstance.execute.mockResolvedValue(undefined);
+    await runCommand(mockArgv, mockCliFacadeInstance, mockLoggerInstance);
 
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
-
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // セッションが開始されることを確認
-    expect(
-      mocks.adapters.integrationManagerAdapter.startSession
-    ).toHaveBeenCalled();
-    expect(consoleCapture.consoleOutput.join('\n')).toContain(
-      'セッションを開始します'
+    expect(mockCliFacadeInstance.execute).toHaveBeenCalledTimes(1);
+    expect(mockCliFacadeInstance.execute).toHaveBeenCalledWith(
+      command,
+      mockArgv
     );
+    expect(displayResult).toHaveBeenCalledWith(command, undefined);
+    expect(mockExit).not.toHaveBeenCalled();
   });
 
-  test('endコマンドでセッションが終了される', async () => {
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['end'],
-      sessionId: 'S001',
+  // --- main 関数のテスト (修正) ---
+
+  test('main 関数が正常に実行されること（エラーなし）', async () => {
+    // main 関数が正常に実行されることを検証
+    // main 関数が正常に実行されることを検証
+    process.argv = ['node', 'knoa-cli', 'status']; // Jest 引数の影響を排除
+    const originalArgv = process.argv; // 元の argv を保持
+
+    // 依存関係のモック設定
+    const { bootstrap } = require('../../src/cli/bootstrap'); // モックされた bootstrap
+    const integration = require('../../src/cli/integration'); // 実際の integration モジュール
+    const { runCommand } = integration; // runCommand は実際のコードを使うが、内部の Facade はモック
+
+    bootstrap.mockReturnValue({
+      logger: mockLoggerInstance,
+      cliFacade: mockCliFacadeInstance, // bootstrap が返す Facade をモック
     });
+    // parseArguments を spyOn でモック
+    const parseSpy = jest
+      .spyOn(integration, 'parseArguments')
+      .mockReturnValue({ _: ['status'], $0: 'knoa-cli' });
+    // runCommand 内の CliFacade.execute をモック
+    mockCliFacadeInstance.execute.mockResolvedValue({}); // 正常終了をシミュレート
 
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
+    await main();
 
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // アサーション (E2E視点: 最終的な副作用のみ検証)
+    expect(mockExit).not.toHaveBeenCalled();
+    expect(consoleCapture.errorMock).not.toHaveBeenCalled();
 
-    // セッションが終了されることを確認
-    expect(
-      mocks.adapters.integrationManagerAdapter.endSession
-    ).toHaveBeenCalledWith('S001');
-    expect(consoleCapture.consoleOutput.join('\n')).toContain(
-      'セッションを終了します'
-    );
+    // スパイをリストア
+    parseSpy.mockRestore();
+    process.argv = originalArgv;
   });
 
-  test('endコマンドでセッションIDが指定されていない場合は最新のセッションが取得される', async () => {
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['end'],
+  test('main 関数が初期化エラーを捕捉し、exit(1) を呼ぶ', async () => {
+    process.argv = ['node', 'knoa-cli', 'status']; // ① argv 設定
+    const initError = new Error('Initialization failed');
+
+    // ② bootstrap 関数自体をモックしてエラーをスローさせる
+    const { bootstrap } = require('../../src/cli/bootstrap'); // モックされた bootstrap
+    const bootstrapSpy = jest.spyOn(
+      require('../../src/cli/bootstrap'),
+      'bootstrap'
+    ); // spyOn を使う
+    bootstrapSpy.mockImplementation(() => {
+      throw initError;
     });
+    // parseArguments の spyOn は不要 (bootstrap でエラーになるため)
+    const { parseArguments, runCommand } = require('../../src/cli/integration'); // モックされていない関数を取得
 
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
+    await main(); // ③ main を実行
 
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // 最新のセッションが取得されることを確認
-    expect(
-      mocks.adapters.sessionManagerAdapter.getLatestSession
-    ).toHaveBeenCalled();
-
-    // セッションが終了されることを確認
-    expect(
-      mocks.adapters.integrationManagerAdapter.endSession
-    ).toHaveBeenCalledWith('S001');
-    expect(consoleCapture.consoleOutput.join('\n')).toContain(
-      'セッションを終了します'
+    // ④ エラーハンドリングを検証 (E2E視点: 最終的な副作用のみ検証)
+    expect(consoleCapture.errorMock).toHaveBeenCalledWith(
+      expect.stringContaining('致命的エラーが発生しました:'),
+      initError
     );
+    expect(mockExit).toHaveBeenCalledWith(1);
+
+    // ⑤ スパイをリストア
+    bootstrapSpy.mockRestore();
   });
 
-  test('createTaskコマンドでタスクが作成される', async () => {
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['createTask'],
-      title: 'テストタスク',
-      description: 'テスト説明',
-    });
+  test('main 関数が引数解析エラーを捕捉し、exit(1) を呼ぶ', async () => {
+    process.argv = ['node', 'knoa-cli', 'invalid-command']; // ① argv 設定
+    const parseError = new Error('Argument parsing failed');
 
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
+    // ② bootstrap は成功させ、parseArguments がエラーをスローするようにモック
+    const { bootstrap } = require('../../src/cli/bootstrap'); // モックされた bootstrap
+    const integration = require('../../src/cli/integration'); // 実際の integration モジュール
+    const { runCommand } = integration; // runCommand は実際のコード
 
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    bootstrap.mockReturnValue({
+      logger: mockLoggerInstance,
+      cliFacade: mockCliFacadeInstance,
+    }); // bootstrap は成功
+    const parseSpy = jest
+      .spyOn(integration, 'parseArguments')
+      .mockImplementation(() => {
+        throw parseError;
+      }); // parseArguments でエラー
 
-    // タスクが作成されることを確認
-    expect(
-      mocks.adapters.integrationManagerAdapter.createTask
-    ).toHaveBeenCalledWith({
-      title: 'テストタスク',
-      description: 'テスト説明',
-    });
-    expect(consoleCapture.consoleOutput.join('\n')).toContain(
-      'タスクを作成します'
+    await main(); // ③ main を実行
+
+    // ④ エラーハンドリングを検証 (E2E視点: 最終的な副作用のみ検証)
+    expect(consoleCapture.errorMock).toHaveBeenCalledWith(
+      expect.stringContaining('致命的エラーが発生しました:'),
+      parseError
     );
-  });
+    expect(mockExit).toHaveBeenCalledWith(1);
 
-  test('updateTaskコマンドでタスク状態が更新される', async () => {
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['updateTask'],
-      taskId: 'T001',
-      status: 'in_progress',
-    });
-
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
-
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // タスク状態が更新されることを確認
-    expect(
-      mocks.adapters.integrationManagerAdapter.updateTaskStatus
-    ).toHaveBeenCalledWith('T001', 'in_progress');
-    expect(consoleCapture.consoleOutput.join('\n')).toContain(
-      'タスク状態を更新します'
-    );
-  });
-
-  test('collectFeedbackコマンドでフィードバックが収集される', async () => {
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['collectFeedback'],
-      taskId: 'T001',
-      content: 'テストフィードバック',
-    });
-
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
-
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // フィードバックが収集されることを確認
-    expect(
-      mocks.adapters.integrationManagerAdapter.collectFeedback
-    ).toHaveBeenCalledWith('T001', {
-      content: 'テストフィードバック',
-    });
-    expect(consoleCapture.consoleOutput.join('\n')).toContain(
-      'フィードバックを収集します'
-    );
-  });
-
-  test('resolveFeedbackコマンドでフィードバックが解決される', async () => {
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['resolveFeedback'],
-      feedbackId: 'F001',
-      resolution: 'fixed',
-    });
-
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
-
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // フィードバックが解決されることを確認
-    expect(
-      mocks.adapters.integrationManagerAdapter.resolveFeedback
-    ).toHaveBeenCalledWith('F001', {
-      action: 'fixed',
-    });
-    expect(consoleCapture.consoleOutput.join('\n')).toContain(
-      'フィードバックを解決します'
-    );
-  });
-
-  test('syncコマンドでコンポーネント間の同期が実行される', async () => {
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['sync'],
-    });
-
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
-
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // コンポーネント間の同期が実行されることを確認
-    expect(
-      mocks.adapters.integrationManagerAdapter.syncComponents
-    ).toHaveBeenCalled();
-    expect(consoleCapture.consoleOutput.join('\n')).toContain(
-      'コンポーネント間の同期を実行します'
-    );
-  });
-
-  test('reportコマンドでレポートが生成される', async () => {
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['report'],
-      format: 'markdown',
-      includeDetails: true,
-    });
-
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
-
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // レポートが生成されることを確認
-    expect(
-      mocks.adapters.integrationManagerAdapter.generateReport
-    ).toHaveBeenCalledWith({
-      format: 'markdown',
-      includeDetails: true,
-    });
-    expect(consoleCapture.consoleOutput.join('\n')).toContain(
-      'レポートを生成します'
-    );
-  });
-
-  test('statusコマンドでワークフロー状態が表示される', async () => {
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['status'],
-    });
-
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
-
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // ワークフロー状態が取得されることを確認
-    expect(
-      mocks.adapters.integrationManagerAdapter.getWorkflowStatus
-    ).toHaveBeenCalled();
-
-    // 現在の状態が取得されることを確認
-    expect(
-      mocks.adapters.stateManagerAdapter.getCurrentState
-    ).toHaveBeenCalled();
-
-    // タスク一覧が取得されることを確認
-    expect(mocks.adapters.taskManagerAdapter.getAllTasks).toHaveBeenCalled();
-
-    expect(consoleCapture.consoleOutput.join('\n')).toContain(
-      'ワークフロー状態を取得します'
-    );
-    expect(consoleCapture.consoleOutput.join('\n')).toContain('現在の状態');
-  });
-
-  test('エラー発生時に適切なエラーメッセージが表示される', async () => {
-    // エラーを発生させる
-    mocks.adapters.integrationManagerAdapter.initializeWorkflow.mockImplementationOnce(
-      () => {
-        throw new Error('テストエラー');
-      }
-    );
-
-    // yargsのparseメソッドをモック
-    const yargs = require('yargs');
-    yargs.parse.mockReturnValue({
-      _: ['init'],
-      projectId: 'P001',
-      request: 'テストリクエスト',
-    });
-
-    // integration.jsを実行
-    jest.isolateModules(() => {
-      require('../../src/cli/integration');
-    });
-
-    // 非同期処理の完了を待つ
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // エラーメッセージが表示されることを確認
-    expect(consoleCapture.consoleErrors.join('\n')).toContain(
-      'ワークフロー初期化エラー'
-    );
-    expect(consoleCapture.consoleErrors.join('\n')).toContain('テストエラー');
+    // ⑤ スパイをリストア
+    parseSpy.mockRestore();
   });
 });

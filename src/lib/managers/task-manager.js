@@ -10,34 +10,19 @@ const PROGRESS_STATES = {
     description: 'タスクがまだ開始されていない状態',
     default_percentage: 0,
   },
-  planning: {
-    description: 'タスクの計画段階',
-    default_percentage: 10,
-  },
-  in_development: {
-    description: '開発中の状態',
-    default_percentage: 30,
-  },
+  planning: { description: 'タスクの計画段階', default_percentage: 10 },
+  in_development: { description: '開発中の状態', default_percentage: 30 },
   implementation_complete: {
     description: '実装が完了した状態',
     default_percentage: 60,
   },
-  in_review: {
-    description: 'レビュー中の状態',
-    default_percentage: 70,
-  },
+  in_review: { description: 'レビュー中の状態', default_percentage: 70 },
   review_complete: {
     description: 'レビューが完了した状態',
     default_percentage: 80,
   },
-  in_testing: {
-    description: 'テスト中の状態',
-    default_percentage: 90,
-  },
-  completed: {
-    description: 'タスクが完了した状態',
-    default_percentage: 100,
-  },
+  in_testing: { description: 'テスト中の状態', default_percentage: 90 },
+  completed: { description: 'タスクが完了した状態', default_percentage: 100 },
 };
 
 // 状態遷移の定義
@@ -59,136 +44,64 @@ class TaskManager {
   /**
    * コンストラクタ
    * @param {Object} options - オプションオブジェクト
-   * @param {Object} options.storageService - ストレージサービス（必須）
+   * @param {Object} options.taskRepository - タスクリポジトリ（必須）
    * @param {Object} options.gitService - Gitサービス（必須）
-   * @param {Object} options.logger - ロガー
-   * @param {Object} options.eventEmitter - イベントエミッター
-   * @param {Object} options.errorHandler - エラーハンドラー
+   * @param {Object} options.logger - ロガー（必須）
+   * @param {Object} options.eventEmitter - イベントエミッター（必須）
+   * @param {Object} options.errorHandler - エラーハンドラー（必須）
+   * @param {Object} options.taskValidator - タスクバリデーター（必須）
    * @param {Object} options.config - 設定オプション
-   * @param {string} options.config.tasksDir - タスクディレクトリのパス
-   * @param {string} options.config.currentTasksFile - 現在のタスクファイル名
    */
   constructor(options = {}) {
     // 必須依存関係の検証
-    if (!options.storageService)
-      throw new Error('TaskManager requires a storageService instance');
+    if (!options.taskRepository)
+      throw new Error('TaskManager requires a taskRepository instance');
     if (!options.gitService)
       throw new Error('TaskManager requires a gitService instance');
+    if (!options.logger)
+      throw new Error('TaskManager requires a logger instance');
+    if (!options.eventEmitter)
+      throw new Error('TaskManager requires an eventEmitter instance');
+    if (!options.errorHandler)
+      throw new Error('TaskManager requires an errorHandler instance');
+    if (!options.taskValidator)
+      // taskValidator の検証を追加
+      throw new Error('TaskManager requires a taskValidator instance');
 
     // 依存関係の設定
-    this.storageService = options.storageService;
+    this.taskRepository = options.taskRepository;
     this.gitService = options.gitService;
-    this.logger = options.logger || console;
+    this.logger = options.logger;
     this.eventEmitter = options.eventEmitter;
     this.errorHandler = options.errorHandler;
+    this.taskValidator = options.taskValidator; // taskValidator を設定
 
-    // 設定オプションの設定
+    // 設定オプションの設定 (必要であれば)
     this.config = options.config || {};
-    this.tasksDir = this.config.tasksDir || 'ai-context/tasks';
-    this.currentTasksFile =
-      this.config.currentTasksFile || 'current-tasks.json';
 
-    // ディレクトリの存在確認はstorageServiceに委譲
-    this.storageService.ensureDirectoryExists(this.tasksDir);
-
-    this.logger.info('TaskManager initialized', {
-      tasksDir: this.tasksDir,
-    });
+    this.logger.info('TaskManager initialized');
 
     // イベントエミッターが存在する場合はイベントを発行
-    if (this.eventEmitter) {
-      this.eventEmitter.emit('task:manager:initialized', {
-        tasksDir: this.tasksDir,
-        currentTasksFile: this.currentTasksFile,
-      });
-    }
-  }
-
-  /**
-   * タスクを検証する
-   * @param {Object} task - 検証するタスク
-   * @returns {Object} 検証結果（isValid: boolean, errors: string[]）
-   */
-  validateTask(task) {
-    const errors = [];
-
-    // 基本的な構造チェック
-    if (!task) {
-      errors.push('タスクオブジェクトが不正です');
-      return { isValid: false, errors };
-    }
-
-    // 必須フィールドのチェック
-    const requiredFields = ['id', 'title', 'description', 'priority', 'status'];
-    for (const field of requiredFields) {
-      // eslint-disable-next-line security/detect-object-injection
-      if (!task[field]) {
-        errors.push(`必須フィールド ${field} がありません`);
-      }
-    }
-
-    // タスクIDの形式チェック
-    if (task.id && !task.id.match(/^T[0-9]{3}$/)) {
-      errors.push(`不正なタスクID形式です: ${task.id}`);
-    }
-
-    // 優先度のチェック
-    if (task.priority && !['high', 'medium', 'low'].includes(task.priority)) {
-      errors.push(`不正な優先度です: ${task.priority}`);
-    }
-
-    // 状態のチェック
-    if (
-      task.status &&
-      !['not_started', 'in_progress', 'completed'].includes(task.status)
-    ) {
-      errors.push(`不正な状態です: ${task.status}`);
-    }
-
-    // 進捗状態のチェック
-    if (
-      task.progress_state &&
-      !Object.keys(PROGRESS_STATES).includes(task.progress_state)
-    ) {
-      errors.push(`不正な進捗状態です: ${task.progress_state}`);
-    }
-
-    // 進捗率のチェック
-    if (task.progress_percentage !== undefined) {
-      const progress = Number(task.progress_percentage);
-      if (isNaN(progress) || progress < 0 || progress > 100) {
-        errors.push(`不正な進捗率です: ${task.progress_percentage}`);
-      }
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-    };
+    // 標準化されたイベント発行ヘルパーを使用することを推奨
+    // emitStandardizedEvent(this.eventEmitter, 'task_manager', 'initialized');
+    this.eventEmitter.emitStandardized('task_manager', 'initialized'); // 直接呼び出し
   }
 
   /**
    * すべてのタスクを取得する
-   * @returns {Promise<Object>} タスクコレクション
+   * @returns {Promise<Array>} タスクの配列
    */
   async getAllTasks() {
     try {
-      const tasksPath = `${this.tasksDir}/${this.currentTasksFile}`;
-
-      if (!this.storageService.fileExists(tasksPath)) {
-        return { tasks: [] };
-      }
-
-      const tasks = await this.storageService.readJSON(tasksPath);
-
-      return tasks || { tasks: [] };
+      // TaskRepository を使用してすべてのタスクデータを取得
+      const taskData = await this.taskRepository.getAll();
+      // taskData が null や undefined でないこと、および tasks プロパティが配列であることを確認
+      return taskData && Array.isArray(taskData.tasks) ? taskData.tasks : [];
     } catch (error) {
-      if (this.errorHandler) {
-        this.errorHandler.handle(error, 'TaskManager', 'getAllTasks');
-      } else {
-        this.logger.error('タスクの取得に失敗しました:', error);
-      }
-      return { tasks: [] };
+      // エラーハンドリング: errorHandler があれば委譲、なければログ出力
+      this.errorHandler.handle(error, 'TaskManager', 'getAllTasks');
+      // エラー時は空配列を返す（あるいはエラーを再スローする）
+      return [];
     }
   }
 
@@ -199,27 +112,126 @@ class TaskManager {
    */
   async getTaskById(taskId) {
     try {
-      // タスクIDの検証
+      // タスクIDの検証 (リポジトリ側でも検証されるが、Manager層でも行うのが一般的)
       if (!taskId || !taskId.match(/^T[0-9]{3}$/)) {
+        // ValidationError を使用する (Repository からインポートが必要)
+        // const { ValidationError } = require('../data/repository'); // ファイル先頭に追加
+        // throw new ValidationError(`不正なタスクID形式です: ${taskId}`);
+        // 現状は Error のままにしておく (リファクタリングフェーズで検討)
         throw new Error(`不正なタスクID形式です: ${taskId}`);
       }
 
-      const tasks = await this.getAllTasks();
-
-      if (!tasks || !Array.isArray(tasks.tasks)) {
-        return null;
-      }
-
-      return tasks.tasks.find((task) => task.id === taskId) || null;
+      // TaskRepository を使用してIDでタスクを取得
+      const task = await this.taskRepository.getById(taskId);
+      return task; // getById は見つからない場合 null を返す
     } catch (error) {
-      if (this.errorHandler) {
-        this.errorHandler.handle(error, 'TaskManager', 'getTaskById', {
-          taskId,
-        });
-      } else {
-        this.logger.error(`タスクID ${taskId} の取得に失敗しました:`, error);
-      }
+      // NotFoundError はそのままスローするか、null を返すか検討
+      // if (error instanceof NotFoundError) {
+      //   return null;
+      // }
+      // それ以外のエラーは errorHandler に委譲
+      this.errorHandler.handle(error, 'TaskManager', 'getTaskById', { taskId });
+      // エラー時は null を返す（あるいはエラーを再スローする）
       return null;
+    }
+  }
+
+  /**
+   * 新しいタスクを作成する
+   * @param {Object} taskData - 作成するタスクのデータ
+   * @returns {Promise<Object>} 作成されたタスクオブジェクト
+   * @throws {ValidationError} バリデーションエラーの場合
+   * @throws {DataConsistencyError} ID重複の場合
+   * @throws {Error} その他の作成エラーの場合
+   */
+  async createTask(taskData) {
+    // バリデーション (将来的には TaskValidator を使用)
+    const validationResult = this.taskValidator.validate(taskData);
+    if (!validationResult.isValid) {
+      // ValidationError を使用する (Repository からインポートが必要)
+      // const { ValidationError } = require('../data/repository'); // ファイル先頭に追加
+      // throw new ValidationError('Invalid task data', validationResult.errors);
+      // 現状は Error のままにしておく
+      throw new Error(
+        `Invalid task data: ${validationResult.errors.join(', ')}`
+      );
+    }
+
+    try {
+      // TaskRepository を使用してタスクを作成
+      const createdTask = await this.taskRepository.create(taskData);
+
+      // イベント発行
+      this.eventEmitter.emitStandardized('task_manager', 'task_created', {
+        task: createdTask,
+      });
+
+      this.logger.info(`Task created: ${createdTask.id}`, {
+        taskId: createdTask.id,
+      });
+      return createdTask;
+    } catch (error) {
+      // Repository からスローされる可能性のあるエラーをハンドル
+      // (ValidationError, DataConsistencyError, NotFoundError は Repository 側で処理される想定だが念のため)
+      // if (error instanceof ValidationError || error instanceof DataConsistencyError || error instanceof NotFoundError) {
+      //   this.errorHandler.handle(error, 'TaskManager', 'createTask', { taskData });
+      //   throw error; // 特定のエラーは再スローするなども検討
+      // }
+
+      // その他のエラーをハンドル
+      this.errorHandler.handle(error, 'TaskManager', 'createTask', {
+        taskData,
+      });
+      // エラーを再スローするか、null や特定の値を返すか検討 (ここでは再スロー)
+      throw new Error(`Failed to create task: ${error.message}`);
+    }
+  }
+
+  /**
+   * タスクを更新する
+   * @param {string} taskId - 更新するタスクのID
+   * @param {Object} updateData - 更新データ
+   * @returns {Promise<Object>} 更新されたタスクオブジェクト
+   * @throws {ValidationError} バリデーションエラーの場合
+   * @throws {NotFoundError} タスクが見つからない場合
+   * @throws {Error} その他の更新エラーの場合
+   */
+  async updateTask(taskId, updateData) {
+    // 更新データとIDを結合してバリデーション (将来的には TaskValidator を使用)
+    const taskToValidate = { ...updateData, id: taskId };
+    const validationResult = this.taskValidator.validate(taskToValidate);
+    if (!validationResult.isValid) {
+      // throw new ValidationError('Invalid task data', validationResult.errors);
+      throw new Error(
+        `Invalid task data: ${validationResult.errors.join(', ')}`
+      );
+    }
+
+    try {
+      // TaskRepository を使用してタスクを更新
+      const updatedTask = await this.taskRepository.update(taskId, updateData);
+
+      // イベント発行
+      this.eventEmitter.emitStandardized('task_manager', 'task_updated', {
+        taskId,
+        updateData,
+      });
+
+      this.logger.info(`Task updated: ${taskId}`, { taskId });
+      return updatedTask;
+    } catch (error) {
+      // Repository からスローされる可能性のあるエラーをハンドル
+      // if (error instanceof ValidationError || error instanceof NotFoundError) {
+      //   this.errorHandler.handle(error, 'TaskManager', 'updateTask', { taskId, updateData });
+      //   throw error;
+      // }
+
+      // その他のエラーをハンドル
+      this.errorHandler.handle(error, 'TaskManager', 'updateTask', {
+        taskId,
+        updateData,
+      });
+      throw new Error(`Failed to update task ${taskId}: ${error.message}`);
     }
   }
 }

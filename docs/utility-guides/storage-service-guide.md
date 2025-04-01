@@ -11,12 +11,15 @@
     *   **`logger` (Object): 必須。** ファイル操作に関するログを出力するために使用される Logger インスタンス。
     *   **`eventEmitter` (Object):** オプション。ファイル操作イベントを発行するために使用する EventEmitter インスタンス。
     *   **`errorHandler` (Object):** オプション。ファイル操作中にエラーが発生した場合の処理をカスタマイズするためのエラーハンドラー。指定しない場合、エラーはログに出力され、操作に応じたデフォルト値（`null` や `false` など）が返されます。
+    *   **`traceIdGenerator` (Function):** オプション。トレースIDを生成する関数。デフォルトは内部のジェネレーター。★★★ 追加 ★★★
+    *   **`requestIdGenerator` (Function):** オプション。リクエストIDを生成する関数。デフォルトは内部のジェネレーター。★★★ 追加 ★★★
 
 *   **例:**
     ```javascript
     const Logger = require('./logger'); // 仮
     const EventEmitter = require('./event-emitter'); // 仮
     const ErrorHandler = require('./error-handler'); // 仮
+    const { generateTraceId, generateRequestId } = require('./id-generators'); // 仮
 
     const logger = new Logger();
     const eventEmitter = new EventEmitter({ logger });
@@ -26,7 +29,9 @@
       basePath: './data', // データディレクトリを基準にする
       logger: logger,
       eventEmitter: eventEmitter,
-      errorHandler: errorHandler
+      errorHandler: errorHandler,
+      traceIdGenerator: generateTraceId, // 注入例
+      requestIdGenerator: generateRequestId // 注入例
     });
     ```
 
@@ -90,20 +95,20 @@
     *   指定されたディレクトリ内のファイル名の配列を返します。
     *   オプションの `pattern` (正規表現文字列) を指定すると、ファイル名をフィルタリングします。
     *   ディレクトリが存在しない場合やエラー時は `[]` を返します（`errorHandler` がなければ）。
-    *   イベント: `storage:directory_list_before`, `storage:directory_list_after`, `storage:directory_not_found`
+    *   イベント: `storage:directory_list_before`, `storage:directory_list_after`, `storage:directory_not_found`, `storage:directory_list_error` ★★★ 修正 ★★★
 *   **`deleteFile(directory, filename)`:**
     *   指定されたファイルを削除します。
     *   成功した場合は `true`、ファイルが存在しない場合や失敗した場合は `false` を返します（`errorHandler` がなければ）。
-    *   イベント: `storage:file_delete_before`, `storage:file_delete_after`, `storage:file_not_found`
+    *   イベント: `storage:file_delete_before`, `storage:file_delete_after`, `storage:file_not_found`, `storage:file_delete_error` ★★★ 修正 ★★★
 *   **`deleteDirectory(directory, [recursive=false])`:**
     *   指定されたディレクトリを削除します。
     *   `recursive` が `true` の場合、ディレクトリ内のファイルやサブディレクトリも再帰的に削除します。**注意して使用してください。**
     *   成功した場合は `true`、ディレクトリが存在しない場合や失敗した場合は `false` を返します（`errorHandler` がなければ）。
-    *   イベント: `storage:directory_delete_before`, `storage:directory_delete_after`, `storage:directory_not_found`
+    *   イベント: `storage:directory_delete_before`, `storage:directory_delete_after`, `storage:directory_not_found`, `storage:directory_delete_error` ★★★ 修正 ★★★
 *   **`copyFile(sourceDir, sourceFile, destDir, destFile)`:**
     *   指定されたソースファイルを指定された宛先にコピーします。宛先ディレクトリが存在しない場合は作成されます。
     *   成功した場合は `true`、ソースファイルが存在しない場合や失敗した場合は `false` を返します（`errorHandler` がなければ）。
-    *   イベント: `storage:file_copy_before`, `storage:file_copy_after`, `storage:file_not_found` (ソース), `storage:directory_created` (宛先)
+    *   イベント: `storage:file_copy_before`, `storage:file_copy_after`, `storage:file_not_found` (ソース), `storage:directory_created` (宛先), `storage:file_copy_error` ★★★ 修正 ★★★
 *   **`ensureDirectoryExists(directory)`:**
     *   指定されたディレクトリが存在することを確認します。存在しない場合は作成します。
     *   成功した場合は `true`、失敗した場合は `false` を返します（`errorHandler` がなければ）。
@@ -125,13 +130,14 @@
 
 ## 4. 発行されるイベント (EventEmitter が指定されている場合)
 
-ファイルやディレクトリの操作前後、エラー発生時、ディレクトリ作成時などに `storage:` プレフィックスを持つイベントが発行されます。詳細は各メソッドの説明を参照してください。イベントデータには通常、操作対象のパスや成功/失敗ステータス、エラーメッセージなどが含まれます。
+ファイルやディレクトリの操作前後、エラー発生時、ディレクトリ作成時などに `storage:` プレフィックスを持つイベントが発行されます。詳細は各メソッドの説明を参照してください。イベントデータには通常、操作対象のパス (`path`) や成功/失敗ステータス、エラーメッセージなどが含まれます。**また、これらのイベントデータには自動的に `timestamp`, `traceId`, `requestId` が含まれます。** ★★★ 修正 ★★★
 
 *   例: `storage:file_read_before`, `storage:file_read_after`, `storage:file_write_error`, `storage:directory_created`, `storage:file_not_found`
 
 ## 5. 注意点とベストプラクティス
 
-*   **パスの扱い:** メソッドに渡す `directory` や `filename` は、コンストラクタで指定された `basePath` からの相対パスとして扱われます。内部的には OS ネイティブなパスに変換されて処理されます。`fileExists` は絶対パスも受け付けます。
+*   **パスの扱い:** メソッドに渡す `directory` や `filename` は、コンストラクタで指定された `basePath` からの相対パスとして扱われます。内部的には OS ネイティブなパスに変換されて処理されます。`fileExists` は絶対パスも受け付けます。イベントデータに含まれるパスも OS ネイティブ形式です。★★★ 修正 ★★★
+*   **IDジェネレーター:** `traceIdGenerator` と `requestIdGenerator` はオプションですが、アプリケーション全体で一貫したトレースを行うために、外部から共通のジェネレーターを注入することを推奨します。★★★ 追加 ★★★
 *   **エラーハンドリング:** デフォルトでは、多くのメソッドはエラー時に例外をスローせず、`null` や `false` を返します。これは `errorHandler` が指定されていない場合の動作です。エラー発生時に例外をスローさせたい場合や、特定のエラー処理（リトライなど）を行いたい場合は、カスタムの `errorHandler` を実装してコンストラクタに渡してください。
 *   **同期処理:** この `StorageService` のメソッドは、Node.js の同期的なファイルシステム API (`fs.readFileSync`, `fs.writeFileSync` など) を使用しています。これは実装を単純化するためですが、大量のファイル操作や高負荷な状況ではアプリケーションのイベントループをブロックする可能性があります。パフォーマンスが重要な場合は、非同期的なファイル操作を行う別のサービスやライブラリの使用を検討してください。
 *   **競合:** 短時間に同じファイルに対して複数のプロセスや非同期操作が書き込みを行うと、競合が発生する可能性があります。`updateJSON` はある程度の保護を提供しますが、より厳密な排他制御が必要な場合は、`LockManager` などのロック機構と組み合わせて使用することを検討してください。

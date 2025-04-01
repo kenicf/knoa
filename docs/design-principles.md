@@ -13,13 +13,13 @@
 
 ## 2. 依存性注入 (DI)
 
-*   **原則:** クラス間の依存関係を疎結合にし、テスト容易性と再利用性を高めるために、依存性注入 (Dependency Injection) パターンを採用します。
+*   **原則:** クラス間の依存関係を疎結合にし、**テスト容易性**と再利用性を高めるために、依存性注入 (Dependency Injection) パターンを採用します。
 *   **方法:**
     *   **コンストラクタインジェクション:** 依存オブジェクトは、クラスのコンストラクタを通じて注入することを原則とします。これにより、クラスのインスタンス化時に必要な依存関係がすべて揃っていることが保証されます。
     *   **`options` オブジェクト:** 依存関係は `options` オブジェクトとしてコンストラクタに渡します。これにより、引数の順序を気にする必要がなくなり、将来的な依存関係の追加が容易になります。
     *   **必須/任意依存:** 依存関係が必須か任意かを明確にします。必須の依存関係が提供されない場合は、コンストラクタでエラーをスローします (`logger` は多くの場合必須です)。任意の依存関係は、存在チェックを行ってから使用します。
 *   **利点:**
-    *   **テスト容易性:** テスト時に依存オブジェクトをモックに差し替えることが容易になります。
+    *   **テスト容易性:** **DI の最大の利点の一つです。** テスト時に、実際の依存オブジェクト（例: データベース接続、外部APIクライアント）の代わりに、モックオブジェクトやスタブを容易に注入できます。これにより、テスト対象のユニットを隔離し、外部要因に影響されずにその動作を検証できます。
     *   **再利用性:** クラスが特定の依存実装に結合しないため、異なるコンテキストで再利用しやすくなります。
     *   **保守性:** 依存関係が明確になり、コードの理解と変更が容易になります。
 *   **Do:**
@@ -34,6 +34,9 @@
         this.logger = options.logger;
         // 任意依存の取得
         this.optionalService = options.optionalService;
+        // ★★★ IDジェネレーターも注入可能 ★★★
+        this._traceIdGenerator = options.traceIdGenerator || (() => `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+        this._requestIdGenerator = options.requestIdGenerator || (() => `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
 
         this.logger.info('ServiceA initialized');
       }
@@ -52,10 +55,20 @@
     const optionalService = new OptionalService();
     const serviceA = new ServiceA({ logger, optionalService });
     const serviceA_minimal = new ServiceA({ logger }); // 任意依存は省略可能
+
+    // テスト時
+    const mockLogger = createMockLogger(); // モックファクトリから
+    const mockOptionalService = { help: jest.fn() };
+    const serviceAForTest = new ServiceA({ logger: mockLogger, optionalService: mockOptionalService });
+    serviceAForTest.doSomething();
+    expect(mockOptionalService.help).toHaveBeenCalled();
     ```
 *   **Don't:**
     *   クラス内部で依存オブジェクトを直接 `new` する。
     *   グローバル変数やシングルトンパターンを通じて依存オブジェクトにアクセスする（テストや再利用が困難になるため）。
+
+*   **関連ガイドライン:**
+    *   テスト容易性の詳細については、[テスト戦略とガイドライン](./testing-guidelines.md#4-テスト容易性のための設計) を参照してください。
 
 ## 3. エラーハンドリング戦略
 
@@ -66,6 +79,25 @@
     *   **`error-helpers.js`:** `emitErrorEvent` ヘルパー関数は、エラー情報をログに出力し、標準化された `app:error` イベントを発行するために使用されます。これにより、アプリケーション全体のエラー監視と分析が容易になります。
     *   **`try...catch`:** エラーが発生する可能性のある操作（ファイルI/O、外部API呼び出し、Git操作など）は `try...catch` ブロックで囲みます。
     *   **エラーのラップ:** 捕捉した低レベルのエラー（例: `fs` モジュールのエラー）は、より意味のあるカスタムエラークラス（例: `StorageError`）でラップしてから再スローするか、`errorHandler` に渡します。エラーの原因 (`cause`) も含めるようにします。
+    *   **エラーコンテキスト:** エラーオブジェクトの `context` プロパティや、`emitErrorEvent` の `details` 引数には、エラー発生時の状況を理解するのに役立つ情報（関連ID、パラメータ、操作名など）を含めます。
+        *   **例 (`LockManager` のタイムアウト):**
+            ```javascript
+            // TimeoutError を使用し、エラーコードとコンテキストを指定
+            const error = new TimeoutError(
+              `リソース ${resourceId} のロック取得がタイムアウトしました`,
+              {
+                code: 'ERR_LOCK_TIMEOUT', // エラーコード
+                context: { // 関連情報
+                  resourceId,
+                  lockerId,
+                  timeout,
+                  errorType: 'LockTimeoutError', // 元のエラータイプ
+                },
+              }
+            );
+            this.logger.warn(`Lock acquisition timed out for resource: ${resourceId}`, { error }); // ログにもエラーオブジェクトを渡す
+            throw error;
+            ```
 *   **Do:**
     ```javascript
     // StorageService の例
@@ -94,13 +126,35 @@
 *   **中心コンポーネント:** `src/lib/utils/event-emitter.js` (コアの `EnhancedEventEmitter` を拡張) がイベントの発行と購読を管理します。
 *   **イベント発行:**
     *   **`emitStandardized(component, action, data)`:** 標準化されたイベントを発行するための主要メソッドです。
-    *   **イベント構造:** `emitStandardized` によって発行されるイベントデータには、自動的に以下の情報が付与されます（または付与されるべきです）。
+    *   **イベント構造:** `emitStandardized` によって発行されるイベントデータには、自動的に以下の情報が付与されます。
         *   `component`: イベントを発行したコンポーネント名 (例: `'git'`, `'storage'`)。
         *   `action`: 発生したアクション (例: `'commit_created'`, `'file_read_after'`)。
         *   `timestamp`: イベント発生時刻 (ISO 8601形式)。
-        *   `traceId`, `requestId`: (将来的には OperationContext などから取得) リクエストや操作の追跡ID。
+        *   **`traceId`, `requestId`:** 操作やリクエストを追跡するためのID。`EventEmitter` インスタンスが持つIDジェネレーターによって自動的に生成・付与されます。
         *   `...data`: アクション固有のデータ。
     *   **イベント名:** `component:action` 形式を厳守します。これにより、イベントの発生源と種類が明確になります。
+    *   **内部ヘルパー (`_emitEvent`):** ユーティリティクラス内でイベントを発行する場合、`_emitEvent(action, data)` のような内部ヘルパーメソッドを定義することを推奨します。このヘルパー内で `traceId`, `requestId` を生成し、`timestamp` と共にデータに追加してから `this.eventEmitter.emitStandardized()` を呼び出します。これにより、各ユーティリティクラス内でのイベント発行ロジックが統一されます。
+        ```javascript
+        // 例: StorageService の _emitEvent
+        _emitEvent(eventName, data) {
+          if (!this.eventEmitter || typeof this.eventEmitter.emitStandardized !== 'function') {
+            return;
+          }
+          try {
+            const traceId = this._traceIdGenerator(); // 内部で保持するジェネレーターを使用
+            const requestId = this._requestIdGenerator();
+            const standardizedData = {
+              ...data,
+              timestamp: new Date().toISOString(),
+              traceId,
+              requestId,
+            };
+            this.eventEmitter.emitStandardized('storage', eventName, standardizedData);
+          } catch (error) {
+            this.logger.warn(`イベント発行中にエラー: storage:${eventName}`, error);
+          }
+        }
+        ```
 *   **イベント購読:**
     *   `on(eventName, listener)`: イベントを購読します。
     *   `off(eventName, listener)`: イベント購読を解除します。
@@ -118,6 +172,7 @@
     eventEmitter.on('git:commit_create_after', (eventData) => {
       if (eventData.success) {
         console.log(`New commit created: ${eventData.hash}`);
+        console.log(`Trace ID: ${eventData.traceId}`); // traceId などが利用可能
       }
     });
     ```
@@ -125,6 +180,7 @@
     *   コンポーネント間で直接メソッドを呼び出して密結合にする（イベントで代替できる場合）。
     *   標準化されていない形式でイベントを発行する (`emit` を直接使用するなど）。
     *   イベント名に一貫性がない。
+    *   ユーティリティクラス内で `emitStandardized` を直接呼び出す代わりに、`_emitEvent` ヘルパーパターンを使用する。
 
 ## 5. 非同期処理
 

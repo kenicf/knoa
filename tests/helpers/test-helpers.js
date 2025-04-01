@@ -3,11 +3,11 @@
  */
 
 /**
- * 標準化されたイベント発行の検証
- * @param {Object} emitter - イベントエミッター
- * @param {string} component - コンポーネント名
- * @param {string} action - アクション名
- * @param {Object} expectedData - 期待されるデータ
+ * 標準化された **同期** イベント発行の検証
+ * @param {Object} emitter - モック化された EventEmitter インスタンス
+ * @param {string} component - 期待されるコンポーネント名
+ * @param {string} action - 期待されるアクション名
+ * @param {Object} [expectedData] - オプション。期待されるイベントデータの一部または全部
  */
 function expectStandardizedEventEmitted(
   emitter,
@@ -15,103 +15,272 @@ function expectStandardizedEventEmitted(
   action,
   expectedData
 ) {
-  // emitStandardizedメソッドが呼び出されていない場合はスキップ
-  if (!emitter.emitStandardized.mock.calls.length) {
-    return;
-  }
+  const eventName = `${component}:${action}`;
+  // emitStandardized が jest.fn() であることを前提とする
+  const calls = emitter.emitStandardized?.mock?.calls || [];
 
-  // 呼び出し引数を取得
-  const calls = emitter.emitStandardized.mock.calls;
-
-  // コンポーネント、アクション、データが一致する呼び出しを探す
   const matchingCall = calls.find((call) => {
-    // コンポーネントの比較
-    if (call[0] !== component) return false;
+    if (call[0] !== component || call[1] !== action) return false;
 
-    // アクションの比較（コロンとアンダースコアの違いを許容）
-    // eslint-disable-next-line security/detect-non-literal-regexp
-    const actionRegex = new RegExp(`^${action.replace(/:/g, '[_:]')}$`);
-    if (!actionRegex.test(call[1])) return false;
+    const callData = call[2]; // 実際に渡されたデータ
 
-    // データの比較
-    const callData = call[2];
-    return Object.keys(expectedData).every((key) => {
-      // timestamp の検証を追加 (ISO形式文字列を期待)
+    // // 最初に traceId と requestId の存在を確認 ★★★ 削除 ★★★
+    // const hasTraceId =
+    //   callData && Object.prototype.hasOwnProperty.call(callData, 'traceId');
+    // const hasRequestId =
+    //   callData && Object.prototype.hasOwnProperty.call(callData, 'requestId');
+    // if (!hasTraceId || !hasRequestId) {
+    //   // console.warn(`Event ${eventName} missing traceId or requestId:`, callData); // デバッグ用
+    //   return false; // traceId または requestId が存在しない場合はマッチしない
+    // }
+
+    // expectedData が指定されていない場合はOK
+    if (!expectedData) return true;
+
+    // expectedData のキーで比較 ★★★ traceId/requestId のフィルタリングを削除 ★★★
+    const keysToCompare = Object.keys(expectedData);
+
+    // キーが expectedData になければOK
+    if (keysToCompare.length === 0) return true;
+
+    // キーについて値を比較
+    return keysToCompare.every((key) => {
       // eslint-disable-next-line security/detect-object-injection
-      if (key === 'timestamp' && typeof expectedData[key] === 'string') {
-        // 期待値が 'any' の場合は型のみチェック
-        // eslint-disable-next-line security/detect-object-injection
-        if (expectedData[key].toLowerCase() === 'any') {
-          return (
-            // eslint-disable-next-line security/detect-object-injection
-            typeof callData[key] === 'string' &&
-            // eslint-disable-next-line security/detect-object-injection
-            !isNaN(Date.parse(callData[key]))
-          );
-        }
-        // それ以外は厳密比較
-        // eslint-disable-next-line security/detect-object-injection
-        return callData[key] === expectedData[key];
+      const expectedValue = expectedData[key];
+      // eslint-disable-next-line security/detect-object-injection
+      const actualValue = callData?.[key];
+
+      if (
+        typeof expectedValue === 'object' &&
+        expectedValue !== null &&
+        typeof expectedValue.asymmetricMatch === 'function'
+      ) {
+        return expectedValue.asymmetricMatch(actualValue);
+      }
+      if (
+        key === 'timestamp' &&
+        typeof expectedValue === 'string' &&
+        expectedValue.toLowerCase() === 'any'
+      ) {
+        return (
+          typeof actualValue === 'string' && !isNaN(Date.parse(actualValue))
+        );
       }
       if (
         key === 'path' &&
-        // eslint-disable-next-line security/detect-object-injection
-        typeof expectedData[key] === 'string' &&
-        // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、typeof チェックのみのため安全と判断
-        typeof callData[key] === 'string'
+        typeof expectedValue === 'string' &&
+        typeof actualValue === 'string'
       ) {
-        // パスの場合は正規化して比較
-        // パスの場合は正規化して比較
-        const normalizePath = (path) => path.replace(/\\/g, '/');
-        // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、パス比較のため安全と判断
-        return normalizePath(callData[key]).includes(
-          // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、パス比較のため安全と判断
-          normalizePath(expectedData[key])
+        const normalizePath = (p) => p?.replace(/\\/g, '/');
+        return normalizePath(actualValue)?.includes(
+          normalizePath(expectedValue)
         );
       }
-
-      // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、instanceof チェックのため安全と判断
-      if (expectedData[key] instanceof RegExp) {
-        // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、RegExp.test の引数として渡すため安全と判断
-        return expectedData[key].test(callData[key]);
+      if (expectedValue instanceof RegExp) {
+        return expectedValue.test(actualValue);
       }
-
-      return (
-        // eslint-disable-next-line security/detect-object-injection -- key はテストデータ由来であり、JSON.stringify で比較するため安全と判断
-        JSON.stringify(callData[key]) === JSON.stringify(expectedData[key])
-      );
+      try {
+        expect(actualValue).toEqual(expectedValue);
+        return true;
+      } catch (e) {
+        return false;
+      }
     });
   });
 
-  // 一致する呼び出しが見つかった場合は成功
-  if (matchingCall) {
-    return;
+  if (!matchingCall) {
+    const formattedCalls = calls
+      .map(
+        (call) =>
+          `  - ${call[0]}:${call[1]} with data: ${JSON.stringify(call[2])}`
+      )
+      .join('\n');
+    throw new Error(
+      // エラーメッセージから traceId/requestId の言及を削除
+      `Expected standardized event '${eventName}' with data matching ${JSON.stringify(expectedData)} to be emitted via emitStandardized, but it was not found.\nActual calls:\n${formattedCalls || '  (No calls to emitStandardized)'}`
+    );
   }
+  expect(matchingCall).toBeDefined();
+}
 
-  // 呼び出しが見つからなかった場合は、最初の呼び出しを確認
-  if (calls.length > 0) {
-    expect(calls[0][0]).toEqual(component);
-    // TODO: アクションやデータも部分的に比較して、より詳細なエラーメッセージを出すことを検討
+/**
+ * 標準化された **非同期** イベント発行の検証
+ * @param {Object} emitter - モック化された EventEmitter インスタンス
+ * @param {string} component - 期待されるコンポーネント名
+ * @param {string} action - 期待されるアクション名
+ * @param {Object} [expectedData] - オプション。期待されるイベントデータの一部または全部
+ */
+function expectStandardizedEventEmittedAsync(
+  emitter,
+  component,
+  action,
+  expectedData
+) {
+  const eventName = `${component}:${action}`;
+  const calls = emitter.emitStandardizedAsync?.mock?.calls || [];
+
+  const matchingCall = calls.find((call) => {
+    if (call[0] !== component || call[1] !== action) return false;
+
+    const callData = call[2];
+
+    // // traceId と requestId の存在を確認 ★★★ 削除 ★★★
+    // const hasTraceId =
+    //   callData && Object.prototype.hasOwnProperty.call(callData, 'traceId');
+    // const hasRequestId =
+    //   callData && Object.prototype.hasOwnProperty.call(callData, 'requestId');
+    // if (!hasTraceId || !hasRequestId) {
+    //   return false;
+    // }
+
+    if (!expectedData) return true;
+
+    // ★★★ traceId/requestId のフィルタリングを削除 ★★★
+    const keysToCompare = Object.keys(expectedData);
+
+    if (keysToCompare.length === 0) return true;
+
+    return keysToCompare.every((key) => {
+      // eslint-disable-next-line security/detect-object-injection
+      const expectedValue = expectedData[key];
+      // eslint-disable-next-line security/detect-object-injection
+      const actualValue = callData?.[key];
+
+      if (
+        typeof expectedValue === 'object' &&
+        expectedValue !== null &&
+        typeof expectedValue.asymmetricMatch === 'function'
+      ) {
+        return expectedValue.asymmetricMatch(actualValue);
+      }
+      if (
+        key === 'timestamp' &&
+        typeof expectedValue === 'string' &&
+        expectedValue.toLowerCase() === 'any'
+      ) {
+        return (
+          typeof actualValue === 'string' && !isNaN(Date.parse(actualValue))
+        );
+      }
+      if (
+        key === 'path' &&
+        typeof expectedValue === 'string' &&
+        typeof actualValue === 'string'
+      ) {
+        const normalizePath = (p) => p?.replace(/\\/g, '/');
+        return normalizePath(actualValue)?.includes(
+          normalizePath(expectedValue)
+        );
+      }
+      if (expectedValue instanceof RegExp) {
+        return expectedValue.test(actualValue);
+      }
+      try {
+        expect(actualValue).toEqual(expectedValue);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    });
+  });
+
+  if (!matchingCall) {
+    const formattedCalls = calls
+      .map(
+        (call) =>
+          `  - ${call[0]}:${call[1]} with data: ${JSON.stringify(call[2])}`
+      )
+      .join('\n');
+    throw new Error(
+      // エラーメッセージから traceId/requestId の言及を削除
+      `Expected standardized event '${eventName}' with data matching ${JSON.stringify(expectedData)} to be emitted via emitStandardizedAsync, but it was not found.\nActual calls:\n${formattedCalls || '  (No calls to emitStandardizedAsync)'}`
+    );
   }
+  expect(matchingCall).toBeDefined();
 }
 
 /**
  * ログ出力の検証
  * @param {Object} logger - モックロガー
  * @param {string} level - ログレベル (info, warn, error, debug)
- * @param {string} message - 期待されるログメッセージ
+ * @param {string|RegExp} message - 期待されるログメッセージまたは正規表現
  */
 function expectLogged(logger, level, message) {
   // eslint-disable-next-line security/detect-object-injection -- level はテストコード内で指定される安全なログレベル文字列のため抑制
-  expect(logger[level]).toHaveBeenCalledWith(
-    expect.stringContaining(message),
-    expect.any(Object)
+  const mockFn = logger[level];
+  if (!mockFn || !mockFn.mock) {
+    throw new Error(
+      `Logger mock for level '${level}' not found or is not a Jest mock function.`
+    );
+  }
+
+  const matchingCall = mockFn.mock.calls.find((callArgs) => {
+    const logMessage = callArgs[0]; // 最初の引数がメッセージ本体と想定
+    if (typeof logMessage !== 'string') return false;
+    if (message instanceof RegExp) {
+      return message.test(logMessage);
+    } else {
+      // stringContaining のような動作にする
+      return logMessage.includes(message);
+    }
+  });
+
+  // expect アサーションを追加
+  // expect(matchingCall).toBeDefined();
+  // より明確なエラーメッセージのために toHaveBeenCalledWith を使用
+  expect(mockFn).toHaveBeenCalledWith(
+    message instanceof RegExp
+      ? expect.stringMatching(message)
+      : expect.stringContaining(message)
+    // 2番目以降の引数は気にしないか、必要なら expect.anything() などを使う
+    // expect.anything() // または expect.any(Object) など
   );
+
+  // オプション: 特定のコンテキストが含まれているかも検証する場合
+  // expect(mockFn).toHaveBeenCalledWith(
+  //   expect.stringContaining(message),
+  //   expect.objectContaining({ userId: 'test' }) // 例
+  // );
+}
+
+/**
+ * コンソール出力をキャプチャするためのヘルパー
+ * @returns {Object} キャプチャ用のオブジェクト { consoleOutput: Array<string>, consoleErrors: Array<string>, restore: Function }
+ */
+function captureConsole() {
+  const originalConsoleLog = console.log;
+  const originalConsoleError = console.error;
+  const consoleOutput = [];
+  const consoleErrors = [];
+
+  // jest.fn() を使って呼び出しを記録
+  console.log = jest.fn((...args) => {
+    consoleOutput.push(args.map((arg) => String(arg)).join(' ')); // 文字列に変換して結合
+  });
+
+  console.error = jest.fn((...args) => {
+    consoleErrors.push(args.map((arg) => String(arg)).join(' ')); // 文字列に変換して結合
+  });
+
+  return {
+    consoleOutput,
+    consoleErrors,
+    // restore 関数内で元の関数に戻す
+    restore: () => {
+      console.log = originalConsoleLog;
+      console.error = originalConsoleError;
+    },
+    // 呼び出し回数などを確認するためのモック自体も返す (任意)
+    logMock: console.log,
+    errorMock: console.error,
+  };
 }
 
 module.exports = {
   // expectEventEmitted, // 削除
   expectStandardizedEventEmitted,
+  expectStandardizedEventEmittedAsync, // 追加
   // expectErrorHandled, // 削除
   expectLogged,
+  captureConsole, // 追加
 };

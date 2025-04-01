@@ -30,44 +30,47 @@ describe('GitService (simple-git)', () => {
   let gitService;
   let mockLogger;
   let mockEventEmitter;
+  let mockErrorHandler; // エラーハンドラモックを追加
   const MOCK_TIMESTAMP_ISO = '2025-03-24T00:00:00.000Z';
 
   beforeEach(() => {
-    // モックのリセット
+    // Arrange (Common setup)
     jest.clearAllMocks();
-
-    // 時間のモック
     mockTimestamp(MOCK_TIMESTAMP_ISO);
-
-    // 共通モックファクトリを使用
     mockLogger = createMockLogger();
     mockEventEmitter = createMockEventEmitter();
+    // エラーハンドラモックを作成 (エラーをそのままスローする)
+    mockErrorHandler = {
+      handle: jest.fn((err) => {
+        throw err;
+      }),
+    };
 
-    // GitServiceのインスタンス作成
-    // エラーハンドラもモックして渡す
-    const mockErrorHandler = { handle: jest.fn((err) => err) }; // エラーをそのまま返すモック
     gitService = new GitService({
       repoPath: '/test/repo/path',
       logger: mockLogger,
       eventEmitter: mockEventEmitter,
-      errorHandler: mockErrorHandler, // errorHandler を渡す
+      errorHandler: mockErrorHandler, // モックを渡す
     });
   });
 
   afterEach(() => {
+    // Clean up mocks
     jest.restoreAllMocks();
   });
 
   describe('constructor', () => {
-    test('logger がないとエラーをスローする', () => {
+    test('should throw error if logger is not provided', () => {
+      // Arrange & Act & Assert
       expect(() => new GitService({ eventEmitter: mockEventEmitter })).toThrow(
         'Logger instance is required'
       );
     });
 
-    test('オプションなしでデフォルト値が正しく設定される', () => {
+    test('should set default values correctly if options are omitted', () => {
       // Arrange & Act
-      const defaultGitService = new GitService({ logger: createMockLogger() });
+      const defaultGitService = new GitService({ logger: createMockLogger() }); // logger は必須
+
       // Assert
       expect(defaultGitService.repoPath).toBe(process.cwd());
       expect(defaultGitService.logger).toBeDefined();
@@ -77,18 +80,19 @@ describe('GitService (simple-git)', () => {
       expect(require('simple-git')).toHaveBeenCalledWith(process.cwd());
     });
 
-    test('カスタム値で初期化される', () => {
-      // Assert (beforeEach で初期化済み)
+    test('should initialize with custom values', () => {
+      // Assert (Instance created in beforeEach)
       expect(gitService.repoPath).toBe('/test/repo/path');
       expect(gitService.logger).toBe(mockLogger);
       expect(gitService.eventEmitter).toBe(mockEventEmitter);
+      expect(gitService.errorHandler).toBe(mockErrorHandler);
       expect(require('simple-git')).toHaveBeenCalledWith('/test/repo/path');
     });
   });
 
-  test('eventEmitter がない場合でもエラーなく動作する', async () => {
+  test('should work without error if eventEmitter is not provided', async () => {
     // Arrange
-    const gitServiceWithoutEmitter = new GitService({ logger: mockLogger });
+    const gitServiceWithoutEmitter = new GitService({ logger: mockLogger }); // No eventEmitter
     const mockHash = 'abcdef1234567890';
     mockGit.revparse.mockResolvedValue(mockHash);
 
@@ -96,11 +100,11 @@ describe('GitService (simple-git)', () => {
     await expect(gitServiceWithoutEmitter.getCurrentCommitHash()).resolves.toBe(
       mockHash
     );
-    // emitStandardized が呼ばれないことを確認 (アサーションは不要)
+    // No assertion needed for eventEmitter calls as it's undefined
   });
 
   describe('getCurrentCommitHash', () => {
-    test('現在のコミットハッシュを取得する', async () => {
+    test('should get the current commit hash', async () => {
       // Arrange
       const mockHash = 'abcdef1234567890';
       mockGit.revparse.mockResolvedValue(mockHash);
@@ -125,33 +129,28 @@ describe('GitService (simple-git)', () => {
       );
     });
 
-    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError and call errorHandler if git command fails', async () => {
       // Arrange
       const error = new Error('Git revparse error');
       mockGit.revparse.mockRejectedValue(error);
-      // emitStandardized のエラーテストは別ケースで行うため、ここでは不要
 
       // Act & Assert
-      await expect(gitService.getCurrentCommitHash()).rejects.toThrow(GitError); // 元のエラーがスローされることを確認
+      await expect(gitService.getCurrentCommitHash()).rejects.toThrow(GitError);
       expect(mockGit.revparse).toHaveBeenCalledWith(['HEAD']);
-      // イベント発行は _handleError に移譲されるか、エラー前に発行される
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_hash_before',
         { timestamp: 'any' }
       );
-      // エラーハンドリングの確認 (logger.error は削除済み)
-
-      // errorHandler.handle が呼び出されることを確認
-      expect(gitService.errorHandler.handle).toHaveBeenCalledWith(
-        expect.any(GitError),
-        'GitService',
-        'getCurrentCommitHash',
-        { operation: 'getCurrentCommitHash' }
+      expectStandardizedEventEmitted(
+        // after イベントも発行される
+        mockEventEmitter,
+        'git',
+        'commit_get_hash_after',
+        { success: false, error: error.message, timestamp: 'any' }
       );
-      // errorHandler.handle が呼び出されたことも確認
-      expect(gitService.errorHandler.handle).toHaveBeenCalledWith(
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
         expect.any(GitError),
         'GitService',
         'getCurrentCommitHash',
@@ -161,27 +160,84 @@ describe('GitService (simple-git)', () => {
   });
 
   describe('extractTaskIdsFromCommitMessage', () => {
-    test.each([
-      ['Fix bug #T001 and implement feature #T002', ['T001', 'T002']],
-      ['Fix bug and implement feature', []],
-      ['Message with #T123 and #T456', ['T123', 'T456']],
-      ['Invalid ID #TABC', []],
-      ['No hash T001', []],
-      ['', []],
-      // null や undefined の場合はエラーではなく空配列を返すことを確認
-      [null, []],
-      [undefined, []],
-    ])('メッセージ "%s" からタスクID %p を抽出する', (message, expected) => {
+    // test.each を個別のテストに分割
+    test('should extract single task ID', () => {
+      // Arrange
+      const message = 'Fix bug #T001';
       // Act
       const result = gitService.extractTaskIdsFromCommitMessage(message);
       // Assert
-      expect(result).toEqual(expected);
+      expect(result).toEqual(['T001']);
     });
 
-    test('message.match がエラーをスローする場合、GitErrorをスローし、エラー情報をログに出力する', () => {
+    test('should extract multiple task IDs', () => {
+      // Arrange
+      const message = 'Fix bug #T001 and implement feature #T002';
+      // Act
+      const result = gitService.extractTaskIdsFromCommitMessage(message);
+      // Assert
+      expect(result).toEqual(['T001', 'T002']);
+    });
+
+    test('should return empty array if no task IDs found', () => {
+      // Arrange
+      const message = 'Fix bug and implement feature';
+      // Act
+      const result = gitService.extractTaskIdsFromCommitMessage(message);
+      // Assert
+      expect(result).toEqual([]);
+    });
+
+    test('should ignore invalid task ID format', () => {
+      // Arrange
+      const message = 'Invalid ID #TABC';
+      // Act
+      const result = gitService.extractTaskIdsFromCommitMessage(message);
+      // Assert
+      expect(result).toEqual([]);
+    });
+
+    test('should ignore task ID without hash', () => {
+      // Arrange
+      const message = 'No hash T001';
+      // Act
+      const result = gitService.extractTaskIdsFromCommitMessage(message);
+      // Assert
+      expect(result).toEqual([]);
+    });
+
+    test('should return empty array for empty message', () => {
+      // Arrange
+      const message = '';
+      // Act
+      const result = gitService.extractTaskIdsFromCommitMessage(message);
+      // Assert
+      expect(result).toEqual([]);
+    });
+
+    test('should return empty array for null message', () => {
+      // Arrange
+      const message = null;
+      // Act
+      const result = gitService.extractTaskIdsFromCommitMessage(message);
+      // Assert
+      expect(result).toEqual([]);
+    });
+
+    test('should return empty array for undefined message', () => {
+      // Arrange
+      const message = undefined;
+      // Act
+      const result = gitService.extractTaskIdsFromCommitMessage(message);
+      // Assert
+      expect(result).toEqual([]);
+    });
+
+    test('should throw GitError and call errorHandler if message.match throws', () => {
       // Arrange
       const invalidMessage = {
-        toString: () => {
+        // Simulate an object that causes .match to fail
+        match: () => {
           throw new Error('Invalid message object');
         },
       };
@@ -189,11 +245,17 @@ describe('GitService (simple-git)', () => {
       expect(() =>
         gitService.extractTaskIdsFromCommitMessage(invalidMessage)
       ).toThrow(GitError);
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'extractTaskIdsFromCommitMessage',
+        expect.objectContaining({ message: invalidMessage }) // context を具体的に
+      );
     });
   });
 
   describe('getCommitsBetween', () => {
-    test('コミット間のコミット情報を取得する', async () => {
+    test('should get commit information between two commits', async () => {
       // Arrange
       const mockLog = {
         all: [
@@ -214,145 +276,144 @@ describe('GitService (simple-git)', () => {
         total: 2,
       };
       mockGit.log.mockResolvedValue(mockLog);
-      jest
+      const extractSpy = jest
         .spyOn(gitService, 'extractTaskIdsFromCommitMessage')
         .mockReturnValueOnce(['T001'])
         .mockReturnValueOnce(['T002']);
+      const startCommit = 'start-commit';
+      const endCommit = 'end-commit';
 
       // Act
-      const result = await gitService.getCommitsBetween(
-        'start-commit',
-        'end-commit'
-      );
+      const result = await gitService.getCommitsBetween(startCommit, endCommit);
 
       // Assert
-      expect(result).toEqual([
-        {
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(
+        expect.objectContaining({
           hash: 'abc123',
           message: 'Fix bug #T001',
-          timestamp: '2025-03-20T10:00:00+09:00',
           author: 'User1',
           related_tasks: ['T001'],
-        },
-        {
+        })
+      );
+      expect(result[1]).toEqual(
+        expect.objectContaining({
           hash: 'def456',
           message: 'Implement feature #T002',
-          timestamp: '2025-03-21T11:00:00+09:00',
           author: 'User2',
           related_tasks: ['T002'],
-        },
-      ]);
+        })
+      );
       expect(mockGit.log).toHaveBeenCalledWith({
-        from: 'start-commit',
-        to: 'end-commit',
+        from: startCommit,
+        to: endCommit,
         format: { hash: '%H', message: '%s', date: '%ad', author_name: '%an' },
         '--date': 'iso',
       });
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledTimes(
-        2
-      );
+      expect(extractSpy).toHaveBeenCalledTimes(2);
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_between_before',
-        {
-          startCommit: 'start-commit',
-          endCommit: 'end-commit',
-          timestamp: 'any',
-        }
+        { startCommit, endCommit, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_between_after',
         {
-          startCommit: 'start-commit',
-          endCommit: 'end-commit',
-          commits: expect.any(Array),
+          startCommit,
+          endCommit,
+          commits: result,
           success: true,
           timestamp: 'any',
         }
       );
     });
 
-    test('コミットがない場合、空配列を返す', async () => {
+    test('should return empty array if no commits found', async () => {
       // Arrange
       const mockLog = { all: [], latest: null, total: 0 };
       mockGit.log.mockResolvedValue(mockLog);
+      const startCommit = 'start-commit';
+      const endCommit = 'end-commit';
 
       // Act
-      const result = await gitService.getCommitsBetween(
-        'start-commit',
-        'end-commit'
-      );
+      const result = await gitService.getCommitsBetween(startCommit, endCommit);
 
       // Assert
       expect(result).toEqual([]);
-      expect(mockGit.log).toHaveBeenCalledWith(expect.any(Object));
+      expect(mockGit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ from: startCommit, to: endCommit })
+      );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_between_after',
-        {
-          startCommit: 'start-commit',
-          endCommit: 'end-commit',
-          commits: [],
-          success: true,
-          timestamp: 'any',
-        }
+        { startCommit, endCommit, commits: [], success: true, timestamp: 'any' }
       );
     });
 
-    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError and call errorHandler if git command fails', async () => {
       // Arrange
       const error = new Error('Git log error');
       mockGit.log.mockRejectedValue(error);
+      const startCommit = 'start';
+      const endCommit = 'end';
 
       // Act & Assert
       await expect(
-        gitService.getCommitsBetween('start', 'end')
+        gitService.getCommitsBetween(startCommit, endCommit)
       ).rejects.toThrow(GitError);
       expect(mockGit.log).toHaveBeenCalled();
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_between_before',
-        { startCommit: 'start', endCommit: 'end', timestamp: 'any' }
+        { startCommit, endCommit, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_between_after',
         {
-          startCommit: 'start',
-          endCommit: 'end',
+          startCommit,
+          endCommit,
           success: false,
           error: error.message,
           timestamp: 'any',
         }
+      );
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'getCommitsBetween',
+        expect.objectContaining({ startCommit, endCommit })
       );
     });
   });
 
   describe('getChangedFilesInCommit', () => {
-    test('コミットで変更されたファイルを取得する', async () => {
+    test('should get changed files in a commit', async () => {
       // Arrange
+      const commitHash = 'commit-hash';
       const mockOutput =
         'A\tfile1.txt\nM\tfile2.js\nD\tfile3.md\nR100\told-file.txt\tnew-file.txt';
       mockGit.show.mockResolvedValue(mockOutput);
-
-      // Act
-      const result = await gitService.getChangedFilesInCommit('commit-hash');
-
-      // Assert
-      expect(result).toEqual([
+      const expectedFiles = [
         { status: 'added', path: 'file1.txt' },
         { status: 'modified', path: 'file2.js' },
         { status: 'deleted', path: 'file3.md' },
         { status: 'renamed', path: 'new-file.txt' },
-      ]);
+      ];
+
+      // Act
+      const result = await gitService.getChangedFilesInCommit(commitHash);
+
+      // Assert
+      expect(result).toEqual(expectedFiles);
       expect(mockGit.show).toHaveBeenCalledWith([
-        'commit-hash',
+        commitHash,
         '--name-status',
         '--format=',
       ]);
@@ -360,30 +421,26 @@ describe('GitService (simple-git)', () => {
         mockEventEmitter,
         'git',
         'commit_get_changed_files_before',
-        { commitHash: 'commit-hash', timestamp: 'any' }
+        { commitHash, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_changed_files_after',
-        {
-          commitHash: 'commit-hash',
-          files: expect.any(Array),
-          success: true,
-          timestamp: 'any',
-        }
+        { commitHash, files: expectedFiles, success: true, timestamp: 'any' }
       );
     });
 
-    test('変更がない場合、空配列を返す', async () => {
+    test('should return empty array if no files changed', async () => {
       // Arrange
+      const commitHash = 'commit-hash';
       mockGit.show.mockResolvedValue('');
       // Act
-      const result = await gitService.getChangedFilesInCommit('commit-hash');
+      const result = await gitService.getChangedFilesInCommit(commitHash);
       // Assert
       expect(result).toEqual([]);
       expect(mockGit.show).toHaveBeenCalledWith([
-        'commit-hash',
+        commitHash,
         '--name-status',
         '--format=',
       ]);
@@ -391,59 +448,58 @@ describe('GitService (simple-git)', () => {
         mockEventEmitter,
         'git',
         'commit_get_changed_files_after',
-        {
-          commitHash: 'commit-hash',
-          files: [],
-          success: true,
-          timestamp: 'any',
-        }
+        { commitHash, files: [], success: true, timestamp: 'any' }
       );
     });
 
-    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError and call errorHandler if git command fails', async () => {
       // Arrange
+      const commitHash = 'hash';
       const error = new Error('Git show error');
       mockGit.show.mockRejectedValue(error);
 
       // Act & Assert
-      await expect(gitService.getChangedFilesInCommit('hash')).rejects.toThrow(
-        GitError
-      );
+      await expect(
+        gitService.getChangedFilesInCommit(commitHash)
+      ).rejects.toThrow(GitError);
       expect(mockGit.show).toHaveBeenCalled();
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_changed_files_before',
-        { commitHash: 'hash', timestamp: 'any' }
+        { commitHash, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_changed_files_after',
-        {
-          commitHash: 'hash',
-          success: false,
-          error: error.message,
-          timestamp: 'any',
-        }
+        { commitHash, success: false, error: error.message, timestamp: 'any' }
+      );
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'getChangedFilesInCommit',
+        expect.objectContaining({ commitHash })
       );
     });
 
-    test('コピーされたファイル(C)や未知のステータスも正しく処理する', async () => {
+    test('should handle copied and unknown statuses correctly', async () => {
       // Arrange
-      const mockOutput = 'C100\tsrc/a.txt\tdst/a.txt\nX\tunknown.file'; // 改行を \n に修正
+      const commitHash = 'commit-hash';
+      const mockOutput = 'C100\tsrc/a.txt\tdst/a.txt\nX\tunknown.file';
       mockGit.show.mockResolvedValue(mockOutput);
+      const expectedFiles = [
+        { status: 'copied', path: 'dst/a.txt' },
+        { status: 'X', path: 'unknown.file' },
+      ];
 
       // Act
-      const result = await gitService.getChangedFilesInCommit('commit-hash');
+      const result = await gitService.getChangedFilesInCommit(commitHash);
 
       // Assert
-      expect(result).toEqual([
-        { status: 'copied', path: 'dst/a.txt' }, // コピー先ファイルパスが取得される
-        { status: 'X', path: 'unknown.file' }, // 未知のステータスはそのまま返される
-      ]);
+      expect(result).toEqual(expectedFiles);
       expect(mockGit.show).toHaveBeenCalledWith([
-        'commit-hash',
+        commitHash,
         '--name-status',
         '--format=',
       ]);
@@ -451,8 +507,9 @@ describe('GitService (simple-git)', () => {
   });
 
   describe('getCommitDiffStats', () => {
-    test('コミットの差分統計を取得する', async () => {
+    test('should get commit diff statistics', async () => {
       // Arrange
+      const commitHash = 'commit-hash';
       const mockFiles = [
         { status: 'added', path: 'file1.txt' },
         { status: 'modified', path: 'file2.js' },
@@ -462,21 +519,22 @@ describe('GitService (simple-git)', () => {
         .spyOn(gitService, 'getChangedFilesInCommit')
         .mockResolvedValue(mockFiles);
       mockGit.show.mockResolvedValue(mockNumstatOutput);
-
-      // Act
-      const result = await gitService.getCommitDiffStats('commit-hash');
-
-      // Assert
-      expect(result).toEqual({
+      const expectedStats = {
         files: mockFiles,
         lines_added: 30,
         lines_deleted: 15,
-      });
+      };
+
+      // Act
+      const result = await gitService.getCommitDiffStats(commitHash);
+
+      // Assert
+      expect(result).toEqual(expectedStats);
       expect(gitService.getChangedFilesInCommit).toHaveBeenCalledWith(
-        'commit-hash'
+        commitHash
       );
       expect(mockGit.show).toHaveBeenCalledWith([
-        'commit-hash',
+        commitHash,
         '--numstat',
         '--format=',
       ]);
@@ -484,23 +542,19 @@ describe('GitService (simple-git)', () => {
         mockEventEmitter,
         'git',
         'commit_get_diff_stats_before',
-        { commitHash: 'commit-hash', timestamp: 'any' }
+        { commitHash, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_diff_stats_after',
-        {
-          commitHash: 'commit-hash',
-          stats: expect.any(Object),
-          success: true,
-          timestamp: 'any',
-        }
+        { commitHash, stats: expectedStats, success: true, timestamp: 'any' }
       );
     });
 
-    test('バイナリファイルを含む場合、正しく処理する', async () => {
+    test('should handle binary files correctly', async () => {
       // Arrange
+      const commitHash = 'commit-hash';
       const mockFiles = [
         { status: 'added', path: 'file1.txt' },
         { status: 'added', path: 'image.png' },
@@ -510,36 +564,40 @@ describe('GitService (simple-git)', () => {
         .spyOn(gitService, 'getChangedFilesInCommit')
         .mockResolvedValue(mockFiles);
       mockGit.show.mockResolvedValue(mockNumstatOutput);
-
-      // Act
-      const result = await gitService.getCommitDiffStats('commit-hash');
-
-      // Assert
-      expect(result).toEqual({
+      const expectedStats = {
         files: mockFiles,
         lines_added: 10,
         lines_deleted: 5,
-      });
+      };
+
+      // Act
+      const result = await gitService.getCommitDiffStats(commitHash);
+
+      // Assert
+      expect(result).toEqual(expectedStats);
       expect(mockGit.show).toHaveBeenCalledWith([
-        'commit-hash',
+        commitHash,
         '--numstat',
         '--format=',
       ]);
     });
 
-    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError and call errorHandler if git command fails', async () => {
       // Arrange
+      const commitHash = 'hash';
       const error = new Error('Git show numstat error');
       jest.spyOn(gitService, 'getChangedFilesInCommit').mockResolvedValue([]);
       mockGit.show.mockRejectedValue(error);
 
       // Act & Assert
-      await expect(gitService.getCommitDiffStats('hash')).rejects.toThrow(
+      await expect(gitService.getCommitDiffStats(commitHash)).rejects.toThrow(
         GitError
       );
-      expect(gitService.getChangedFilesInCommit).toHaveBeenCalledWith('hash');
+      expect(gitService.getChangedFilesInCommit).toHaveBeenCalledWith(
+        commitHash
+      );
       expect(mockGit.show).toHaveBeenCalledWith([
-        'hash',
+        commitHash,
         '--numstat',
         '--format=',
       ]);
@@ -547,36 +605,38 @@ describe('GitService (simple-git)', () => {
         mockEventEmitter,
         'git',
         'commit_get_diff_stats_before',
-        { commitHash: 'hash', timestamp: 'any' }
+        { commitHash, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_diff_stats_after',
-        {
-          commitHash: 'hash',
-          success: false,
-          error: error.message,
-          timestamp: 'any',
-        }
+        { commitHash, success: false, error: error.message, timestamp: 'any' }
+      );
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'getCommitDiffStats',
+        expect.objectContaining({ commitHash })
       );
     });
   });
 
   describe('getBranches', () => {
-    test('ブランチ一覧を取得する', async () => {
+    test('should get list of branches', async () => {
       // Arrange
       const mockBranchSummary = {
         all: ['main', 'develop', 'feature/test'],
         current: 'main',
       };
       mockGit.branchLocal.mockResolvedValue(mockBranchSummary);
+      const expectedBranches = ['main', 'develop', 'feature/test'];
 
       // Act
       const result = await gitService.getBranches();
 
       // Assert
-      expect(result).toEqual(['main', 'develop', 'feature/test']);
+      expect(result).toEqual(expectedBranches);
       expect(mockGit.branchLocal).toHaveBeenCalled();
       expectStandardizedEventEmitted(
         mockEventEmitter,
@@ -588,11 +648,11 @@ describe('GitService (simple-git)', () => {
         mockEventEmitter,
         'git',
         'branch_get_all_after',
-        { branches: expect.any(Array), success: true, timestamp: 'any' }
+        { branches: expectedBranches, success: true, timestamp: 'any' }
       );
     });
 
-    test('ブランチがない場合、空配列を返す', async () => {
+    test('should return empty array if no branches found', async () => {
       // Arrange
       const mockBranchSummary = { all: [], current: '' };
       mockGit.branchLocal.mockResolvedValue(mockBranchSummary);
@@ -609,7 +669,7 @@ describe('GitService (simple-git)', () => {
       );
     });
 
-    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError and call errorHandler if git command fails', async () => {
       // Arrange
       const error = new Error('Git branch error');
       mockGit.branchLocal.mockRejectedValue(error);
@@ -629,11 +689,17 @@ describe('GitService (simple-git)', () => {
         'branch_get_all_after',
         { success: false, error: error.message, timestamp: 'any' }
       );
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'getBranches',
+        expect.any(Object)
+      );
     });
   });
 
   describe('getCurrentBranch', () => {
-    test('現在のブランチを取得する', async () => {
+    test('should get the current branch', async () => {
       // Arrange
       const mockBranchSummary = { all: ['main', 'develop'], current: 'main' };
       mockGit.branchLocal.mockResolvedValue(mockBranchSummary);
@@ -658,7 +724,7 @@ describe('GitService (simple-git)', () => {
       );
     });
 
-    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError and call errorHandler if git command fails', async () => {
       // Arrange
       const error = new Error('Git branch current error');
       mockGit.branchLocal.mockRejectedValue(error);
@@ -678,11 +744,17 @@ describe('GitService (simple-git)', () => {
         'branch_get_current_after',
         { success: false, error: error.message, timestamp: 'any' }
       );
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'getCurrentBranch',
+        expect.any(Object)
+      );
     });
   });
 
   describe('getCommitHistory', () => {
-    test('コミット履歴を取得する', async () => {
+    test('should get commit history', async () => {
       // Arrange
       const mockLog = {
         all: [
@@ -703,59 +775,54 @@ describe('GitService (simple-git)', () => {
         total: 2,
       };
       mockGit.log.mockResolvedValue(mockLog);
-      jest
+      const extractSpy = jest
         .spyOn(gitService, 'extractTaskIdsFromCommitMessage')
         .mockReturnValueOnce(['T001'])
         .mockReturnValueOnce(['T002']);
+      const limit = 2;
 
       // Act
-      const result = await gitService.getCommitHistory(2);
+      const result = await gitService.getCommitHistory(limit);
 
       // Assert
-      expect(result).toEqual([
-        {
+      expect(result).toHaveLength(limit);
+      expect(result[0]).toEqual(
+        expect.objectContaining({
           hash: 'abc123',
           message: 'Fix bug #T001',
-          timestamp: '2025-03-20T10:00:00+09:00',
           author: 'User1',
           related_tasks: ['T001'],
-        },
-        {
+        })
+      );
+      expect(result[1]).toEqual(
+        expect.objectContaining({
           hash: 'def456',
           message: 'Implement feature #T002',
-          timestamp: '2025-03-21T11:00:00+09:00',
           author: 'User2',
           related_tasks: ['T002'],
-        },
-      ]);
+        })
+      );
       expect(mockGit.log).toHaveBeenCalledWith({
-        n: 2,
-        format: { hash: '%H', message: '%s', date: '%ad', author_name: '%an' },
+        n: limit,
+        format: expect.any(Object),
         '--date': 'iso',
       });
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledTimes(
-        2
-      );
+      expect(extractSpy).toHaveBeenCalledTimes(limit);
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_history_before',
-        { limit: 2, timestamp: 'any' }
+        { limit, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_history_after',
-        {
-          limit: 2,
-          commits: expect.any(Array),
-          success: true,
-          timestamp: 'any',
-        }
+        { limit, commits: result, success: true, timestamp: 'any' }
       );
     });
 
-    test('デフォルトのlimitを使用する', async () => {
+    test('should use default limit if not provided', async () => {
       // Arrange
       const mockLog = { all: [], latest: null, total: 0 };
       mockGit.log.mockResolvedValue(mockLog);
@@ -767,31 +834,53 @@ describe('GitService (simple-git)', () => {
       );
     });
 
-    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should use default limit if invalid limit provided', async () => {
+      // Arrange
+      const mockLog = { all: [], latest: null, total: 0 };
+      mockGit.log.mockResolvedValue(mockLog);
+      // Act
+      await gitService.getCommitHistory(-1); // Invalid limit
+      // Assert
+      expect(mockGit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ n: 10 })
+      );
+    });
+
+    test('should throw GitError and call errorHandler if git command fails', async () => {
       // Arrange
       const error = new Error('Git log history error');
       mockGit.log.mockRejectedValue(error);
+      const limit = 5;
 
       // Act & Assert
-      await expect(gitService.getCommitHistory(5)).rejects.toThrow(GitError);
+      await expect(gitService.getCommitHistory(limit)).rejects.toThrow(
+        GitError
+      );
       expect(mockGit.log).toHaveBeenCalled();
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_history_before',
-        { limit: 5, timestamp: 'any' }
+        { limit, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_history_after',
-        { limit: 5, success: false, error: error.message, timestamp: 'any' }
+        { limit, success: false, error: error.message, timestamp: 'any' }
+      );
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'getCommitHistory',
+        expect.objectContaining({ limit })
       );
     });
   });
 
   describe('getFileHistory', () => {
-    test('ファイルの変更履歴を取得する', async () => {
+    const filePath = 'path/to/file.js';
+    test('should get file history', async () => {
       // Arrange
       const mockLog = {
         all: [
@@ -806,194 +895,181 @@ describe('GitService (simple-git)', () => {
         total: 1,
       };
       mockGit.log.mockResolvedValue(mockLog);
-      jest
+      const extractSpy = jest
         .spyOn(gitService, 'extractTaskIdsFromCommitMessage')
         .mockReturnValue(['T001']);
+      const limit = 1;
 
       // Act
-      const result = await gitService.getFileHistory('path/to/file.js', 1);
+      const result = await gitService.getFileHistory(filePath, limit);
 
       // Assert
-      expect(result).toEqual([
-        {
+      expect(result).toHaveLength(limit);
+      expect(result[0]).toEqual(
+        expect.objectContaining({
           hash: 'abc123',
           message: 'Fix bug #T001',
-          timestamp: '2025-03-20T10:00:00+09:00',
           author: 'User1',
           related_tasks: ['T001'],
-        },
-      ]);
+        })
+      );
       expect(mockGit.log).toHaveBeenCalledWith({
-        file: 'path/to/file.js',
-        n: 1,
-        format: { hash: '%H', message: '%s', date: '%ad', author_name: '%an' },
+        file: filePath,
+        n: limit,
+        format: expect.any(Object),
         '--date': 'iso',
       });
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledTimes(
-        1
-      );
+      expect(extractSpy).toHaveBeenCalledTimes(limit);
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'file_get_history_before',
-        { filePath: 'path/to/file.js', limit: 1, timestamp: 'any' }
+        { filePath, limit, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'file_get_history_after',
-        {
-          filePath: 'path/to/file.js',
-          limit: 1,
-          commits: expect.any(Array),
-          success: true,
-          timestamp: 'any',
-        }
+        { filePath, limit, commits: result, success: true, timestamp: 'any' }
       );
     });
 
-    test('履歴がない場合、空配列を返す', async () => {
+    test('should return empty array if no history found', async () => {
       // Arrange
       const mockLog = { all: [], latest: null, total: 0 };
       mockGit.log.mockResolvedValue(mockLog);
       // Act
-      const result = await gitService.getFileHistory('path/to/file.js');
+      const result = await gitService.getFileHistory(filePath);
       // Assert
       expect(result).toEqual([]);
       expect(mockGit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ file: 'path/to/file.js' })
-      );
+        expect.objectContaining({ file: filePath, n: 10 })
+      ); // Default limit
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'file_get_history_after',
-        {
-          filePath: 'path/to/file.js',
-          limit: 10,
-          commits: [],
-          success: true,
-          timestamp: 'any',
-        }
+        { filePath, limit: 10, commits: [], success: true, timestamp: 'any' }
       );
     });
 
-    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError and call errorHandler if git command fails', async () => {
       // Arrange
       const error = new Error('Git log file error');
       mockGit.log.mockRejectedValue(error);
+      const limit = 10; // Default limit
 
       // Act & Assert
-      await expect(
-        gitService.getFileHistory('path/to/file.js')
-      ).rejects.toThrow(GitError);
+      await expect(gitService.getFileHistory(filePath)).rejects.toThrow(
+        GitError
+      );
       expect(mockGit.log).toHaveBeenCalled();
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'file_get_history_before',
-        { filePath: 'path/to/file.js', limit: 10, timestamp: 'any' }
+        { filePath, limit, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'file_get_history_after',
         {
-          filePath: 'path/to/file.js',
-          limit: 10,
+          filePath,
+          limit,
           success: false,
           error: error.message,
           timestamp: 'any',
         }
       );
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'getFileHistory',
+        expect.objectContaining({ filePath, limit })
+      );
     });
   });
 
   describe('getCommitDetails', () => {
-    test('コミットの詳細情報を取得する', async () => {
+    test('should get commit details', async () => {
       // Arrange
+      const commitHash = 'abc123';
       const mockLog = {
         latest: {
-          hash: 'abc123',
-          message: 'Commit message with #T001\n',
+          hash: commitHash,
+          message: 'Commit message #T001\n',
           author_name: 'User1',
-          author_email: 'user1@example.com',
-          author_date: '2025-03-20T10:00:00+09:00',
-          committer_name: 'User1',
-          committer_email: 'user1@example.com',
-          committer_date: '2025-03-20T10:00:00+09:00',
-          parents: 'parent1 parent2',
+          author_email: 'u1@e.com',
+          author_date: 'd1',
+          committer_name: 'C1',
+          committer_email: 'c1@e.com',
+          committer_date: 'd2',
+          parents: 'p1 p2',
         },
         all: [],
         total: 1,
       };
       const mockStats = {
-        files: [{ status: 'added', path: 'file1.txt' }],
+        files: [{ status: 'A', path: 'f.txt' }],
         lines_added: 10,
         lines_deleted: 5,
       };
       mockGit.log.mockResolvedValue(mockLog);
       jest.spyOn(gitService, 'getCommitDiffStats').mockResolvedValue(mockStats);
-      jest
+      const extractSpy = jest
         .spyOn(gitService, 'extractTaskIdsFromCommitMessage')
         .mockReturnValue(['T001']);
-
-      // Act
-      const result = await gitService.getCommitDetails('abc123');
-
-      // Assert
-      expect(result).toEqual({
-        hash: 'abc123',
-        message: 'Commit message with #T001',
-        author: {
-          name: 'User1',
-          email: 'user1@example.com',
-          date: '2025-03-20T10:00:00+09:00',
-        },
-        committer: {
-          name: 'User1',
-          email: 'user1@example.com',
-          date: '2025-03-20T10:00:00+09:00',
-        },
-        parents: ['parent1', 'parent2'],
+      const expectedDetails = {
+        hash: commitHash,
+        message: 'Commit message #T001',
+        author: { name: 'User1', email: 'u1@e.com', date: 'd1' },
+        committer: { name: 'C1', email: 'c1@e.com', date: 'd2' },
+        parents: ['p1', 'p2'],
         files: mockStats.files,
         stats: { lines_added: 10, lines_deleted: 5, files_changed: 1 },
         related_tasks: ['T001'],
-      });
+      };
+
+      // Act
+      const result = await gitService.getCommitDetails(commitHash);
+
+      // Assert
+      expect(result).toEqual(expectedDetails);
       expect(mockGit.log).toHaveBeenCalledWith({
         format: expect.any(Object),
         n: 1,
-        abc123: null,
+        [commitHash]: null,
       });
-      expect(gitService.getCommitDiffStats).toHaveBeenCalledWith('abc123');
-      expect(gitService.extractTaskIdsFromCommitMessage).toHaveBeenCalledWith(
-        'Commit message with #T001\n'
-      );
+      expect(gitService.getCommitDiffStats).toHaveBeenCalledWith(commitHash);
+      expect(extractSpy).toHaveBeenCalledWith('Commit message #T001\n');
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_details_before',
-        { commitHash: 'abc123', timestamp: 'any' }
+        { commitHash, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_details_after',
         {
-          commitHash: 'abc123',
-          details: expect.any(Object),
+          commitHash,
+          details: expectedDetails,
           success: true,
           timestamp: 'any',
         }
       );
     });
 
-    test('コミットが見つからない場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError if commit not found', async () => {
       // Arrange
+      const commitHash = 'unknown-hash';
       const mockLog = { latest: null, all: [], total: 0 };
       mockGit.log.mockResolvedValue(mockLog);
 
       // Act & Assert
-      await expect(gitService.getCommitDetails('unknown-hash')).rejects.toThrow(
+      await expect(gitService.getCommitDetails(commitHash)).rejects.toThrow(
         GitError
       );
       expect(mockGit.log).toHaveBeenCalled();
@@ -1001,29 +1077,36 @@ describe('GitService (simple-git)', () => {
         mockEventEmitter,
         'git',
         'commit_get_details_before',
-        { commitHash: 'unknown-hash', timestamp: 'any' }
+        { commitHash, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_details_after',
         {
-          commitHash: 'unknown-hash',
+          commitHash,
           details: null,
           success: false,
           error: 'Commit info not found',
           timestamp: 'any',
         }
       );
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'getCommitDetails',
+        expect.objectContaining({ commitHash })
+      );
     });
 
-    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError and call errorHandler if git log fails', async () => {
       // Arrange
+      const commitHash = 'hash';
       const error = new Error('Git log details error');
       mockGit.log.mockRejectedValue(error);
 
       // Act & Assert
-      await expect(gitService.getCommitDetails('hash')).rejects.toThrow(
+      await expect(gitService.getCommitDetails(commitHash)).rejects.toThrow(
         GitError
       );
       expect(mockGit.log).toHaveBeenCalled();
@@ -1031,159 +1114,252 @@ describe('GitService (simple-git)', () => {
         mockEventEmitter,
         'git',
         'commit_get_details_before',
-        { commitHash: 'hash', timestamp: 'any' }
+        { commitHash, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_get_details_after',
-        {
-          commitHash: 'hash',
-          success: false,
-          error: error.message,
-          timestamp: 'any',
-        }
+        { commitHash, success: false, error: error.message, timestamp: 'any' }
+      );
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'getCommitDetails',
+        expect.objectContaining({ commitHash })
+      );
+    });
+
+    test('should throw GitError and call errorHandler if getCommitDiffStats fails', async () => {
+      // Arrange
+      const commitHash = 'abc123';
+      const mockLog = {
+        latest: {
+          hash: commitHash,
+          message: 'Msg',
+          author_name: 'A',
+          author_email: 'a@e',
+          author_date: 'd',
+          committer_name: 'C',
+          committer_email: 'c@e',
+          committer_date: 'd',
+          parents: '',
+        },
+        all: [],
+        total: 1,
+      };
+      mockGit.log.mockResolvedValue(mockLog);
+      const error = new Error('Diff stats error');
+      jest.spyOn(gitService, 'getCommitDiffStats').mockRejectedValue(error); // Simulate failure
+
+      // Act & Assert
+      await expect(gitService.getCommitDetails(commitHash)).rejects.toThrow(
+        GitError
+      );
+      expect(gitService.getCommitDiffStats).toHaveBeenCalledWith(commitHash);
+      expectStandardizedEventEmitted(
+        mockEventEmitter,
+        'git',
+        'commit_get_details_before',
+        { commitHash, timestamp: 'any' }
+      );
+      // After event might not be emitted if getCommitDiffStats fails early, or might have diff stats error
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'getCommitDetails',
+        expect.objectContaining({ commitHash })
       );
     });
   });
 
   describe('stageFiles', () => {
-    test('ファイルをステージする', async () => {
+    test('should stage files', async () => {
       // Arrange
+      const files = ['file1.txt', 'file2.js'];
       mockGit.add.mockResolvedValue(undefined);
       // Act
-      const result = await gitService.stageFiles(['file1.txt', 'file2.js']);
+      const result = await gitService.stageFiles(files);
       // Assert
       expect(result).toBe(true);
-      expect(mockGit.add).toHaveBeenCalledWith(['file1.txt', 'file2.js']);
+      expect(mockGit.add).toHaveBeenCalledWith(files);
       expectStandardizedEventEmitted(mockEventEmitter, 'git', 'stage_before', {
-        files: ['file1.txt', 'file2.js'],
+        files,
         timestamp: 'any',
       });
       expectStandardizedEventEmitted(mockEventEmitter, 'git', 'stage_after', {
-        files: ['file1.txt', 'file2.js'],
+        files,
         success: true,
         timestamp: 'any',
       });
     });
 
-    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError and call errorHandler if git command fails', async () => {
       // Arrange
+      const files = 'file.txt';
       const error = new Error('Git add error');
       mockGit.add.mockRejectedValue(error);
 
       // Act & Assert
-      await expect(gitService.stageFiles('file.txt')).rejects.toThrow(GitError);
-      expect(mockGit.add).toHaveBeenCalledWith('file.txt');
+      await expect(gitService.stageFiles(files)).rejects.toThrow(GitError);
+      expect(mockGit.add).toHaveBeenCalledWith(files);
       expectStandardizedEventEmitted(mockEventEmitter, 'git', 'stage_before', {
-        files: 'file.txt',
+        files,
         timestamp: 'any',
       });
       expectStandardizedEventEmitted(mockEventEmitter, 'git', 'stage_after', {
-        files: 'file.txt',
+        files,
         success: false,
         error: error.message,
         timestamp: 'any',
       });
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'stageFiles',
+        expect.objectContaining({ files })
+      );
     });
   });
 
   describe('createCommit', () => {
-    test('コミットを作成する', async () => {
+    test('should create a commit', async () => {
       // Arrange
+      const message = 'Test commit message';
       const mockCommitSummary = { commit: 'new-commit-hash' };
       mockGit.commit.mockResolvedValue(mockCommitSummary);
 
       // Act
-      const result = await gitService.createCommit('Test commit message');
+      const result = await gitService.createCommit(message);
 
       // Assert
       expect(result).toBe('new-commit-hash');
-      expect(mockGit.commit).toHaveBeenCalledWith('Test commit message');
+      expect(mockGit.commit).toHaveBeenCalledWith(message);
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_create_before',
-        { message: 'Test commit message', timestamp: 'any' }
+        { message, timestamp: 'any' }
       );
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_create_after',
-        {
-          message: 'Test commit message',
-          hash: 'new-commit-hash',
-          success: true,
-          timestamp: 'any',
-        }
+        { message, hash: 'new-commit-hash', success: true, timestamp: 'any' }
       );
     });
 
-    test('コミットメッセージが空の場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError if commit message is empty', async () => {
+      // Arrange
+      const message = '';
       // Act & Assert
-      await expect(gitService.createCommit('')).rejects.toThrow(GitError);
+      await expect(gitService.createCommit(message)).rejects.toThrow(GitError);
       expect(mockGit.commit).not.toHaveBeenCalled();
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_create_after',
         {
-          message: '',
+          message,
           success: false,
           error: 'コミットメッセージが空です',
           timestamp: 'any',
         }
       );
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'createCommit',
+        expect.objectContaining({ message })
+      );
     });
 
-    test('エラーが発生した場合、GitErrorをスローし、エラー情報をログに出力する', async () => {
+    test('should throw GitError if commit message is whitespace only', async () => {
       // Arrange
+      const message = '   ';
+      // Act & Assert
+      await expect(gitService.createCommit(message)).rejects.toThrow(GitError);
+      expect(mockGit.commit).not.toHaveBeenCalled();
+      expectStandardizedEventEmitted(
+        mockEventEmitter,
+        'git',
+        'commit_create_after',
+        {
+          message,
+          success: false,
+          error: 'コミットメッセージが空です',
+          timestamp: 'any',
+        }
+      );
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'createCommit',
+        expect.objectContaining({ message })
+      );
+    });
+
+    test('should throw GitError and call errorHandler if git command fails', async () => {
+      // Arrange
+      const message = 'message';
       const error = new Error('Git commit error');
       mockGit.commit.mockRejectedValue(error);
 
       // Act & Assert
-      await expect(gitService.createCommit('message')).rejects.toThrow(
-        GitError
-      );
-      expect(mockGit.commit).toHaveBeenCalledWith('message');
+      await expect(gitService.createCommit(message)).rejects.toThrow(GitError);
+      expect(mockGit.commit).toHaveBeenCalledWith(message);
       expectStandardizedEventEmitted(
         mockEventEmitter,
         'git',
         'commit_create_before',
-        { message: 'message', timestamp: 'any' }
+        { message, timestamp: 'any' }
       );
-      // エラー時の after イベントは _handleError 内で発行される
+      // エラー時の after イベントは _handleError 内で発行される想定だが、errorHandler がエラーを再スローするため、ここでは検証しない
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.any(GitError),
+        'GitService',
+        'createCommit',
+        expect.objectContaining({ message })
+      );
     });
   });
 
   describe('_emitEvent (Error Handling)', () => {
-    test('イベント発行中にエラーが発生した場合、警告ログを出力する', async () => {
+    // 内部メソッドのエラーハンドリングテスト
+    test('should log warning if event emission fails (e.g., ID generator error)', async () => {
       // Arrange
       const emitError = new Error('ID generation failed');
       // IDジェネレーターがエラーをスローするようにモック
-      // 注意: beforeEach で設定したモックを上書きするため、テストケース内で再定義
-      const mockErrorHandler = { handle: jest.fn((err) => err) };
-      gitService = new GitService({
+      const faultyGitService = new GitService({
         repoPath: '/test/repo/path',
         logger: mockLogger,
         eventEmitter: mockEventEmitter,
         errorHandler: mockErrorHandler,
+        traceIdGenerator: jest.fn().mockImplementation(() => {
+          throw emitError;
+        }), // エラーをスロー
+        requestIdGenerator: jest.fn().mockReturnValue('req-id'),
       });
-      gitService._traceIdGenerator = jest.fn().mockImplementation(() => {
-        throw emitError;
-      });
-      mockGit.revparse.mockResolvedValue('some-hash'); // getCurrentCommitHash が正常に完了するように
+      mockGit.revparse.mockResolvedValue('some-hash'); // メイン処理は成功させる
 
       // Act
-      await gitService.getCurrentCommitHash(); // _emitEvent を呼び出すメソッドを実行
+      await faultyGitService.getCurrentCommitHash(); // _emitEvent を呼び出すメソッドを実行
 
       // Assert
+      // _emitEvent 内でエラーがキャッチされ、warn ログが出力されることを確認
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        `イベント発行中にエラーが発生しました: git:commit_get_hash_before`,
+        `イベント発行中にエラーが発生しました: git:commit_get_hash_before`, // before イベントでエラー発生
         emitError
       );
-      // エラーは _emitEvent 内でキャッチされるため、getCurrentCommitHash は正常に完了するはず
+      // メインの処理 (revparse) は成功し、after イベントの発行も試みられるはず
       expect(mockGit.revparse).toHaveBeenCalled();
+      // after イベントの発行も失敗するはず (同じ ID ジェネレーターエラーのため)
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        `イベント発行中にエラーが発生しました: git:commit_get_hash_after`,
+        emitError
+      );
+      // エラーハンドラは呼ばれない（メイン処理は成功しているため）
+      expect(mockErrorHandler.handle).not.toHaveBeenCalled();
     });
   });
 });

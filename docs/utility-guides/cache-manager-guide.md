@@ -11,11 +11,14 @@
     *   **`eventEmitter` (Object): 必須。** キャッシュイベントを発行するために使用する EventEmitter インスタンス。
     *   **`ttlMs` (number):** オプション。キャッシュエントリのデフォルト有効期間（ミリ秒）。デフォルトは `300000` (5分)。`set` メソッドで個別に指定することも可能です。
     *   **`maxSize` (number):** オプション。キャッシュが保持できる最大エントリ数。デフォルトは `1000`。上限に達すると、最も古いエントリが自動的に削除されます。
+    *   **`traceIdGenerator` (Function):** オプション。トレースIDを生成する関数。デフォルトは内部のジェネレーター。★★★ 追加 ★★★
+    *   **`requestIdGenerator` (Function):** オプション。リクエストIDを生成する関数。デフォルトは内部のジェネレーター。★★★ 追加 ★★★
 
 *   **例:**
     ```javascript
     const Logger = require('./logger'); // 仮
     const EventEmitter = require('./event-emitter'); // 仮
+    const { generateTraceId, generateRequestId } = require('./id-generators'); // 仮
 
     const logger = new Logger();
     const eventEmitter = new EventEmitter({ logger });
@@ -24,7 +27,9 @@
       logger: logger,
       eventEmitter: eventEmitter,
       ttlMs: 60000, // 1分
-      maxSize: 500
+      maxSize: 500,
+      traceIdGenerator: generateTraceId, // 注入例
+      requestIdGenerator: generateRequestId // 注入例
     });
     ```
 *   **初期化イベント:** コンストラクタ呼び出し時に `cache:system_initialized` イベントが発行されます。
@@ -90,7 +95,7 @@
 
 ## 4. 発行されるイベント (EventEmitter が必須)
 
-キャッシュのライフサイクルや操作に応じて、`cache:` プレフィックスを持つ以下のイベントが発行されます。
+キャッシュのライフサイクルや操作に応じて、`cache:` プレフィックスを持つ以下のイベントが発行されます。イベントデータには、関連するキー、TTL、削除数などの情報に加え、**自動的に `timestamp`, `traceId`, `requestId` が含まれます。** ★★★ 修正 ★★★
 
 *   `cache:system_initialized`: CacheManager インスタンス生成時。
 *   `cache:item_accessed`: `get` でキャッシュヒットした時。
@@ -101,11 +106,10 @@
 *   `cache:items_invalidated`: `invalidate` で1つ以上のデータが削除された時。
 *   `cache:cleared`: `clear` で1つ以上のデータが削除された時。
 
-イベントデータには、関連するキー、TTL、削除数などの情報が含まれます。
-
 ## 5. 注意点とベストプラクティス
 
 *   **必須依存関係:** `CacheManager` は `logger` と `eventEmitter` を**必須**とします。コンストラクタで必ず渡してください。
+*   **IDジェネレーター:** `traceIdGenerator` と `requestIdGenerator` はオプションですが、アプリケーション全体で一貫したトレースを行うために、外部から共通のジェネレーターを注入することを推奨します。
 *   **キャッシュキーの設計:** 一意で、キャッシュされるデータを適切に識別できるキーを設計してください。プレフィックス（例: `user:`, `product:`）を使用すると、`invalidate` でのパターンマッチングが容易になります。
 *   **TTLの選択:** キャッシュするデータの性質や更新頻度に応じて、適切な TTL を設定してください。短すぎるとキャッシュ効果が薄れ、長すぎると古いデータが表示される可能性があります。`set` で個別に TTL を指定することも可能です。
 *   **`maxSize` の設定:** アプリケーションのメモリ使用量とキャッシュヒット率のバランスを考慮して、適切な `maxSize` を設定してください。小さすぎると頻繁に Eviction が発生し、キャッシュ効果が低下します。

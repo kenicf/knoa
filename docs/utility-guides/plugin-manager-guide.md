@@ -16,13 +16,16 @@
     ```javascript
     const Logger = require('./logger'); // 仮
     const EventEmitter = require('./event-emitter'); // 仮
+    const { generateTraceId, generateRequestId } = require('./id-generators'); // 仮
 
     const logger = new Logger();
     const eventEmitter = new EventEmitter({ logger });
 
     const pluginManager = new PluginManager({
       logger: logger,
-      eventEmitter: eventEmitter
+      eventEmitter: eventEmitter,
+      traceIdGenerator: generateTraceId, // 注入例
+      requestIdGenerator: generateRequestId // 注入例
     });
     ```
 
@@ -99,7 +102,7 @@
 
 ## 4. 発行されるイベント (EventEmitter が指定されている場合)
 
-プラグインのライフサイクルやメソッド呼び出しに応じて、`plugin:` プレフィックスを持つ以下のイベントが発行されます。
+プラグインのライフサイクルやメソッド呼び出しに応じて、`plugin:` プレフィックスを持つ以下のイベントが発行されます。**これらのイベントデータには自動的に `timestamp`, `traceId`, `requestId` が含まれます。** ★★★ 修正 ★★★
 
 *   `plugin:registered`: プラグイン登録成功時。
 *   `plugin:validation_failed`: プラグイン登録時の検証失敗時。
@@ -116,6 +119,7 @@
 ## 5. 注意点とベストプラクティス
 
 *   **必須依存関係:** `PluginManager` は `logger` を**必須**とします。
+*   **IDジェネレーター:** `traceIdGenerator` と `requestIdGenerator` はオプションですが、アプリケーション全体で一貫したトレースを行うために、外部から共通のジェネレーターを注入することを推奨します。★★★ 追加 ★★★
 *   **プラグインインターフェース:** 特定の `pluginType` に対して期待されるメソッドシグネチャ（必須メソッド、引数、戻り値）を定義し、ドキュメント化することを推奨します。`_validatePlugin` メソッドは基本的な検証を行いますが、より厳密なインターフェースチェックが必要な場合は、登録前に追加の検証を行うか、TypeScript などの型システムを利用することを検討してください。
 *   **非同期メソッド:** `invokePlugin` は常に Promise を返します。プラグインメソッドが同期的であっても非同期的であっても、呼び出し側は `await` または `.then()` で処理する必要があります。
 *   **エラーハンドリング:** `invokePlugin` で発生したエラーは、呼び出し元にそのままスローされます。呼び出し側で適切に `try...catch` を使用してエラーを処理してください。`initialize` や `cleanup` でのエラーは PluginManager 内部でログに出力され、イベントが発行されますが、呼び出し元には直接スローされません。

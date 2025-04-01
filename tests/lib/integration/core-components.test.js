@@ -7,7 +7,7 @@ jest.mock('fs', () => ({
   existsSync: jest.fn(),
   mkdirSync: jest.fn(),
   readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
+  writeFileSync: jest.fn(), // 単純なモックに戻す
   unlinkSync: jest.fn(),
   rmdirSync: jest.fn(),
   rmSync: jest.fn(),
@@ -22,10 +22,15 @@ jest.mock('child_process', () => ({
   execSync: jest.fn(),
 }));
 
+// simple-git をモック
+jest.mock('simple-git');
+const simpleGit = require('simple-git'); // モックされた simpleGit を取得
 const fs = require('fs');
 const { execSync } = require('child_process');
 // const path = require('path'); // 未使用のためコメントアウト
 
+const os = require('os');
+const path = require('path');
 // テスト対象のコンポーネント
 const {
   ApplicationError,
@@ -45,11 +50,60 @@ describe('コア基盤コンポーネントの統合', () => {
   let git;
   let mockLogger;
 
+  let tempRepoPath;
+
   beforeEach(() => {
     // モックをリセット
-    jest.clearAllMocks();
+    // simple-git のモック設定
+    const mockGitInstance = {
+      revparse: jest.fn().mockResolvedValue('mock-hash'),
+      log: jest.fn().mockResolvedValue({ all: [], latest: null }),
+      show: jest.fn().mockResolvedValue(''),
+      branchLocal: jest.fn().mockResolvedValue({ all: [], current: 'main' }),
+      add: jest.fn().mockResolvedValue(undefined),
+      commit: jest.fn().mockResolvedValue({ commit: 'mock-commit-hash' }),
+      // 必要に応じて他のメソッドもモック
+    };
+    simpleGit.mockImplementation(() => mockGitInstance);
 
-    // モックの基本動作を設定
+    jest.clearAllMocks();
+    // 一時リポジトリパスを生成
+    tempRepoPath = path.join(os.tmpdir(), `knoa-test-repo-${Date.now()}`);
+
+    // 実際の fs と child_process を一時的に使用
+    const realFs = jest.requireActual('fs');
+    // 一時リポジトリ関連の処理は不要になるためコメントアウトまたは削除
+    /*
+    tempRepoPath = path.join(os.tmpdir(), `knoa-test-repo-${Date.now()}`);
+
+    const realFs = jest.requireActual('fs');
+    const realChildProcess = jest.requireActual('child_process');
+
+    try {
+      console.log(`Creating test repo at: ${tempRepoPath}`);
+      realFs.mkdirSync(tempRepoPath, { recursive: true });
+      realChildProcess.execSync('git init', { cwd: tempRepoPath });
+      console.log(`Test repo initialized successfully at: ${tempRepoPath}`);
+    } catch (err) {
+      console.error('Failed to initialize test repository:', err);
+      throw err;
+    }
+    */
+    const realChildProcess = jest.requireActual('child_process');
+
+    // 一時ディレクトリを作成し、git init を実行
+    try {
+      console.log(`Creating test repo at: ${tempRepoPath}`); // パス確認ログ
+      realFs.mkdirSync(tempRepoPath, { recursive: true });
+      realChildProcess.execSync('git init', { cwd: tempRepoPath });
+      console.log(`Test repo initialized successfully at: ${tempRepoPath}`); // 成功ログ
+    } catch (err) {
+      console.error('Failed to initialize test repository:', err); // エラーログ
+      // エラー発生時はテストを続行しない方が良いかもしれない
+      throw err; // エラーをスローしてテストを失敗させる
+    }
+
+    // モックの基本動作を設定 (GitService インスタンス化の前に移動)
     fs.existsSync.mockReturnValue(false);
     fs.statSync.mockReturnValue({
       isFile: () => true,
@@ -90,19 +144,44 @@ describe('コア基盤コンポーネントの統合', () => {
       errorHandler: errorHandler,
     });
 
+    // GitService のインスタンス化を beforeEach の最後に移動
     git = new GitService({
-      repoPath: '/test/repo/path',
+      repoPath: tempRepoPath, // 一時リポジトリのパスを使用
       logger: mockLogger,
       eventEmitter: eventEmitter,
+      // repoPath: tempRepoPath, // モックを使用するため不要
       errorHandler: errorHandler,
     });
+  });
+
+  afterEach(() => {
+    // 一時リポジトリを削除
+    if (tempRepoPath) {
+      const realFs = jest.requireActual('fs');
+      // 一時リポジトリ削除処理も不要になるためコメントアウトまたは削除
+      /*
+    if (tempRepoPath) {
+      const realFs = jest.requireActual('fs');
+      try {
+        realFs.rmSync(tempRepoPath, { recursive: true, force: true });
+      } catch (err) {
+        console.error(`Failed to remove test repository ${tempRepoPath}:`, err);
+      }
+    }
+    */
+      try {
+        realFs.rmSync(tempRepoPath, { recursive: true, force: true });
+      } catch (err) {
+        console.error(`Failed to remove test repository ${tempRepoPath}:`, err);
+      }
+    }
   });
 
   describe('イベント連携', () => {
     // 既存のテスト - 従来のイベント発行方式
     test('ストレージ操作がイベントを発行し、リスナーが呼び出される', () => {
       const mockListener = jest.fn();
-      eventEmitter.on('storage:file_written', mockListener);
+      eventEmitter.on('storage:file_write_after', mockListener); // イベント名を修正
 
       storage.writeFile('test-dir', 'test-file.txt', 'file content');
 
@@ -114,15 +193,21 @@ describe('コア基盤コンポーネントの統合', () => {
       expect(event.timestamp).toBeDefined();
     });
 
-    test('Git操作がイベントを発行し、リスナーが呼び出される', () => {
+    test('Git操作がイベントを発行し、リスナーが呼び出される', async () => {
+      // async追加
       const mockListener = jest.fn();
-      eventEmitter.on('git:command_executed', mockListener);
+      // イベント名を修正 (例: commit_get_hash_after)
+      eventEmitter.on('git:commit_get_hash_after', mockListener);
 
-      git._execGit('status');
+      // 存在するメソッド getCurrentCommitHash を呼び出すように修正
+      await git.getCurrentCommitHash();
 
       expect(mockListener).toHaveBeenCalled();
       const event = mockListener.mock.calls[0][0];
-      expect(event.command).toBe('git status');
+      // イベントデータの検証を修正
+      expect(event.action).toBe('commit_get_hash_after');
+      expect(event.success).toBe(true); // 成功したと仮定
+      expect(event.hash).toBeDefined();
       expect(event.timestamp).toBeDefined();
     });
 
@@ -157,16 +242,22 @@ describe('コア基盤コンポーネントの統合', () => {
       expect(mockListener).toHaveBeenCalledTimes(2);
     });
 
-    test('イベント履歴が正しく記録される', () => {
+    test('イベント履歴が正しく記録される', async () => {
+      // async追加
       storage.writeFile('test-dir', 'test-file.txt', 'file content');
-      git._execGit('status');
+      await git.getCurrentCommitHash(); // _execGit を getCurrentCommitHash に変更
 
       const history = eventEmitter.getEventHistory();
       expect(history.length).toBeGreaterThanOrEqual(2);
 
-      // 最新のイベントが最後に記録されていることを確認
-      const lastEvent = history[history.length - 1];
-      expect(lastEvent.event).toBe('git:command_executed');
+      // Git 操作に関連するイベント 'git:commit_get_hash_after' が記録されていることを確認 (グローバル 'event' を除く)
+      const gitHistory = history.filter(
+        (e) => e.event === 'git:commit_get_hash_after'
+      );
+      expect(gitHistory.length).toBeGreaterThan(0); // イベントが存在することを確認
+      const gitEventEntry = gitHistory[gitHistory.length - 1]; // 最後のgitイベントを取得
+      expect(gitEventEntry).toBeDefined();
+      expect(gitEventEntry.event).toBe('git:commit_get_hash_after');
     });
 
     // 新しいテスト - 標準化されたイベント発行方式
@@ -444,16 +535,17 @@ describe('コア基盤コンポーネントの統合', () => {
   });
 
   describe('複合操作', () => {
-    test('ファイル操作とGit操作の連携', () => {
+    test('ファイル操作とGit操作の連携', async () => {
+      // async追加
       const fileListener = jest.fn();
       const gitListener = jest.fn();
 
-      eventEmitter.on('storage:file_written', fileListener);
-      eventEmitter.on('git:command_executed', gitListener);
+      eventEmitter.on('storage:file_write_after', fileListener); // イベント名修正
+      eventEmitter.on('git:stage_after', gitListener); // イベント名修正
 
       // JSONファイルを更新してGitコマンドを実行
       storage.writeFile('test-dir', 'test-file.json', '{"updated": true}');
-      git._execGit('add test-dir/test-file.json');
+      await git.stageFiles('test-dir/test-file.json'); // _execGit を stageFiles に変更
 
       // 両方のイベントが発行されたことを確認
       expect(fileListener).toHaveBeenCalled();
@@ -546,30 +638,94 @@ describe('コア基盤コンポーネントの統合', () => {
     });
 
     test('ファイルロックの競合', async () => {
+      // テストケース固有のモック設定 (ファイルロック競合用)
+      const lockFilePath = path.join(
+        '/test/base/path',
+        'test-dir',
+        'locked-file.txt.lock'
+      );
+      console.log('Lock path for test:', lockFilePath); // lockPath確認ログ
+      const originalExistsSync = fs.existsSync;
+      const originalWriteFileSync = fs.writeFileSync;
+
+      // 最初のロック取得時はロックファイルが存在しないようにモック
+      fs.existsSync.mockImplementation((p) => {
+        console.log(
+          '[Lock Test] existsSync (initial) called with:',
+          p,
+          'Returning:',
+          p !== lockFilePath
+        );
+        return p !== lockFilePath;
+      });
+      fs.writeFileSync.mockImplementation((filePath, data, options) => {
+        console.log(
+          '[Lock Test] writeFileSync (initial) called with:',
+          filePath,
+          options
+        );
+        // 最初の書き込みは成功させる (エラーをスローしない)
+      });
+
       // 最初のロックは成功
       const unlock1 = await storage.lockFile('test-dir', 'locked-file.txt');
 
       // 2つ目のロックは失敗する
-      // ロックファイルが存在するようにモックを変更
-      fs.existsSync.mockImplementation((path) => {
-        if (path.endsWith('.lock')) {
-          return true;
+      // 2回目のロック取得前にモックを再設定
+      // ロックファイルが存在するように設定
+      fs.existsSync.mockImplementation((p) => {
+        console.log(
+          '[Lock Test] existsSync (second attempt) called with:',
+          p,
+          'Returning:',
+          p === lockFilePath
+        );
+        return p === lockFilePath;
+      });
+      // flag: 'wx' で呼び出されたら EEXIST エラーをスロー
+      fs.writeFileSync.mockImplementation((filePath, data, options) => {
+        console.log(
+          '[Lock Test] writeFileSync (second attempt) called with:',
+          filePath,
+          options
+        );
+        if (options?.flag === 'wx' && filePath === lockFilePath) {
+          const error = new Error(
+            `EEXIST: file already exists, open '${filePath}'`
+          );
+          error.code = 'EEXIST';
+          throw error;
         }
-        return false;
       });
 
+      fs.writeFileSync.mockImplementation((filePath, data, options) => {
+        if (options?.flag === 'wx' && filePath === lockFilePath) {
+          const error = new Error(
+            `EEXIST: file already exists, open '${filePath}'`
+          );
+          error.code = 'EEXIST';
+          throw error;
+        }
+      });
+
+      // storage.lockFile がタイムアウトエラーをスローすることを期待するアサーション
       await expect(
         storage.lockFile('test-dir', 'locked-file.txt')
-      ).rejects.toThrow();
+      ).rejects.toThrow('ファイルロックの最大試行回数を超えました'); // エラーメッセージを具体的に指定
+
+      // モックを元に戻す
+      fs.existsSync = originalExistsSync;
+      fs.writeFileSync = originalWriteFileSync;
 
       // ロック解除後は再度ロックできる
-      fs.existsSync.mockReturnValue(false);
+      // fs.existsSync.mockReturnValue(false); // モックを元に戻したので不要
       unlock1();
       const unlock2 = await storage.lockFile('test-dir', 'locked-file.txt');
       expect(typeof unlock2).toBe('function');
     });
 
-    test('回復不可能なエラーは回復戦略が実行されない', () => {
+    test('回復不可能なエラーは回復戦略が実行されない', async () => {
+      // async追加
       // 回復戦略を登録
       errorHandler.registerRecoveryStrategy('ERR_STATE', (error) => {
         return { recovered: true, error };
@@ -588,8 +744,8 @@ describe('コア基盤コンポーネントの統合', () => {
         'testOperation'
       );
 
-      // 回復戦略が実行されなかったことを確認
-      expect(result).toBe(unrecoverableError);
+      // 回復戦略が実行されなかったことを確認 (handleがPromiseを返す可能性を考慮)
+      await expect(Promise.resolve(result)).resolves.toBe(unrecoverableError);
     });
   });
 

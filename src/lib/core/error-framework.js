@@ -136,6 +136,7 @@ class StorageError extends ApplicationError {
       recoverable:
         options.recoverable !== undefined ? options.recoverable : true,
     });
+    this.name = 'StorageError'; // name プロパティを設定
   }
 }
 

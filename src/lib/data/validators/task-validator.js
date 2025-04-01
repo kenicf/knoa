@@ -1,162 +1,127 @@
 /**
- * タスクバリデータクラス
- *
- * タスクデータの検証を行うクラス。
- * IDの形式、ステータス、優先度、見積もり時間、進捗率、進捗状態などの検証を行います。
+ * タスクデータ検証クラス
  */
 
-/**
- * タスクバリデータクラス
- */
+// constants.js から PROGRESS_STATES をインポート
+const { PROGRESS_STATES } = require('../../core/constants');
+
 class TaskValidator {
   /**
    * コンストラクタ
    * @param {Object} options - オプション
+   * @param {Object} options.logger - ロガー (必須)
    */
   constructor(options = {}) {
-    // 進捗状態の定義
-    this.progressStates = options.progressStates || {
-      not_started: {
-        description: 'タスクがまだ開始されていない状態',
-        default_percentage: 0,
-      },
-      planning: {
-        description: 'タスクの計画段階',
-        default_percentage: 10,
-      },
-      in_development: {
-        description: '開発中の状態',
-        default_percentage: 30,
-      },
-      implementation_complete: {
-        description: '実装が完了した状態',
-        default_percentage: 60,
-      },
-      in_review: {
-        description: 'レビュー中の状態',
-        default_percentage: 70,
-      },
-      review_complete: {
-        description: 'レビューが完了した状態',
-        default_percentage: 80,
-      },
-      in_testing: {
-        description: 'テスト中の状態',
-        default_percentage: 90,
-      },
-      completed: {
-        description: 'タスクが完了した状態',
-        default_percentage: 100,
-      },
-    };
+    if (!options.logger) {
+      throw new Error('TaskValidator requires a logger instance');
+    }
+    this.logger = options.logger;
+    // 必要に応じて他の依存関係 (例: TaskRepository) を注入
   }
 
   /**
-   * タスクを検証する
-   * @param {Object} task - 検証するタスク
+   * タスクデータを検証する
+   * @param {Object} task - 検証するタスクデータ
    * @returns {Object} 検証結果（isValid: boolean, errors: string[]）
    */
   validate(task) {
     const errors = [];
 
-    // 必須フィールドの検証
-    const requiredFields = [
-      'id',
-      'title',
-      'description',
-      'status',
-      'dependencies',
-    ];
+    // 基本的な構造チェック
+    if (!task) {
+      errors.push('タスクオブジェクトが不正です');
+      return { isValid: false, errors };
+    }
+
+    // 必須フィールドのチェック
+    const requiredFields = ['id', 'title', 'description', 'priority', 'status'];
+    /* eslint-disable security/detect-object-injection -- field は固定配列由来のため、このループ内では安全と判断 */
     for (const field of requiredFields) {
-      // eslint-disable-next-line security/detect-object-injection
-      if (!task[field]) {
-        errors.push(`${field}は必須フィールドです`);
+      if (
+        task[field] === undefined ||
+        task[field] === null ||
+        task[field] === ''
+      ) {
+        errors.push(`必須フィールド ${field} がありません`);
       }
     }
+    /* eslint-enable security/detect-object-injection */
 
-    // IDの形式検証
+    // タスクIDの形式チェック
     if (task.id && !task.id.match(/^T[0-9]{3}$/)) {
-      errors.push('IDはT001形式である必要があります');
+      errors.push(`不正なタスクID形式です: ${task.id}`);
     }
 
-    // ステータスの検証
-    const validStatuses = ['pending', 'in_progress', 'completed', 'blocked'];
-    if (task.status && !validStatuses.includes(task.status)) {
-      errors.push(
-        `ステータスは${validStatuses.join(', ')}のいずれかである必要があります`
-      );
+    // タイトルの長さチェック (追加)
+    if (task.title && task.title.length > 200) {
+      errors.push('タイトルは200文字以内にしてください');
     }
 
-    // 優先度の検証
-    if (task.priority !== undefined) {
-      if (
-        !Number.isInteger(task.priority) ||
-        task.priority < 1 ||
-        task.priority > 5
-      ) {
-        errors.push('優先度は1から5の整数である必要があります');
-      }
+    // 優先度のチェック
+    if (task.priority && typeof task.priority !== 'number') {
+      errors.push(`優先度は数値である必要があります: ${task.priority}`);
+    } else if (task.priority && (task.priority < 1 || task.priority > 5)) {
+      errors.push(`不正な優先度です (1-5): ${task.priority}`);
     }
 
-    // 見積もり時間の検証
-    if (task.estimated_hours !== undefined) {
-      if (
-        typeof task.estimated_hours !== 'number' ||
-        task.estimated_hours < 0
-      ) {
-        errors.push('見積もり時間は0以上の数値である必要があります');
-      }
+    // 状態のチェック
+    if (
+      task.status &&
+      ![
+        'not_started',
+        'in_progress',
+        'completed',
+        'pending',
+        'blocked',
+      ].includes(task.status) // pending, blocked も追加
+    ) {
+      errors.push(`不正な状態です: ${task.status}`);
     }
 
-    // 進捗率の検証
+    // 進捗状態のチェック
+    if (
+      task.progress_state &&
+      !Object.prototype.hasOwnProperty.call(
+        PROGRESS_STATES,
+        task.progress_state
+      ) // インポートした定数を使用し、hasOwnProperty でチェック
+    ) {
+      errors.push(`不正な進捗状態です: ${task.progress_state}`);
+    }
+
+    // 進捗率のチェック
     if (task.progress_percentage !== undefined) {
-      if (
-        !Number.isInteger(task.progress_percentage) ||
-        task.progress_percentage < 0 ||
-        task.progress_percentage > 100
-      ) {
-        errors.push('進捗率は0から100の整数である必要があります');
+      const progress = Number(task.progress_percentage);
+      if (isNaN(progress) || progress < 0 || progress > 100) {
+        errors.push(`不正な進捗率です: ${task.progress_percentage}`);
       }
     }
 
-    // 進捗状態の検証
-    if (task.progress_state !== undefined) {
-      if (!this.progressStates[task.progress_state]) {
-        errors.push(
-          `進捗状態は${Object.keys(this.progressStates).join(', ')}のいずれかである必要があります`
-        );
-      }
-    }
-
-    // 依存関係の検証
-
-    if (task.dependencies && Array.isArray(task.dependencies)) {
-      for (let i = 0; i < task.dependencies.length; i++) {
-        // eslint-disable-next-line security/detect-object-injection
-        const dep = task.dependencies[i];
-
-        // task_idの検証
-
-        if (!dep.task_id) {
-          errors.push(`依存関係[${i}]のtask_idは必須です`);
-        } else if (!dep.task_id.match(/^T[0-9]{3}$/)) {
-          errors.push(`依存関係[${i}]のtask_idはT001形式である必要があります`);
+    // 依存関係のチェック (形式のみ)
+    if (task.dependencies && !Array.isArray(task.dependencies)) {
+      errors.push('依存関係は配列である必要があります');
+    } else if (task.dependencies) {
+      task.dependencies.forEach((dep, index) => {
+        if (!dep || typeof dep !== 'object') {
+          errors.push(`依存関係[${index}]がオブジェクトではありません`);
+        } else if (
+          !dep.task_id ||
+          typeof dep.task_id !== 'string' ||
+          !dep.task_id.match(/^T[0-9]{3}$/)
+        ) {
+          errors.push(`依存関係[${index}]のtask_idが不正です: ${dep.task_id}`);
+        } else if (dep.type && !['strong', 'weak'].includes(dep.type)) {
+          errors.push(`依存関係[${index}]のtypeが不正です: ${dep.type}`);
         }
-
-        // typeの検証
-        if (!dep.type) {
-          errors.push(`依存関係[${i}]のtypeは必須です`);
-        } else if (!['strong', 'weak'].includes(dep.type)) {
-          errors.push(
-            `依存関係[${i}]のtypeはstrong, weakのいずれかである必要があります`
-          );
-        }
-      }
+      });
     }
 
-    // git_commitsの検証
-    if (task.git_commits !== undefined && !Array.isArray(task.git_commits)) {
-      errors.push('git_commitsは配列である必要があります');
+    // estimated_hours のチェック
+    if (task.estimated_hours !== undefined) {
+      const hours = Number(task.estimated_hours);
+      if (isNaN(hours) || hours < 0) {
+        errors.push(`不正な見積もり時間です: ${task.estimated_hours}`);
+      }
     }
 
     return {
@@ -166,196 +131,30 @@ class TaskValidator {
   }
 
   /**
-   * タスク階層を検証する
-   * @param {Object} hierarchy - 検証するタスク階層
+   * タスク階層を検証する (基本チェックのみ)
+   * @param {Object} hierarchy - 検証するタスク階層データ
    * @returns {Object} 検証結果（isValid: boolean, errors: string[]）
    */
   validateHierarchy(hierarchy) {
     const errors = [];
-
-    // 基本的な構造チェック
     if (!hierarchy) {
-      errors.push('タスク階層が指定されていません');
+      errors.push('階層データが不正です');
+      // hierarchy が null や undefined の場合、以降のチェックは不要なのでここで返す
       return { isValid: false, errors };
     }
-
-    // epicsの検証
-
-    if (!hierarchy.epics || !Array.isArray(hierarchy.epics)) {
+    // epics が存在し、かつ配列でない場合にエラー
+    if (hierarchy.epics !== undefined && !Array.isArray(hierarchy.epics)) {
       errors.push('epicsは配列である必要があります');
-    } else {
-      for (let i = 0; i < hierarchy.epics.length; i++) {
-        // eslint-disable-next-line security/detect-object-injection -- 配列インデックスアクセスであり、i はループ内で安全に管理されているため抑制
-        const epic = hierarchy.epics[i];
-
-        // epic_idの検証
-
-        if (!epic.epic_id) {
-          errors.push(`epic[${i}]のepic_idは必須です`);
-        } else if (!epic.epic_id.match(/^E[0-9]{3}$/)) {
-          errors.push(`epic[${i}]のepic_idはE001形式である必要があります`);
-        }
-
-        // titleの検証
-        if (!epic.title) {
-          errors.push(`epic[${i}]のtitleは必須です`);
-        }
-
-        // storiesの検証
-
-        if (!epic.stories || !Array.isArray(epic.stories)) {
-          errors.push(`epic[${i}]のstoriesは配列である必要があります`);
-        } else {
-          for (let j = 0; j < epic.stories.length; j++) {
-            // eslint-disable-next-line security/detect-object-injection -- 配列インデックスアクセスであり、j はループ内で安全に管理されているため抑制
-            const storyId = epic.stories[j];
-
-            // story_idの検証
-            if (!storyId.match(/^S[0-9]{3}$/)) {
-              errors.push(
-                `epic[${i}].stories[${j}]はS001形式である必要があります`
-              );
-            }
-          }
-        }
-      }
     }
-
-    // storiesの検証
-
-    if (!hierarchy.stories || !Array.isArray(hierarchy.stories)) {
+    // stories が存在し、かつ配列でない場合にエラー
+    if (hierarchy.stories !== undefined && !Array.isArray(hierarchy.stories)) {
       errors.push('storiesは配列である必要があります');
-    } else {
-      for (let i = 0; i < hierarchy.stories.length; i++) {
-        // eslint-disable-next-line security/detect-object-injection -- 配列インデックスアクセスであり、i はループ内で安全に管理されているため抑制
-        const story = hierarchy.stories[i];
-
-        // story_idの検証
-        if (!story.story_id) {
-          errors.push(`story[${i}]のstory_idは必須です`);
-        } else if (!story.story_id.match(/^S[0-9]{3}$/)) {
-          errors.push(`story[${i}]のstory_idはS001形式である必要があります`);
-        }
-
-        // titleの検証
-
-        if (!story.title) {
-          errors.push(`story[${i}]のtitleは必須です`);
-        }
-
-        // tasksの検証
-
-        if (!story.tasks || !Array.isArray(story.tasks)) {
-          errors.push(`story[${i}]のtasksは配列である必要があります`);
-        } else {
-          for (let j = 0; j < story.tasks.length; j++) {
-            // eslint-disable-next-line security/detect-object-injection
-            const taskId = story.tasks[j];
-
-            // task_idの検証
-            if (!taskId.match(/^T[0-9]{3}$/)) {
-              errors.push(
-                `story[${i}].tasks[${j}]はT001形式である必要があります`
-              );
-            }
-          }
-        }
-      }
     }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-    };
+    // TODO: より詳細な検証ロジックを追加 (IDの存在確認、循環参照チェックなど)
+    return { isValid: errors.length === 0, errors };
   }
 
-  /**
-   * タスク依存関係を検証する
-   * @param {Array} tasks - タスクの配列
-   * @returns {Object} 検証結果（isValid: boolean, errors: string[], circularDependencies: Array}）
-   */
-  validateDependencies(tasks) {
-    const errors = [];
-    const circularDependencies = [];
-
-    // 基本的な構造チェック
-    if (!tasks || !Array.isArray(tasks)) {
-      errors.push('tasksは配列である必要があります');
-      return { isValid: false, errors, circularDependencies };
-    }
-
-    // 各タスクの依存関係をチェック
-    for (const task of tasks) {
-      if (!task.id) {
-        continue;
-      }
-
-      const visited = new Set();
-      const recursionStack = new Set();
-
-      // 循環依存をチェックする深さ優先探索
-      const checkCircularDependency = (currentId, path = []) => {
-        if (recursionStack.has(currentId)) {
-          const cycle = [...path, currentId];
-          circularDependencies.push(cycle);
-          return true;
-        }
-
-        if (visited.has(currentId)) {
-          return false;
-        }
-
-        visited.add(currentId);
-        recursionStack.add(currentId);
-
-        const currentTask = tasks.find((t) => t.id === currentId);
-        if (!currentTask || !currentTask.dependencies) {
-          recursionStack.delete(currentId);
-          return false;
-        }
-
-        for (const dep of currentTask.dependencies) {
-          if (checkCircularDependency(dep.task_id, [...path, currentId])) {
-            return true;
-          }
-        }
-
-        recursionStack.delete(currentId);
-        return false;
-      };
-
-      checkCircularDependency(task.id);
-    }
-
-    // 存在しない依存関係をチェック
-    const taskIds = tasks.map((task) => task.id);
-
-    for (const task of tasks) {
-      if (!task.dependencies) {
-        continue;
-      }
-
-      for (const dep of task.dependencies) {
-        if (!taskIds.includes(dep.task_id)) {
-          errors.push(
-            `タスク ${task.id} の依存タスク ${dep.task_id} が存在しません`
-          );
-        }
-      }
-    }
-
-    if (circularDependencies.length > 0) {
-      for (const cycle of circularDependencies) {
-        errors.push(`循環依存が検出されました: ${cycle.join(' -> ')}`);
-      }
-    }
-
-    return {
-      isValid: errors.length === 0 && circularDependencies.length === 0,
-      errors,
-      circularDependencies,
-    };
-  }
+  // 必要に応じて他の検証メソッドを追加
 }
 
 module.exports = { TaskValidator };

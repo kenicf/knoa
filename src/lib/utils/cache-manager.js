@@ -18,6 +18,8 @@ class CacheManager {
    * @param {Object} options.eventEmitter - イベントエミッターインスタンス (必須)
    * @param {number} [options.ttlMs=300000] - デフォルトTTL (ミリ秒)
    * @param {number} [options.maxSize=1000] - 最大キャッシュサイズ
+   * @param {Function} [options.traceIdGenerator] - トレースID生成関数 ★★★ 追加 ★★★
+   * @param {Function} [options.requestIdGenerator] - リクエストID生成関数 ★★★ 追加 ★★★
    */
   constructor(options = {}) {
     // 依存関係の設定 (必須化)
@@ -36,12 +38,20 @@ class CacheManager {
     this.hitCount = 0;
     this.missCount = 0;
 
+    // ★★★ ID ジェネレーターを保存 ★★★
+    this._traceIdGenerator =
+      options.traceIdGenerator ||
+      (() => `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+    this._requestIdGenerator =
+      options.requestIdGenerator ||
+      (() => `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+
     // キャッシュ初期化イベント
     // emitStandardized を直接呼び出すように変更
-    this.eventEmitter.emitStandardized('cache', 'system_initialized', {
+    // ★★★ _emitEvent を使うように変更 ★★★
+    this._emitEvent('system_initialized', {
       ttlMs: this.ttlMs,
       maxSize: this.maxSize,
-      // timestamp, traceId, requestId は emitStandardized 内で付与される想定
     });
   }
 
@@ -56,7 +66,7 @@ class CacheManager {
       this.missCount++;
 
       // cache:miss イベントを標準化
-      this.eventEmitter.emitStandardized('cache', 'item_missed', { key });
+      this._emitEvent('item_missed', { key }); // ★★★ _emitEvent を使用 ★★★
 
       return null;
     }
@@ -67,7 +77,8 @@ class CacheManager {
       this.missCount++;
 
       // cache:expired イベントを標準化
-      this.eventEmitter.emitStandardized('cache', 'item_expired', {
+      this._emitEvent('item_expired', {
+        // ★★★ _emitEvent を使用 ★★★
         key,
         ttl: cached.ttl, // エントリ固有のTTLを使用
       });
@@ -78,10 +89,7 @@ class CacheManager {
     this.hitCount++;
 
     // cache:hit イベントを標準化 (item_accessed)
-    this.eventEmitter.emitStandardized('cache', 'item_accessed', {
-      key,
-      // timestamp, traceId, requestId は emitStandardized 内で付与される想定
-    });
+    this._emitEvent('item_accessed', { key }); // ★★★ _emitEvent を使用 ★★★
 
     return cached.value;
   }
@@ -94,7 +102,8 @@ class CacheManager {
    */
   set(key, value, ttl = this.ttlMs) {
     // キャッシュサイズチェック
-    if (this.cache.size >= this.maxSize) {
+    // ★★★ set する前にチェックし、evict してから set する ★★★
+    if (!this.cache.has(key) && this.cache.size >= this.maxSize) {
       this._evictOldest();
     }
 
@@ -105,11 +114,7 @@ class CacheManager {
     });
 
     // cache:set イベントを標準化 (item_set)
-    this.eventEmitter.emitStandardized('cache', 'item_set', {
-      key,
-      ttl,
-      // timestamp, traceId, requestId は emitStandardized 内で付与される想定
-    });
+    this._emitEvent('item_set', { key, ttl }); // ★★★ _emitEvent を使用 ★★★
   }
 
   /**
@@ -158,10 +163,10 @@ class CacheManager {
         typeof keyPattern === 'string' || keyPattern instanceof RegExp
           ? keyPattern.toString()
           : '[Invalid Pattern]';
-      this.eventEmitter.emitStandardized('cache', 'items_invalidated', {
+      this._emitEvent('items_invalidated', {
+        // ★★★ _emitEvent を使用 ★★★
         pattern: patternString,
         count,
-        // timestamp, traceId, requestId は emitStandardized 内で付与される想定
       });
     }
 
@@ -177,10 +182,7 @@ class CacheManager {
 
     if (size > 0) {
       // cache:cleared イベントを標準化
-      this.eventEmitter.emitStandardized('cache', 'cleared', {
-        count: size,
-        // timestamp, traceId, requestId は emitStandardized 内で付与される想定
-      });
+      this._emitEvent('cleared', { count: size }); // ★★★ _emitEvent を使用 ★★★
     }
   }
 
@@ -220,10 +222,53 @@ class CacheManager {
       this.cache.delete(oldestKey);
 
       // cache:evicted イベントを標準化 (item_evicted)
-      this.eventEmitter.emitStandardized('cache', 'item_evicted', {
-        key: oldestKey,
-        // timestamp, traceId, requestId は emitStandardized 内で付与される想定
-      });
+      this._emitEvent('item_evicted', { key: oldestKey }); // ★★★ _emitEvent を使用 ★★★
+    }
+  }
+
+  /**
+   * イベントを発行
+   * @param {string} eventName - イベント名 (例: 'item_missed')
+   * @param {Object} data - イベントデータ
+   * @private
+   */
+  _emitEvent(eventName, data) {
+    // ★★★ _emitEvent を追加 ★★★
+    if (
+      !this.eventEmitter ||
+      typeof this.eventEmitter.emitStandardized !== 'function'
+    ) {
+      return;
+    }
+
+    try {
+      // ID ジェネレーターを使用して ID を生成
+      const traceId = this._traceIdGenerator();
+      const requestId = this._requestIdGenerator();
+
+      const standardizedData = {
+        ...data,
+        timestamp: new Date().toISOString(),
+        traceId,
+        requestId,
+      };
+
+      // Add logging to check event emission
+      this.logger.debug(
+        `Emitting standardized event: cache:${eventName}`,
+        standardizedData
+      );
+
+      this.eventEmitter.emitStandardized(
+        'cache', // component name
+        eventName, // action name
+        standardizedData
+      );
+    } catch (error) {
+      this.logger.warn(
+        `イベント発行中にエラーが発生しました: cache:${eventName}`,
+        error
+      );
     }
   }
 }

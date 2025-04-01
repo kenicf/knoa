@@ -324,9 +324,10 @@ describe('アダプター統合テスト', () => {
   });
 
   // 開発環境でのみ警告ログのテストを実行
-  test.skipIf(process.env.NODE_ENV !== 'development')(
-    '開発環境では非推奨イベントの警告ログが出力される',
-    async () => {
+  if (process.env.NODE_ENV !== 'development') {
+    test.skip('開発環境では非推奨イベントの警告ログが出力される', () => {});
+  } else {
+    test('開発環境では非推奨イベントの警告ログが出力される', async () => {
       eventEmitter.on('task:created', jest.fn()); // リスナー登録が必要
       eventEmitter.on('session:started', jest.fn()); // リスナー登録が必要
       await taskAdapter.createTask({ title: '後方互換性テスト' });
@@ -336,6 +337,6 @@ describe('アダプター統合テスト', () => {
         expect.stringContaining('非推奨のイベント名'),
         expect.any(Object)
       );
-    }
-  );
+    });
+  }
 });

@@ -39,6 +39,13 @@ jobs:
         # package.json に test:ci スクリプトがあるのでそれを使用
         run: npm run test:ci
 
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report-${{ matrix.node-version }}
+        path: coverage/
+
       - name: Check for vulnerabilities
         # high 以上の深刻度の脆弱性があれば失敗させる
         run: npm audit --audit-level=high

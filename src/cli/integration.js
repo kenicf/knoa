@@ -1,749 +1,430 @@
 #!/usr/bin/env node
 /**
- * 統合マネージャーCLI
+ * 統合マネージャーCLI (リファクタリング版)
  *
- * 統合マネージャーを使用するためのコマンドラインインターフェース
+ * 各種CLI操作のエントリーポイント。コマンドを解析し、CliFacadeに処理を委譲する。
  */
 
 const colors = require('colors/safe');
-const readline = require('readline');
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
-const fs = require('fs');
-const path = require('path');
 
-// 依存性注入
-const ServiceContainer = require('../lib/core/service-container');
-const { registerServices } = require('../lib/core/service-definitions');
-const config = require('../config');
+// 初期化処理と表示関数をインポート
+const { bootstrap } = require('./bootstrap'); // bootstrap 関数をインポート
+const { displayResult } = require('./display'); // 表示用関数をインポート
 
-// サービスコンテナの作成と初期化
-const container = new ServiceContainer();
-registerServices(container, config);
+// CliFacade は runCommand で必要
+const CliFacade = require('./facade'); // Facade は必要
 
-// 統合マネージャーのインスタンスを取得
-const integrationManager = container.get('integrationManagerAdapter');
+// initializeContainerAndComponents 関数は bootstrap.js に移動
 
-// コマンドライン引数の解析
-const argv = yargs(hideBin(process.argv))
-  .usage('使用方法: $0 <コマンド> [オプション]')
-  .command('init <project-id> <request>', 'ワークフローの初期化', (yargs) => {
-    return yargs
-      .positional('project-id', {
-        describe: 'プロジェクトID',
-        type: 'string',
-      })
-      .positional('request', {
-        describe: '元のリクエスト',
-        type: 'string',
-      });
-  })
-  .command(
-    'start-session [previous-session-id]',
-    'セッションの開始',
-    (yargs) => {
-      return yargs.positional('previous-session-id', {
-        describe: '前回のセッションID',
-        type: 'string',
-      });
-    }
-  )
-  .command('end-session [session-id]', 'セッションの終了', (yargs) => {
-    return yargs.positional('session-id', {
-      describe: 'セッションID',
-      type: 'string',
-    });
-  })
-  .command('create-task <title> <description>', 'タスクの作成', (yargs) => {
-    return yargs
-      .positional('title', {
-        describe: 'タスクタイトル',
-        type: 'string',
-      })
-      .positional('description', {
-        describe: 'タスク説明',
-        type: 'string',
-      })
-      .option('status', {
-        describe: 'タスク状態',
-        type: 'string',
-        choices: ['pending', 'in_progress', 'completed', 'blocked'],
-        default: 'pending',
-      })
-      .option('priority', {
-        describe: '優先度',
-        type: 'number',
-        choices: [1, 2, 3, 4, 5],
-        default: 3,
-      })
-      .option('estimated-hours', {
-        describe: '見積もり時間',
-        type: 'number',
-        default: 1,
-      })
-      .option('dependencies', {
-        describe: '依存タスクID（カンマ区切り）',
-        type: 'string',
-      });
-  })
-  .command(
-    'update-task <task-id> <status> [progress]',
-    'タスクの更新',
-    (yargs) => {
-      return yargs
-        .positional('task-id', {
-          describe: 'タスクID',
-          type: 'string',
-        })
-        .positional('status', {
-          describe: 'タスク状態',
-          type: 'string',
-          choices: ['pending', 'in_progress', 'completed', 'blocked'],
-        })
-        .positional('progress', {
-          describe: '進捗率（0-100）',
-          type: 'number',
-        });
-    }
-  )
-  .command(
-    'collect-feedback <task-id> <test-command>',
-    'フィードバックの収集',
-    (yargs) => {
-      return yargs
-        .positional('task-id', {
-          describe: 'タスクID',
-          type: 'string',
-        })
-        .positional('test-command', {
-          describe: 'テストコマンド',
+/**
+ * コマンドライン引数を解析する
+ * @param {Array<string>} processArgv - process.argv
+ * @returns {object} 解析された引数オブジェクト (yargs の argv)
+ */
+function parseArguments(processArgv) {
+  return (
+    yargs(hideBin(processArgv))
+      .usage('使用方法: $0 <コマンド> [オプション]')
+      // --- Workflow ---
+      .command(
+        'init <project-id> <request>',
+        'ワークフローの初期化',
+        (yargs) => {
+          return yargs
+            .positional('project-id', {
+              describe: 'プロジェクトID',
+              type: 'string',
+            })
+            .positional('request', {
+              describe: '元のリクエスト',
+              type: 'string',
+            });
+        }
+      )
+      .command('status', 'ワークフロー状態の取得')
+      // --- Session ---
+      .command(
+        'start-session [previous-session-id]',
+        'セッションの開始',
+        (yargs) => {
+          return yargs.positional('previous-session-id', {
+            describe: '前回のセッションID',
+            type: 'string',
+          });
+        }
+      )
+      .command(
+        'end-session [session-id]',
+        'セッションの終了 (引数なしで最新)',
+        (yargs) => {
+          return yargs.positional('session-id', {
+            describe: 'セッションID',
+            type: 'string',
+          });
+        }
+      )
+      .command('list-sessions', 'セッション一覧を表示')
+      .command('current-session', '現在のセッションを表示')
+      .command('session-info <session-id>', 'セッション情報を表示', (yargs) => {
+        return yargs.positional('session-id', {
+          describe: 'セッションID',
           type: 'string',
         });
-    }
-  )
-  .command(
-    'resolve-feedback <feedback-id>',
-    'フィードバックの解決',
-    (yargs) => {
-      return yargs.positional('feedback-id', {
-        describe: 'フィードバックID',
-        type: 'string',
-      });
-    }
-  )
-  .command('sync', 'コンポーネントの同期')
-  .command('report <type>', 'レポートの生成', (yargs) => {
-    return yargs
-      .positional('type', {
-        describe: 'レポートタイプ',
-        type: 'string',
-        choices: [
-          'task_summary',
-          'session_summary',
-          'feedback_summary',
-          'workflow_status',
-          'integration_status',
-        ],
       })
-      .option('format', {
-        describe: '出力形式',
-        type: 'string',
-        choices: ['text', 'json', 'markdown'],
-        default: 'text',
+      .command(
+        'export-session <session-id> [path]',
+        'セッション情報をエクスポート',
+        (yargs) => {
+          return yargs
+            .positional('session-id', {
+              describe: 'セッションID',
+              type: 'string',
+            })
+            .positional('path', {
+              describe: '出力ファイルパス',
+              type: 'string',
+            });
+        }
+      )
+      .command(
+        'import-session <path>',
+        'セッション情報をインポート',
+        (yargs) => {
+          return yargs.positional('path', {
+            describe: '入力ファイルパス',
+            type: 'string',
+          });
+        }
+      )
+      // --- Task ---
+      .command('create-task <title> <description>', 'タスクの作成', (yargs) => {
+        return yargs
+          .positional('title', { describe: 'タスクタイトル', type: 'string' })
+          .positional('description', { describe: 'タスク説明', type: 'string' })
+          .option('status', {
+            describe: 'タスク状態',
+            type: 'string',
+            choices: ['pending', 'in_progress', 'completed', 'blocked'],
+            default: 'pending',
+          })
+          .option('priority', {
+            describe: '優先度',
+            type: 'number',
+            choices: [1, 2, 3, 4, 5],
+            default: 3,
+          })
+          .option('estimated-hours', {
+            describe: '見積もり時間',
+            type: 'number',
+          }) // default は CliTaskManager で設定
+          .option('dependencies', {
+            describe: '依存タスクID（カンマ区切り）',
+            type: 'string',
+          });
       })
-      .option('output', {
-        describe: '出力ファイルパス',
-        type: 'string',
-      });
-  })
-  .command('status', 'ワークフロー状態の取得')
-  .command('interactive', 'インタラクティブモード', {})
-  .demandCommand(1, 'コマンドを指定してください')
-  .help()
-  .alias('h', 'help')
-  .version()
-  .alias('v', 'version').argv;
+      .command(
+        'update-task <task-id> <status> [progress]',
+        'タスク状態/進捗を更新',
+        (yargs) => {
+          return yargs
+            .positional('task-id', { describe: 'タスクID', type: 'string' })
+            .positional('status', {
+              describe: 'タスク状態',
+              type: 'string',
+              choices: ['pending', 'in_progress', 'completed', 'blocked'],
+            })
+            .positional('progress', {
+              describe: '進捗率（0-100）',
+              type: 'number',
+            });
+        }
+      )
+      .command('list-tasks', 'タスク一覧を表示')
+      .command('task-info <task-id>', 'タスク情報を表示', (yargs) => {
+        return yargs.positional('task-id', {
+          describe: 'タスクID',
+          type: 'string',
+        });
+      })
+      .command(
+        'update-task-progress <task-id> <progress>',
+        'タスク進捗を更新',
+        (yargs) => {
+          return yargs
+            .positional('task-id', { describe: 'タスクID', type: 'string' })
+            .positional('progress', {
+              describe: '進捗率（0-100）',
+              type: 'number',
+            });
+        }
+      )
+      .command('delete-task <task-id>', 'タスクを削除', (yargs) => {
+        return yargs.positional('task-id', {
+          describe: 'タスクID',
+          type: 'string',
+        });
+      })
+      .command(
+        'link-task-commit <task-id> <commit-hash>',
+        'タスクにGitコミットを関連付け',
+        (yargs) => {
+          return yargs
+            .positional('task-id', { describe: 'タスクID', type: 'string' })
+            .positional('commit-hash', {
+              describe: 'コミットハッシュ',
+              type: 'string',
+            });
+        }
+      )
+      .command(
+        'export-task <task-id> [path]',
+        'タスク情報をエクスポート',
+        (yargs) => {
+          return yargs
+            .positional('task-id', { describe: 'タスクID', type: 'string' })
+            .positional('path', {
+              describe: '出力ファイルパス',
+              type: 'string',
+            });
+        }
+      )
+      .command('import-task <path>', 'タスク情報をインポート', (yargs) => {
+        return yargs.positional('path', {
+          describe: '入力ファイルパス',
+          type: 'string',
+        });
+      })
+      // --- Feedback ---
+      .command(
+        'collect-feedback <task-id> <test-command>',
+        'フィードバックの収集',
+        (yargs) => {
+          return yargs
+            .positional('task-id', { describe: 'タスクID', type: 'string' })
+            .positional('test-command', {
+              describe: 'テストコマンド',
+              type: 'string',
+            });
+        }
+      )
+      .command(
+        'resolve-feedback <feedback-id>',
+        'フィードバックの解決',
+        (yargs) => {
+          // feedbackId は taskId のこと？
+          return yargs.positional('feedback-id', {
+            describe: 'フィードバックID (通常タスクID)',
+            type: 'string',
+          });
+        }
+      )
+      .command(
+        'feedback-status <task-id>',
+        'フィードバックの状態を表示',
+        (yargs) => {
+          return yargs.positional('task-id', {
+            describe: 'タスクID',
+            type: 'string',
+          });
+        }
+      )
+      .command(
+        'reopen-feedback <task-id>',
+        'フィードバックを再オープン',
+        (yargs) => {
+          return yargs.positional('task-id', {
+            describe: 'タスクID',
+            type: 'string',
+          });
+        }
+      )
+      .command(
+        'report-feedback <task-id> [output-path]',
+        'フィードバックレポートを生成',
+        (yargs) => {
+          return yargs
+            .positional('task-id', { describe: 'タスクID', type: 'string' })
+            .positional('output-path', {
+              describe: '出力ファイルパス',
+              type: 'string',
+            });
+        }
+      )
+      .command(
+        'prioritize-feedback <task-id>',
+        'フィードバックの優先順位付け',
+        (yargs) => {
+          return yargs.positional('task-id', {
+            describe: 'タスクID',
+            type: 'string',
+          });
+        }
+      )
+      .command(
+        'link-feedback-commit <task-id> <commit-hash>',
+        'フィードバックにGitコミットを関連付け',
+        (yargs) => {
+          return yargs
+            .positional('task-id', { describe: 'タスクID', type: 'string' })
+            .positional('commit-hash', {
+              describe: 'コミットハッシュ',
+              type: 'string',
+            });
+        }
+      )
+      .command(
+        'link-feedback-session <task-id> <session-id>',
+        'フィードバックにセッションを関連付け',
+        (yargs) => {
+          return yargs
+            .positional('task-id', { describe: 'タスクID', type: 'string' })
+            .positional('session-id', {
+              describe: 'セッションID',
+              type: 'string',
+            });
+        }
+      )
+      .command(
+        'integrate-feedback-task <task-id>',
+        'フィードバックをタスクに統合',
+        (yargs) => {
+          return yargs.positional('task-id', {
+            describe: 'タスクID',
+            type: 'string',
+          });
+        }
+      )
+      .command(
+        'integrate-feedback-session <task-id> <session-id>',
+        'フィードバックをセッションに統合',
+        (yargs) => {
+          return yargs
+            .positional('task-id', { describe: 'タスクID', type: 'string' })
+            .positional('session-id', {
+              describe: 'セッションID',
+              type: 'string',
+            });
+        }
+      )
+      // --- Sync ---
+      .command('sync', 'コンポーネントの同期')
+      // --- Report ---
+      .command('report <type>', 'レポートの生成', (yargs) => {
+        return yargs
+          .positional('type', {
+            describe: 'レポートタイプ',
+            type: 'string',
+            choices: [
+              'task_summary',
+              'session_summary',
+              'feedback_summary',
+              'workflow_status',
+              'integration_status',
+            ],
+          }) // 選択肢を更新
+          .option('format', {
+            describe: '出力形式',
+            type: 'string',
+            choices: ['text', 'json', 'markdown'],
+            default: 'text',
+          })
+          .option('output', { describe: '出力ファイルパス', type: 'string' })
+          .option('no-cache', {
+            describe: 'キャッシュを使用しない',
+            type: 'boolean',
+            default: false,
+          });
+      })
+      // --- Interactive ---
+      .command('interactive', 'インタラクティブモード', {})
+      // --- General ---
+      .demandCommand(1, 'コマンドを指定してください')
+      .help()
+      .alias('h', 'help')
+      .version()
+      .alias('v', 'version')
+      .strict()
+      .argv.exitProcess(false) // エラー時にプロセスを終了しない
+  ); // 未定義のコマンドやオプションをエラーにする
+}
 
-// コマンド分岐処理を実装
-async function executeCommand(command, args) {
+/**
+ * 解析された引数に基づいてコマンドを実行する
+ * @param {object} argv - 解析された引数オブジェクト
+ * @param {CliFacade} cliFacade - CliFacade インスタンス
+ * @param {Logger} logger - Logger インスタンス
+ */
+async function runCommand(argv, cliFacade, logger) {
+  // 引数に cliFacade と logger を追加
+  const command = argv._[0];
+
   try {
-    switch (command) {
-      case 'init':
-        return await initializeWorkflow(args.projectId, args.request);
+    // CliFacade を通じてコマンドを実行
+    const result = await cliFacade.execute(command, argv);
 
-      case 'start-session':
-        return await startSession(args.previousSessionId);
-
-      case 'end-session':
-        return await endSession(args.sessionId);
-
-      case 'create-task':
-        return await createTask(args.title, args.description, args);
-
-      case 'update-task':
-        return await updateTask(args.taskId, args.status, args.progress);
-
-      case 'collect-feedback':
-        return await collectFeedback(args.taskId, args.testCommand);
-
-      case 'resolve-feedback':
-        return await resolveFeedback(args.feedbackId);
-
-      case 'sync':
-        return await syncComponents();
-
-      case 'report':
-        return await generateReport(args.type, args);
-
-      case 'status':
-        return await getWorkflowStatus();
-
-      case 'interactive':
-        return await startInteractiveMode();
-
-      default:
-        console.error(colors.red('不明なコマンド:'), command);
-        process.exit(1);
-    }
+    // 結果の表示 (displayResult 関数を使用)
+    displayResult(command, result);
   } catch (error) {
-    console.error(colors.red('エラーが発生しました:'), error.message);
+    // CliFacade からスローされたエラーを最終的にここで捕捉
+    // logger は main 関数スコープから渡す必要があるため、ここでは console.error を使用
+    console.error(
+      colors.red('\nエラーが発生しました:'),
+      error.message || error
+    );
+    if (error.context) {
+      console.error(
+        colors.red('詳細:'),
+        JSON.stringify(error.context, null, 2)
+      );
+    }
+    if (error.cause) {
+      console.error(colors.red('原因:'), error.cause.message || error.cause);
+    }
+    process.exit(1); // エラー終了
+  }
+}
+
+/**
+ * メイン処理
+ */
+async function main() {
+  let logger; // logger を main スコープで定義 (エラーハンドリング用)
+  try {
+    // bootstrap 関数を呼び出して初期化
+    const { logger: initializedLogger, cliFacade } = bootstrap();
+    logger = initializedLogger; // logger を設定
+
+    const argv = parseArguments(process.argv);
+    // runCommand に logger と cliFacade を渡す
+    await runCommand(argv, cliFacade, logger);
+  } catch (error) {
+    // bootstrap や parseArguments でのエラーを捕捉
+    // logger が利用可能であれば logger.fatal を使う (bootstrap 成功時)
+    if (logger) {
+      logger.fatal('CLI initialization or argument parsing failed:', error);
+    }
+    console.error(colors.red('\n致命的エラーが発生しました:'), error);
     process.exit(1);
   }
 }
 
-/**
- * ワークフローを初期化
- * @param {string} projectId - プロジェクトID
- * @param {string} request - 元のリクエスト
- */
-async function initializeWorkflow(projectId, request) {
-  console.log(colors.cyan('ワークフローの初期化...'), projectId);
-
-  const result = await integrationManager.initializeWorkflow(
-    projectId,
-    request
-  );
-
-  if (result.error) {
-    console.error(colors.red('初期化エラー:'), result.error);
-    return;
-  }
-
-  console.log(colors.green('ワークフローを初期化しました:'));
-  console.log(colors.yellow('プロジェクトID:'), result.project);
-  console.log(colors.yellow('リクエスト:'), result.original_request);
-}
-
-/**
- * セッションを開始
- * @param {string} previousSessionId - 前回のセッションID
- */
-async function startSession(previousSessionId) {
-  console.log(colors.cyan('セッションを開始します...'));
-
-  const result = await integrationManager.startSession(previousSessionId);
-
-  if (result.error) {
-    console.error(colors.red('セッション開始エラー:'), result.error);
-    return;
-  }
-
-  console.log(colors.green('セッションを開始しました:'));
-  console.log(colors.yellow('セッションID:'), result.session_id);
-
-  if (previousSessionId) {
-    console.log(colors.yellow('前回のセッションID:'), previousSessionId);
-  }
-}
-
-/**
- * セッションを終了
- * @param {string} sessionId - セッションID
- */
-async function endSession(sessionId) {
-  console.log(colors.cyan('セッションを終了します...'));
-
-  // セッションIDが指定されていない場合は最新のセッションを取得
-  if (!sessionId) {
-    const sessionManager = container.get('sessionManagerAdapter');
-    const session = await sessionManager.getLatestSession();
-    if (session) {
-      sessionId = session.session_id;
-    } else {
-      console.error(colors.red('アクティブなセッションが見つかりません'));
-      return;
-    }
-  }
-
-  const result = await integrationManager.endSession(sessionId);
-
-  if (result.error) {
-    console.error(colors.red('セッション終了エラー:'), result.error);
-    return;
-  }
-
-  console.log(colors.green('セッションを終了しました:'));
-  console.log(colors.yellow('セッションID:'), result.session_id);
-
-  // 引継ぎドキュメントを保存
-  const handoverPath = path.join(
-    process.cwd(),
-    'ai-context',
-    'sessions',
-    'session-handover.md'
-  );
-  fs.writeFileSync(handoverPath, result.handover_document, 'utf8');
-  console.log(colors.green('引継ぎドキュメントを保存しました:'), handoverPath);
-}
-
-/**
- * タスクを作成
- * @param {string} title - タスクタイトル
- * @param {string} description - タスク説明
- * @param {Object} options - その他のオプション
- */
-async function createTask(title, description, options) {
-  console.log(colors.cyan('タスクを作成します...'));
-
-  // タスクデータの構築
-  const taskData = {
-    title,
-    description,
-    status: options.status,
-    priority: options.priority,
-    estimated_hours: options.estimatedHours,
-    dependencies: [],
-  };
-
-  // 依存関係の処理
-  if (options.dependencies) {
-    const deps = options.dependencies.split(',').map((d) => d.trim());
-    taskData.dependencies = deps.map((taskId) => ({
-      task_id: taskId,
-      type: 'strong',
-    }));
-  }
-
-  const result = await integrationManager.createTask(taskData);
-
-  if (result.error) {
-    console.error(colors.red('タスク作成エラー:'), result.error);
-    return;
-  }
-
-  console.log(colors.green('タスクを作成しました:'));
-  console.log(colors.yellow('タスクID:'), result.id);
-  console.log(colors.yellow('タイトル:'), result.title);
-  console.log(colors.yellow('説明:'), result.description);
-  console.log(colors.yellow('状態:'), result.status);
-  console.log(colors.yellow('優先度:'), result.priority);
-}
-
-/**
- * タスク状態を更新
- * @param {string} taskId - タスクID
- * @param {string} status - 新しい状態
- * @param {number} progress - 進捗率
- */
-async function updateTask(taskId, status, progress) {
-  console.log(colors.cyan('タスク状態を更新します...'), taskId);
-
-  const result = await integrationManager.updateTaskStatus(
-    taskId,
-    status,
-    progress
-  );
-
-  if (result.error) {
-    console.error(colors.red('タスク更新エラー:'), result.error);
-    return;
-  }
-
-  console.log(colors.green('タスク状態を更新しました:'));
-  console.log(colors.yellow('タスクID:'), result.id);
-  console.log(colors.yellow('状態:'), result.status);
-  console.log(colors.yellow('進捗率:'), result.progress_percentage);
-  console.log(colors.yellow('進捗状態:'), result.progress_state);
-}
-
-/**
- * フィードバックを収集
- * @param {string} taskId - タスクID
- * @param {string} testCommand - テストコマンド
- */
-async function collectFeedback(taskId, testCommand) {
-  console.log(colors.cyan('フィードバックを収集します...'), taskId);
-  console.log(colors.cyan('テストコマンド:'), testCommand);
-
-  const result = await integrationManager.collectFeedback(taskId, testCommand);
-
-  if (result.error) {
-    console.error(colors.red('フィードバック収集エラー:'), result.error);
-    return;
-  }
-
-  console.log(colors.green('フィードバックを収集しました:'));
-  console.log(colors.yellow('タスクID:'), result.feedback_loop.task_id);
-
-  const verificationResults = result.feedback_loop.verification_results;
-  console.log(
-    colors.yellow('テスト結果:'),
-    verificationResults.passes_tests ? colors.green('成功') : colors.red('失敗')
-  );
-
-  if (verificationResults.test_summary) {
-    const summary = verificationResults.test_summary;
-    console.log(
-      colors.yellow('テスト概要:'),
-      `合計: ${summary.total}, 成功: ${summary.passed}, 失敗: ${summary.failed}, スキップ: ${summary.skipped}`
-    );
-  }
-
-  // 失敗したテストがある場合は表示
-  if (
-    verificationResults.failed_tests &&
-    verificationResults.failed_tests.length > 0
-  ) {
-    console.log(colors.yellow('\n失敗したテスト:'));
-    for (const test of verificationResults.failed_tests) {
-      console.log(`- ${test.test_name}: ${test.error}`);
-    }
-  }
-
-  // 提案がある場合は表示
-  if (
-    verificationResults.suggestions &&
-    verificationResults.suggestions.length > 0
-  ) {
-    console.log(colors.yellow('\n提案:'));
-    for (const suggestion of verificationResults.suggestions) {
-      if (typeof suggestion === 'string') {
-        console.log(`- ${suggestion}`);
-      } else {
-        console.log(`- [${suggestion.type || 'その他'}] ${suggestion.content}`);
-      }
-    }
-  }
-}
-
-/**
- * フィードバックを解決
- * @param {string} feedbackId - フィードバックID
- */
-async function resolveFeedback(feedbackId) {
-  console.log(colors.cyan('フィードバックを解決します...'), feedbackId);
-
-  const result = await integrationManager.resolveFeedback(feedbackId);
-
-  if (result.error) {
-    console.error(colors.red('フィードバック解決エラー:'), result.error);
-    return;
-  }
-
-  console.log(colors.green('フィードバックを解決しました:'));
-  console.log(colors.yellow('フィードバックID:'), result.feedback_loop.task_id);
-  console.log(
-    colors.yellow('ステータス:'),
-    result.feedback_loop.feedback_status
-  );
-
-  const verificationResults = result.feedback_loop.verification_results;
-  console.log(
-    colors.yellow('テスト結果:'),
-    verificationResults.passes_tests ? colors.green('成功') : colors.red('失敗')
-  );
-}
-
-/**
- * コンポーネント間の同期を実行
- */
-async function syncComponents() {
-  console.log(colors.cyan('コンポーネント間の同期を実行します...'));
-
-  const result = await integrationManager.syncComponents();
-
-  if (result === true) {
-    console.log(colors.green('コンポーネント間の同期が完了しました'));
-  } else {
-    console.error(colors.red('同期中にエラーが発生しました'));
-  }
-}
-
-/**
- * レポートを生成
- * @param {string} reportType - レポートタイプ
- * @param {Object} options - レポートオプション
- */
-async function generateReport(reportType, options) {
-  console.log(colors.cyan('レポートを生成します...'), reportType);
-
-  const reportOptions = {
-    format: options.format || 'text',
-    noCache: options.noCache || false,
-  };
-
-  const report = await integrationManager.generateReport(
-    reportType,
-    reportOptions
-  );
-
-  if (typeof report === 'object' && report.error) {
-    console.error(colors.red('レポート生成エラー:'), report.error);
-    return;
-  }
-
-  // 出力ファイルが指定されている場合はファイルに保存
-  if (options.output) {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
-    fs.writeFileSync(options.output, report, 'utf8');
-    console.log(colors.green('レポートを保存しました:'), options.output);
-  } else {
-    // 標準出力に表示
-    console.log(report);
-  }
-}
-
-/**
- * ワークフロー状態を取得
- */
-async function getWorkflowStatus() {
-  console.log(colors.cyan('ワークフロー状態を取得します...'));
-
-  // 現在の状態を取得
-  const stateManager = container.get('stateManagerAdapter');
-  const currentState = stateManager.getCurrentState();
-  console.log(colors.yellow('現在の状態:'), currentState);
-
-  // タスク状態の取得
-  try {
-    const taskManager = container.get('taskManagerAdapter');
-    const tasks = await taskManager.getAllTasks();
-
-    console.log(colors.yellow('\nタスク状態:'));
-    console.log(colors.yellow('プロジェクト:'), tasks.project);
-    console.log(colors.yellow('タスク数:'), tasks.decomposed_tasks.length);
-
-    const statusCounts = {
-      completed: tasks.decomposed_tasks.filter((t) => t.status === 'completed')
-        .length,
-      in_progress: tasks.decomposed_tasks.filter(
-        (t) => t.status === 'in_progress'
-      ).length,
-      pending: tasks.decomposed_tasks.filter((t) => t.status === 'pending')
-        .length,
-      blocked: tasks.decomposed_tasks.filter((t) => t.status === 'blocked')
-        .length,
-    };
-
-    console.log(colors.yellow('タスク状態カウント:'));
-    console.log(`- 完了: ${statusCounts.completed}`);
-    console.log(`- 進行中: ${statusCounts.in_progress}`);
-    console.log(`- 保留中: ${statusCounts.pending}`);
-    console.log(`- ブロック中: ${statusCounts.blocked}`);
-
-    if (tasks.current_focus) {
-      const focusTask = tasks.decomposed_tasks.find(
-        (t) => t.id === tasks.current_focus
-      );
-      if (focusTask) {
-        console.log(colors.yellow('\n現在のフォーカス:'));
-        console.log(`- ${focusTask.id}: ${focusTask.title}`);
-        console.log(
-          `  状態: ${focusTask.status}, 進捗率: ${focusTask.progress_percentage}%`
-        );
-      }
-    }
-  } catch (error) {
-    console.error(colors.red('タスク状態の取得に失敗しました:'), error.message);
-  }
-
-  // セッション状態の取得
-  try {
-    const sessionManager = container.get('sessionManager');
-    const session = await sessionManager.getLatestSession();
-
-    if (session) {
-      console.log(colors.yellow('\nセッション状態:'));
-      console.log(colors.yellow('セッションID:'), session.session_id);
-      console.log(
-        colors.yellow('タイムスタンプ:'),
-        session.session_handover.session_timestamp
-      );
-
-      if (session.session_handover.previous_session_id) {
-        console.log(
-          colors.yellow('前回のセッションID:'),
-          session.session_handover.previous_session_id
-        );
-      }
-    } else {
-      console.log(colors.yellow('\nアクティブなセッションはありません'));
-    }
-  } catch (error) {
-    console.error(
-      colors.red('セッション状態の取得に失敗しました:'),
-      error.message
-    );
-  }
-}
-
-/**
- * インタラクティブモードを開始
- */
-async function startInteractiveMode() {
-  console.log(colors.cyan('インタラクティブモードを開始します...'));
-  console.log(
-    colors.cyan('終了するには "exit" または "quit" と入力してください')
-  );
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: colors.green('knoa> '),
-  });
-
-  rl.prompt();
-
-  rl.on('line', async (line) => {
-    const input = line.trim();
-
-    if (input === 'exit' || input === 'quit') {
-      rl.close();
-      return;
-    }
-
-    const args = input.split(' ');
-    const command = args.shift();
-
-    try {
-      switch (command) {
-        case 'help':
-          console.log(colors.cyan('\n利用可能なコマンド:'));
-          console.log('  status - ワークフロー状態の取得');
-          console.log('  init <project-id> <request> - ワークフローの初期化');
-          console.log(
-            '  start-session [previous-session-id] - セッションの開始'
-          );
-          console.log('  end-session [session-id] - セッションの終了');
-          console.log('  create-task <title> <description> - タスクの作成');
-          console.log(
-            '  update-task <task-id> <status> [progress] - タスクの更新'
-          );
-          console.log(
-            '  collect-feedback <task-id> <test-command> - フィードバックの収集'
-          );
-          console.log(
-            '  resolve-feedback <feedback-id> - フィードバックの解決'
-          );
-          console.log('  sync - コンポーネントの同期');
-          console.log('  report <type> - レポートの生成');
-          console.log('  exit, quit - インタラクティブモードの終了');
-          break;
-
-        case 'status':
-          await getWorkflowStatus();
-          break;
-
-        case 'init':
-          if (args.length < 2) {
-            console.error(colors.red('使用方法: init <project-id> <request>'));
-            break;
-          }
-          await initializeWorkflow(args[0], args.slice(1).join(' '));
-          break;
-
-        case 'start-session':
-          await startSession(args[0]);
-          break;
-
-        case 'end-session':
-          await endSession(args[0]);
-          break;
-
-        case 'create-task':
-          if (args.length < 2) {
-            console.error(
-              colors.red('使用方法: create-task <title> <description>')
-            );
-            break;
-          }
-          await createTask(args[0], args.slice(1).join(' '), {
-            status: 'pending',
-            priority: 3,
-            estimatedHours: 1,
-          });
-          break;
-
-        case 'update-task':
-          if (args.length < 2) {
-            console.error(
-              colors.red('使用方法: update-task <task-id> <status> [progress]')
-            );
-            break;
-          }
-          await updateTask(
-            args[0],
-            args[1],
-            args[2] ? parseInt(args[2], 10) : undefined
-          );
-          break;
-
-        case 'collect-feedback':
-          if (args.length < 2) {
-            console.error(
-              colors.red('使用方法: collect-feedback <task-id> <test-command>')
-            );
-            break;
-          }
-          await collectFeedback(args[0], args.slice(1).join(' '));
-          break;
-
-        case 'resolve-feedback':
-          if (args.length < 1) {
-            console.error(
-              colors.red('使用方法: resolve-feedback <feedback-id>')
-            );
-            break;
-          }
-          await resolveFeedback(args[0]);
-          break;
-
-        case 'sync':
-          await syncComponents();
-          break;
-
-        case 'report':
-          if (args.length < 1) {
-            console.error(colors.red('使用方法: report <type>'));
-            break;
-          }
-          await generateReport(args[0], {
-            format: 'text',
-          });
-          break;
-
-        default:
-          console.error(colors.red('不明なコマンド:'), command);
-          console.log('ヘルプを表示するには "help" と入力してください');
-      }
-    } catch (error) {
-      console.error(colors.red('エラーが発生しました:'), error.message);
-    }
-
-    rl.prompt();
-  }).on('close', () => {
-    console.log(colors.cyan('インタラクティブモードを終了します'));
-    process.exit(0);
-  });
-
-  return new Promise((resolve) => {
-    rl.on('close', resolve);
+// main 関数と parseArguments をエクスポート (テスト用)
+module.exports = {
+  main,
+  parseArguments, // テスト用にエクスポート
+  runCommand, // テスト用にエクスポート
+  // initializeContainerAndComponents は削除
+};
+
+// スクリプトとして直接実行された場合のみ main を実行
+if (require.main === module) {
+  main().catch((error) => {
+    // main 内で捕捉されなかった予期せぬエラー
+    // logger が利用可能であれば logger.fatal を使うべきだが、
+    // main 実行前の初期化エラーの可能性も考慮し console.error を残す
+    console.error(colors.red('\n予期せぬ致命的エラーが発生しました:'), error);
+    process.exit(1);
   });
 }
-
-// メイン処理
-async function main() {
-  await executeCommand(argv._[0], argv);
-}
-
-main().catch(console.error);

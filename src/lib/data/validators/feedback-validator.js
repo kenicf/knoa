@@ -4,6 +4,10 @@
  * フィードバックデータの検証を行うクラス。
  * フィードバックの基本構造、タスクID形式、状態などの検証を行います。
  */
+const {
+  FEEDBACK_STATE_TRANSITIONS,
+  FEEDBACK_TYPE_WEIGHTS,
+} = require('../../core/constants'); // 定数をインポート
 
 /**
  * フィードバックバリデータクラス
@@ -14,22 +18,7 @@ class FeedbackValidator {
    * @param {Object} options - オプション
    */
   constructor(options = {}) {
-    // フィードバックの状態遷移の定義
-    this.feedbackStateTransitions = options.feedbackStateTransitions || {
-      open: ['in_progress', 'resolved', 'wontfix'],
-      in_progress: ['resolved', 'wontfix', 'open'],
-      resolved: ['open'],
-      wontfix: ['open'],
-    };
-
-    // フィードバックの種類と優先度の重み付け
-    this.feedbackTypeWeights = options.feedbackTypeWeights || {
-      security: 5,
-      functional: 5,
-      performance: 4,
-      ux: 3,
-      code_quality: 2,
-    };
+    // 状態遷移と重み付けは constants.js からインポートして使用
   }
 
   /**
@@ -73,7 +62,7 @@ class FeedbackValidator {
 
     // 状態のチェック
     if (loop.status) {
-      const validStatuses = Object.keys(this.feedbackStateTransitions);
+      const validStatuses = Object.keys(FEEDBACK_STATE_TRANSITIONS); // インポートした定数を使用
       if (!validStatuses.includes(loop.status)) {
         errors.push(`不正な状態です: ${loop.status}`);
       }
@@ -81,7 +70,7 @@ class FeedbackValidator {
 
     // フィードバックタイプのチェック
     if (loop.feedback_type) {
-      const validTypes = Object.keys(this.feedbackTypeWeights);
+      const validTypes = Object.keys(FEEDBACK_TYPE_WEIGHTS); // インポートした定数を使用
       if (!validTypes.includes(loop.feedback_type)) {
         errors.push(`不正なフィードバックタイプです: ${loop.feedback_type}`);
       }
@@ -308,7 +297,7 @@ class FeedbackValidator {
   validateStatusTransition(currentStatus, newStatus) {
     // 状態のチェック
 
-    const validStatuses = Object.keys(this.feedbackStateTransitions);
+    const validStatuses = Object.keys(FEEDBACK_STATE_TRANSITIONS); // インポートした定数を使用
 
     if (!validStatuses.includes(currentStatus)) {
       return {
@@ -328,7 +317,7 @@ class FeedbackValidator {
     if (
       currentStatus !== newStatus &&
       // eslint-disable-next-line security/detect-object-injection
-      !this.feedbackStateTransitions[currentStatus].includes(newStatus)
+      !FEEDBACK_STATE_TRANSITIONS[currentStatus].includes(newStatus) // インポートした定数を使用
     ) {
       return {
         isValid: false,
@@ -356,10 +345,12 @@ class FeedbackValidator {
 
     // フィードバックタイプによる重み付け
     const feedbackType = loop.feedback_type;
+
     // eslint-disable-next-line security/detect-object-injection
-    if (feedbackType && this.feedbackTypeWeights[feedbackType]) {
+    if (feedbackType && FEEDBACK_TYPE_WEIGHTS[feedbackType]) {
+      // インポートした定数を使用
       // eslint-disable-next-line security/detect-object-injection
-      score += this.feedbackTypeWeights[feedbackType];
+      score += FEEDBACK_TYPE_WEIGHTS[feedbackType]; // インポートした定数を使用
     }
 
     // テスト結果による重み付け

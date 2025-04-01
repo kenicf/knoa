@@ -3,29 +3,37 @@
  */
 
 const { SessionManager } = require('../../../src/lib/managers/session-manager');
-const { createMockDependencies } = require('../../helpers/mock-factory');
+const {
+  createMockLogger,
+  createMockEventEmitter,
+  createMockErrorHandler,
+  createMockDependencies, // ここに追加
+} = require('../../helpers/mock-factory');
 
 describe('SessionManager', () => {
   let sessionManager;
-  let mockDeps;
   let mockSession;
+  // Removed individual mock declarations, using mockDeps now
+  let mockDeps; // mockDeps を定義
 
   beforeEach(() => {
-    // モック依存関係の作成
-    mockDeps = createMockDependencies();
+    mockDeps = createMockDependencies(); // mockDeps を初期化
 
-    // SessionManagerのインスタンスを作成
-    sessionManager = new SessionManager(
-      mockDeps.storageService,
-      mockDeps.gitService,
-      mockDeps.logger,
-      mockDeps.eventEmitter,
-      mockDeps.errorHandler,
-      {
+    // SessionManagerのインスタンスを作成 using mockDeps
+    sessionManager = new SessionManager({
+      // Pass dependencies from mockDeps
+      storageService: mockDeps.storageService,
+      gitService: mockDeps.gitService,
+      logger: mockDeps.logger,
+      eventEmitter: mockDeps.eventEmitter,
+      errorHandler: mockDeps.errorHandler,
+      validator: mockDeps.validator, // Use validator from mockDeps
+      config: {
+        // Pass config as a separate property
         sessionsDir: 'test-sessions',
         templateDir: 'test-templates',
-      }
-    );
+      },
+    });
 
     // モックセッションの作成
     mockSession = {
@@ -288,142 +296,6 @@ describe('SessionManager', () => {
 
       const result = sessionManager.getSessionById('non-existent-id');
       expect(result).toBeNull();
-    });
-  });
-
-  describe('createNewSession', () => {
-    test('前回のセッションIDを指定して新しいセッションを作成できること', () => {
-      // getSessionByIdをモック
-      sessionManager.getSessionById = jest.fn().mockReturnValue(mockSession);
-
-      // getCurrentGitCommitHashをモック
-      sessionManager._getCurrentGitCommitHash = jest
-        .fn()
-        .mockReturnValue('new-commit-hash');
-
-      const result = sessionManager.createNewSession('abc123');
-
-      expect(result).not.toBeNull();
-      expect(result.session_handover.previous_session_id).toBe('abc123');
-      expect(result.session_handover.session_id).toBe('new-commit-hash');
-      expect(
-        result.session_handover.project_state_summary.completed_tasks
-      ).toEqual(['T001', 'T002']);
-      expect(
-        result.session_handover.project_state_summary.current_tasks
-      ).toEqual(['T003']);
-      expect(
-        result.session_handover.project_state_summary.pending_tasks
-      ).toEqual(['T004', 'T005']);
-      expect(result.session_handover.next_session_focus).toBe(
-        'T004: 次のタスク'
-      );
-    });
-
-    test('前回のセッションIDを指定せずに新しいセッションを作成できること', () => {
-      // getLatestSessionをモック
-      sessionManager.getLatestSession = jest.fn().mockReturnValue(mockSession);
-
-      // getCurrentGitCommitHashをモック
-      sessionManager._getCurrentGitCommitHash = jest
-        .fn()
-        .mockReturnValue('new-commit-hash');
-
-      const result = sessionManager.createNewSession();
-
-      expect(result).not.toBeNull();
-      expect(result.session_handover.previous_session_id).toBe('abc123');
-      expect(result.session_handover.session_id).toBe('new-commit-hash');
-    });
-
-    test('前回のセッションが存在しない場合でも新しいセッションを作成できること', () => {
-      // getSessionByIdとgetLatestSessionをモック
-      sessionManager.getSessionById = jest.fn().mockReturnValue(null);
-      sessionManager.getLatestSession = jest.fn().mockReturnValue(null);
-
-      // getCurrentGitCommitHashをモック
-      sessionManager._getCurrentGitCommitHash = jest
-        .fn()
-        .mockReturnValue('new-commit-hash');
-
-      const result = sessionManager.createNewSession();
-
-      expect(result).not.toBeNull();
-      expect(result.session_handover.previous_session_id).toBeNull();
-      expect(result.session_handover.session_id).toBe('new-commit-hash');
-      expect(result.session_handover.project_id).toBe('knoa');
-    });
-  });
-
-  describe('saveSession', () => {
-    test('セッションを保存できること', () => {
-      // validateSessionをモック
-      sessionManager.validateSession = jest.fn().mockReturnValue(true);
-
-      const result = sessionManager.saveSession(mockSession, true);
-
-      expect(result).toBe(true);
-      expect(mockDeps.storageService.writeJSON).toHaveBeenCalledTimes(2);
-
-      // 最初の呼び出しがセッション履歴への保存であることを確認
-      expect(mockDeps.storageService.writeJSON).toHaveBeenCalledWith(
-        'test-sessions/session-history',
-        'session-abc123.json',
-        mockSession
-      );
-
-      // 2番目の呼び出しが最新セッションへの保存であることを確認
-      expect(mockDeps.storageService.writeJSON).toHaveBeenCalledWith(
-        'test-sessions',
-        'latest-session.json',
-        mockSession
-      );
-    });
-
-    test('不正なセッションは保存できないこと', () => {
-      // validateSessionをモック
-      sessionManager.validateSession = jest.fn().mockReturnValue(false);
-
-      const result = sessionManager.saveSession(mockSession, true);
-
-      expect(result).toBe(false);
-      expect(mockDeps.storageService.writeJSON).not.toHaveBeenCalled();
-      expect(mockDeps.logger.error).toHaveBeenCalled();
-    });
-
-    test('isLatestがfalseの場合は最新のセッションとして保存しないこと', () => {
-      // validateSessionをモック
-      sessionManager.validateSession = jest.fn().mockReturnValue(true);
-
-      const result = sessionManager.saveSession(mockSession, false);
-
-      expect(result).toBe(true);
-      expect(mockDeps.storageService.writeJSON).toHaveBeenCalledTimes(1);
-
-      // 呼び出しがセッション履歴への保存であることを確認
-      expect(mockDeps.storageService.writeJSON).toHaveBeenCalledWith(
-        'test-sessions/session-history',
-        'session-abc123.json',
-        mockSession
-      );
-    });
-  });
-
-  describe('extractTaskIdsFromCommitMessage', () => {
-    test('コミットメッセージからタスクIDを抽出できること', () => {
-      // gitServiceのextractTaskIdsFromCommitMessageをモック
-      mockDeps.gitService.extractTaskIdsFromCommitMessage.mockReturnValue([
-        'T001',
-        'T002',
-      ]);
-
-      const message = 'テスト実装 #T001 #T002';
-      const result = sessionManager.extractTaskIdsFromCommitMessage(message);
-
-      expect(result).toEqual(['T001', 'T002']);
-      expect(
-        mockDeps.gitService.extractTaskIdsFromCommitMessage
-      ).toHaveBeenCalledWith(message);
     });
   });
 

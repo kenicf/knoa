@@ -25,14 +25,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/61</span>
+                <span class='fraction'>0/58</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/75</span>
+                <span class='fraction'>0/73</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/61</span>
+                <span class='fraction'>0/58</span>
             </div>
         
             
@@ -348,21 +348,7 @@
 <a name='L283'></a><a href='#L283'>283</a>
 <a name='L284'></a><a href='#L284'>284</a>
 <a name='L285'></a><a href='#L285'>285</a>
-<a name='L286'></a><a href='#L286'>286</a>
-<a name='L287'></a><a href='#L287'>287</a>
-<a name='L288'></a><a href='#L288'>288</a>
-<a name='L289'></a><a href='#L289'>289</a>
-<a name='L290'></a><a href='#L290'>290</a>
-<a name='L291'></a><a href='#L291'>291</a>
-<a name='L292'></a><a href='#L292'>292</a>
-<a name='L293'></a><a href='#L293'>293</a>
-<a name='L294'></a><a href='#L294'>294</a>
-<a name='L295'></a><a href='#L295'>295</a>
-<a name='L296'></a><a href='#L296'>296</a>
-<a name='L297'></a><a href='#L297'>297</a>
-<a name='L298'></a><a href='#L298'>298</a>
-<a name='L299'></a><a href='#L299'>299</a>
-<a name='L300'></a><a href='#L300'>300</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L286'></a><a href='#L286'>286</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -449,22 +435,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -496,6 +466,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -581,6 +552,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -746,26 +718,10 @@ class BaseAdapter {
       });
     }
 &nbsp;
-    // エラーイベントを発行
-<span class="cstat-no" title="statement not covered" >    if (this.eventEmitter) {</span>
-      const component = <span class="cstat-no" title="statement not covered" >this.constructor.name</span>
-        .replace('Adapter', '')
-        .toLowerCase();
-<span class="cstat-no" title="statement not covered" >      this.eventEmitter.emitError(</span>
-        error,
-        component,
-        operation,
-        context,
-        details
-      );
-    } else {
-      // イベントエミッターがない場合は直接ロガーに出力
-<span class="cstat-no" title="statement not covered" >      this.logger.error(</span>
-        `Error in ${this.constructor.name}.${operation}:`,
-        error,
-        details
-      );
-    }
+    // エラーイベントを発行 (修正: _emitErrorEvent を使用)
+<span class="cstat-no" title="statement not covered" >    this._emitErrorEvent(error, operation, context, details);</span>
+&nbsp;
+    // イベントエミッターがない場合の直接ログ出力は _emitErrorEvent 内で行われるため削除
 &nbsp;
     // 構造化されたエラー情報を返す
 <span class="cstat-no" title="statement not covered" >    return {</span>
@@ -795,7 +751,8 @@ class BaseAdapter {
     }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    for (const param of required) {</span>
-<span class="cstat-no" title="statement not covered" >      if (params[param] === undefined) {</span>
+      // params オブジェクト自身がプロパティを持っているかを確認 (プロトタイプ汚染対策)
+<span class="cstat-no" title="statement not covered" >      if (!Object.prototype.hasOwnProperty.call(params, param)) {</span>
 <span class="cstat-no" title="statement not covered" >        throw new ValidationError(`Parameter '${param}' is required`);</span>
       }
     }
@@ -880,9 +837,10 @@ class BaseAdapter {
 &nbsp;
       // 古いイベント名のサポート（オプション）
 <span class="cstat-no" title="statement not covered" >      if (bridgeOldEvents) {</span>
-        const oldEventName = <span class="cstat-no" title="statement not covered" >EVENT_MAP[standardEvent];</span>
-&nbsp;
-<span class="cstat-no" title="statement not covered" >        if (oldEventName) {</span>
+        // EVENT_MAP 自身がプロパティを持っているかを確認 (プロトタイプ汚染対策)
+<span class="cstat-no" title="statement not covered" >        if (Object.prototype.hasOwnProperty.call(EVENT_MAP, standardEvent)) {</span>
+          // eslint-disable-next-line security/detect-object-injection
+          const oldEventName = <span class="cstat-no" title="statement not covered" >EVENT_MAP[standardEvent];</span>
 <span class="cstat-no" title="statement not covered" >          this.eventEmitter.emit(oldEventName, enhancedData);</span>
 &nbsp;
           // 警告ログを出力（開発環境のみ）
@@ -967,7 +925,7 @@ class BaseAdapter {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-03-29T11:46:38.498Z
+                at 2025-04-01T22:13:42.734Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

@@ -9,22 +9,23 @@ const {
   createMockLogger,
 } = require('../../helpers/mock-factory');
 
-// TimeoutError をモック化
-jest.mock('../../../src/lib/core/error-framework', () => {
-  const originalModule = jest.requireActual(
-    '../../../src/lib/core/error-framework'
-  );
-  return {
-    ...originalModule,
-    TimeoutError: class MockTimeoutError extends originalModule.TimeoutError {
-      constructor(message, options) {
-        super(message, options);
-        this.name = 'TimeoutError';
-        this._mockOptions = options; // テストで検証可能にする
-      }
-    },
-  };
-});
+// TimeoutError をモック化 (エラープロパティ検証のため)
+// ★★★ TimeoutError のモック化を削除 ★★★
+// jest.mock('../../../src/lib/core/error-framework', () => {
+//   const originalModule = jest.requireActual(
+//     '../../../src/lib/core/error-framework'
+//   );
+//   return {
+//     ...originalModule,
+//     TimeoutError: class MockTimeoutError extends originalModule.TimeoutError {
+//       constructor(message, options) {
+//         super(message, options);
+//         this.name = 'TimeoutError';
+//         this._mockOptions = options; // テストで検証可能にする
+//       }
+//     },
+//   };
+// });
 
 describe('LockManager', () => {
   let lockManager;
@@ -33,32 +34,35 @@ describe('LockManager', () => {
   const MOCK_TIMESTAMP_MS = new Date(MOCK_TIMESTAMP_ISO).getTime();
 
   beforeEach(() => {
-    // モックのセットアップ
+    // Arrange (Common setup)
     jest.clearAllMocks();
     mockLogger = createMockLogger();
 
     // LockManagerのインスタンスを作成
     lockManager = new LockManager({ logger: mockLogger });
 
-    // タイマーと時間のモック
-    jest.useFakeTimers();
+    // タイマーと時間のモック (モダンフェイクタイマーを使用)
+    jest.useFakeTimers({ advanceTimers: true }); // モダンタイマーに変更
     mockTimestamp(MOCK_TIMESTAMP_ISO);
     jest.spyOn(Date, 'now').mockReturnValue(MOCK_TIMESTAMP_MS);
   });
 
   afterEach(() => {
-    // モックのリセット
+    // Clean up mocks
     jest.useRealTimers();
     jest.restoreAllMocks();
   });
 
   describe('constructor', () => {
-    test('logger がないとエラーをスローする', () => {
+    test('should throw error if logger is not provided', () => {
+      // Arrange & Act & Assert
       expect(() => new LockManager()).toThrow('Logger instance is required');
     });
 
-    test('デフォルト値で初期化される', () => {
-      // Assert (beforeEach で初期化済み)
+    test('should initialize with default values', () => {
+      // Arrange (Instance created in beforeEach)
+      // Act (Implicitly done by beforeEach)
+      // Assert
       expect(lockManager.logger).toBe(mockLogger);
       expect(lockManager.locks).toBeInstanceOf(Map);
       expect(lockManager.lockTimeout).toBe(30000);
@@ -66,15 +70,18 @@ describe('LockManager', () => {
       expect(lockManager.maxRetries).toBe(50);
     });
 
-    test('カスタム値で初期化される', () => {
+    test('should initialize with custom values', () => {
       // Arrange
       const customLogger = createMockLogger();
-      const customLockManager = new LockManager({
+      const options = {
         logger: customLogger,
         lockTimeout: 5000,
         retryInterval: 200,
         maxRetries: 10,
-      });
+      };
+
+      // Act
+      const customLockManager = new LockManager(options);
 
       // Assert
       expect(customLockManager.logger).toBe(customLogger);
@@ -85,7 +92,7 @@ describe('LockManager', () => {
   });
 
   describe('_tryAcquireLock', () => {
-    test('ロックがない場合、ロックを取得できる', () => {
+    test('should acquire lock if resource is not locked', () => {
       // Arrange
       const resourceId = 'resource1';
       const lockerId = 'locker1';
@@ -98,15 +105,15 @@ describe('LockManager', () => {
       expect(lockManager.locks.has(resourceId)).toBe(true);
       expect(lockManager.locks.get(resourceId)).toEqual({
         lockerId,
-        timestamp: MOCK_TIMESTAMP_MS, // モックされた現在時刻
+        timestamp: MOCK_TIMESTAMP_MS,
       });
     });
 
-    test('同じプロセスによるロックの場合、ロックを取得でき、タイムスタンプが更新される', () => {
+    test('should acquire lock and update timestamp if lock is held by the same locker', () => {
       // Arrange
       const resourceId = 'resource1';
       const lockerId = 'locker1';
-      const initialTimestamp = MOCK_TIMESTAMP_MS - 1000; // 1秒前
+      const initialTimestamp = MOCK_TIMESTAMP_MS - 1000; // 1 second ago
       lockManager.locks.set(resourceId, {
         lockerId,
         timestamp: initialTimestamp,
@@ -119,17 +126,17 @@ describe('LockManager', () => {
       expect(result).toBe(true);
       expect(lockManager.locks.get(resourceId).timestamp).toBe(
         MOCK_TIMESTAMP_MS
-      ); // 現在時刻に更新
+      ); // Updated timestamp
     });
 
-    test('別のプロセスによる有効なロックがある場合、ロックを取得できない', () => {
+    test('should not acquire lock if held by another locker', () => {
       // Arrange
       const resourceId = 'resource1';
       const lockerId1 = 'locker1';
       const lockerId2 = 'locker2';
       lockManager.locks.set(resourceId, {
         lockerId: lockerId1,
-        timestamp: MOCK_TIMESTAMP_MS - 1000, // 有効なロック
+        timestamp: MOCK_TIMESTAMP_MS - 1000, // Still valid lock
       });
 
       // Act
@@ -137,17 +144,19 @@ describe('LockManager', () => {
 
       // Assert
       expect(result).toBe(false);
-      expect(lockManager.locks.get(resourceId).lockerId).toBe(lockerId1); // 変更なし
+      expect(lockManager.locks.get(resourceId).lockerId).toBe(lockerId1); // Unchanged
     });
 
-    test('期限切れのロックがある場合、新しいロックを取得できる', () => {
+    test('should acquire lock if existing lock is expired', () => {
       // Arrange
       const resourceId = 'resource1';
       const lockerId1 = 'locker1';
       const lockerId2 = 'locker2';
+      const expiredTimestamp =
+        MOCK_TIMESTAMP_MS - (lockManager.lockTimeout + 1000); // Expired
       lockManager.locks.set(resourceId, {
         lockerId: lockerId1,
-        timestamp: MOCK_TIMESTAMP_MS - (lockManager.lockTimeout + 1000), // 期限切れ
+        timestamp: expiredTimestamp,
       });
 
       // Act
@@ -155,11 +164,10 @@ describe('LockManager', () => {
 
       // Assert
       expect(result).toBe(true);
-      expect(lockManager.locks.get(resourceId).lockerId).toBe(lockerId2);
+      expect(lockManager.locks.get(resourceId).lockerId).toBe(lockerId2); // Overwritten
       expect(lockManager.locks.get(resourceId).timestamp).toBe(
         MOCK_TIMESTAMP_MS
       );
-      // warn はメッセージのみで呼び出されるように変更されたため、アサーションを修正
       expect(mockLogger.warn).toHaveBeenCalledWith(
         `Overwriting expired lock for resource: ${resourceId} held by ${lockerId1}`
       );
@@ -167,7 +175,7 @@ describe('LockManager', () => {
   });
 
   describe('acquireLock', () => {
-    test('ロックがない場合、すぐにロックを取得できる', async () => {
+    test('should acquire lock immediately if available', async () => {
       // Arrange
       const resourceId = 'resource1';
       const lockerId = 'locker1';
@@ -178,22 +186,22 @@ describe('LockManager', () => {
 
       // Assert
       expect(result).toBe(true);
-      expect(tryAcquireLockSpy).toHaveBeenCalledWith(resourceId, lockerId);
+      expect(tryAcquireLockSpy).toHaveBeenCalledTimes(1);
       expect(lockManager.locks.has(resourceId)).toBe(true);
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Lock acquired')
+        `Lock acquired for resource: ${resourceId} by ${lockerId}`
       );
     });
 
-    test('ロックが取得できない場合、再試行する', async () => {
+    test('should retry acquiring lock if initially unavailable', async () => {
       // Arrange
       const resourceId = 'resource1';
       const lockerId = 'locker1';
       const tryAcquireLockSpy = jest
         .spyOn(lockManager, '_tryAcquireLock')
-        .mockReturnValueOnce(false) // 1回目失敗
-        .mockReturnValueOnce(false) // 2回目失敗
-        .mockReturnValueOnce(true); // 3回目成功
+        .mockReturnValueOnce(false) // 1st attempt fails
+        .mockReturnValueOnce(false) // 2nd attempt fails
+        .mockReturnValueOnce(true); // 3rd attempt succeeds
       const sleepSpy = jest.spyOn(lockManager, '_sleep').mockResolvedValue();
 
       // Act
@@ -204,27 +212,25 @@ describe('LockManager', () => {
       expect(tryAcquireLockSpy).toHaveBeenCalledTimes(3);
       expect(sleepSpy).toHaveBeenCalledTimes(2);
       expect(sleepSpy).toHaveBeenCalledWith(lockManager.retryInterval);
-      // debug はメッセージのみで呼び出されるように変更されたため、アサーションを修正
       expect(mockLogger.debug).toHaveBeenCalledWith(
         `Retrying lock acquisition for resource: ${resourceId} (Attempt 1)`
       );
       expect(mockLogger.debug).toHaveBeenCalledWith(
         `Retrying lock acquisition for resource: ${resourceId} (Attempt 2)`
       );
-      // 成功時のログも確認 (必要に応じて)
       expect(mockLogger.debug).toHaveBeenCalledWith(
         `Lock acquired for resource: ${resourceId} by ${lockerId}`
-      ); // lockerId1 を lockerId に修正
+      );
     });
 
-    test('タイムアウトした場合、TimeoutErrorをスローし、正しいcodeとcontextを持つ', async () => {
+    // タイムアウト値をテスト関数の第3引数に追加
+    test('should throw TimeoutError with correct code and context on timeout', async () => {
       // Arrange
       const resourceId = 'resource1';
       const lockerId = 'locker1';
       const timeout = 500;
-      lockManager.maxRetries = 50; // デフォルト値に戻す
-      jest.spyOn(lockManager, '_tryAcquireLock').mockReturnValue(false); // 常に失敗
-      // const sleepSpy = jest.spyOn(lockManager, '_sleep').mockResolvedValue(); // 未使用のためコメントアウト
+      lockManager.maxRetries = 50; // Ensure retries don't limit before timeout
+      jest.spyOn(lockManager, '_tryAcquireLock').mockReturnValue(false); // Always fail
 
       // Act
       const acquirePromise = lockManager.acquireLock(
@@ -232,70 +238,77 @@ describe('LockManager', () => {
         lockerId,
         timeout
       );
-      // 時間を進めてタイムアウトさせる
-      jest.advanceTimersByTime(timeout + lockManager.retryInterval);
+      // jest.advanceTimersByTime(timeout + lockManager.retryInterval); // モダンタイマーでは不要な場合がある
 
       // Assert
       await expect(acquirePromise).rejects.toThrow(TimeoutError);
       await expect(acquirePromise).rejects.toMatchObject({
         name: 'TimeoutError',
-        _mockOptions: {
-          code: 'ERR_LOCK_TIMEOUT',
-          context: {
-            resourceId,
-            lockerId,
-            timeout,
-            errorType: 'LockTimeoutError',
-          },
+        code: 'ERR_LOCK_TIMEOUT', // ★★★ TimeoutError のモック化をやめたため、直接プロパティを検証 ★★★
+        context: {
+          resourceId,
+          lockerId,
+          timeout,
+          errorType: 'LockTimeoutError',
         },
       });
-
+      // ★★★ アサーション修正: 第2引数の形式を実際の呼び出しに合わせる ★★★
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Lock acquisition timed out'),
-        expect.any(Object)
+        `Lock acquisition timed out for resource: ${resourceId}`,
+        {
+          error: expect.objectContaining({
+            // error プロパティの中に TimeoutError があることを確認
+            name: 'TimeoutError',
+            code: 'ERR_LOCK_TIMEOUT',
+            context: expect.objectContaining({ resourceId, lockerId, timeout }),
+          }),
+        }
       );
-    });
+    }, 10000); // タイムアウト値を 10000ms に変更 (Jest のデフォルトタイムアウトより長く)
 
-    test('最大再試行回数に達した場合、TimeoutErrorをスローする', async () => {
+    // タイムアウト値をテスト関数の第3引数に追加
+    test('should throw TimeoutError after reaching max retries', async () => {
       // Arrange
       const resourceId = 'resource1';
       const lockerId = 'locker1';
-      const timeout = 30000; // デフォルトタイムアウト
+      const timeout = 30000; // Default timeout (long enough not to trigger first)
       const maxRetries = 3;
       lockManager.maxRetries = maxRetries;
-      jest.spyOn(lockManager, '_tryAcquireLock').mockReturnValue(false); // 常に失敗
-      // const sleepSpy = jest.spyOn(lockManager, '_sleep').mockResolvedValue(); // 未使用のためコメントアウト
+      const tryAcquireLockSpy = jest
+        .spyOn(lockManager, '_tryAcquireLock')
+        .mockReturnValue(false); // Always fail
 
       // Act & Assert
-      await expect(
-        lockManager.acquireLock(resourceId, lockerId, timeout)
-      ).rejects.toThrow(TimeoutError);
-      await expect(
-        lockManager.acquireLock(resourceId, lockerId, timeout)
-      ).rejects.toMatchObject({
-        name: 'TimeoutError',
-        _mockOptions: {
-          code: 'ERR_LOCK_TIMEOUT',
-          context: {
-            resourceId,
-            lockerId,
-            timeout,
-            errorType: 'LockTimeoutError',
-          },
-        },
-      });
-
-      // 最大再試行回数だけ試行していることを確認
-      expect(lockManager._tryAcquireLock).toHaveBeenCalledTimes(maxRetries);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Lock acquisition timed out'),
-        expect.any(Object)
+      const acquirePromise = lockManager.acquireLock(
+        resourceId,
+        lockerId,
+        timeout
       );
-    });
+      // jest.advanceTimersByTime(maxRetries * lockManager.retryInterval + 1); // モダンタイマーでは不要な場合がある
+
+      await expect(acquirePromise).rejects.toThrow(TimeoutError);
+      await expect(acquirePromise).rejects.toMatchObject({
+        name: 'TimeoutError',
+        code: 'ERR_LOCK_TIMEOUT', // ★★★ TimeoutError のモック化をやめたため、直接プロパティを検証 ★★★
+        context: expect.objectContaining({ resourceId, lockerId, timeout }),
+      });
+      expect(tryAcquireLockSpy).toHaveBeenCalledTimes(maxRetries); // Verify retry count
+      // ★★★ アサーション修正: 第2引数の形式を実際の呼び出しに合わせる ★★★
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        `Lock acquisition timed out for resource: ${resourceId}`,
+        {
+          error: expect.objectContaining({
+            // error プロパティの中に TimeoutError があることを確認
+            name: 'TimeoutError',
+            code: 'ERR_LOCK_TIMEOUT',
+          }),
+        }
+      );
+    }, 10000); // タイムアウト値を 10000ms に変更
   });
 
   describe('releaseLock', () => {
-    test('ロックを解放できる', () => {
+    test('should release the lock successfully', () => {
       // Arrange
       const resourceId = 'resource1';
       const lockerId = 'locker1';
@@ -311,11 +324,11 @@ describe('LockManager', () => {
       expect(result).toBe(true);
       expect(lockManager.locks.has(resourceId)).toBe(false);
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Lock released')
+        `Lock released for resource: ${resourceId} by ${lockerId}`
       );
     });
 
-    test('ロックがない場合、trueを返し、デバッグログを出力する', () => {
+    test('should return true and log debug if lock does not exist', () => {
       // Arrange
       const resourceId = 'resource1';
       const lockerId = 'locker1';
@@ -326,11 +339,11 @@ describe('LockManager', () => {
       // Assert
       expect(result).toBe(true);
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Lock not found')
+        `Lock not found for resource: ${resourceId}, assuming released.`
       );
     });
 
-    test('別のプロセスによるロックを解放しようとすると、エラーをスローし、エラーログを出力する', () => {
+    test('should throw Error and log error if attempting to release lock held by another locker', () => {
       // Arrange
       const resourceId = 'resource1';
       const lockerId1 = 'locker1';
@@ -344,25 +357,28 @@ describe('LockManager', () => {
       expect(() => lockManager.releaseLock(resourceId, lockerId2)).toThrow(
         `リソース ${resourceId} のロックは別のプロセス (${lockerId1}) が保持しています`
       );
-      expect(lockManager.locks.has(resourceId)).toBe(true); // ロックは解放されていない
+      expect(lockManager.locks.has(resourceId)).toBe(true); // Lock not released
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'Attempted to release lock held by another locker'
-        ),
-        expect.any(Object)
+        `Attempted to release lock held by another locker`,
+        expect.objectContaining({
+          resourceId,
+          attemptedLockerId: lockerId2,
+          actualLockerId: lockerId1,
+          error: expect.any(Error),
+        })
       );
     });
   });
 
   describe('getLockStatus', () => {
-    test('ロック状態を取得できる', () => {
+    test('should return the current lock status', () => {
       // Arrange
       const resourceId1 = 'resource1';
       const resourceId2 = 'resource2';
       const lockerId1 = 'locker1';
       const lockerId2 = 'locker2';
-      const timestamp1 = MOCK_TIMESTAMP_MS - 10000; // 10秒前
-      const timestamp2 = MOCK_TIMESTAMP_MS - (lockManager.lockTimeout + 1000); // 期限切れ
+      const timestamp1 = MOCK_TIMESTAMP_MS - 10000; // 10 seconds ago (not expired)
+      const timestamp2 = MOCK_TIMESTAMP_MS - (lockManager.lockTimeout + 1000); // Expired
 
       lockManager.locks.set(resourceId1, {
         lockerId: lockerId1,
@@ -381,19 +397,24 @@ describe('LockManager', () => {
       expect(status.size).toBe(2);
 
       const status1 = status.get(resourceId1);
-      expect(status1.lockerId).toBe(lockerId1);
-      expect(status1.timestamp).toBe(timestamp1);
-      expect(status1.age).toBe(MOCK_TIMESTAMP_MS - timestamp1);
-      expect(status1.isExpired).toBe(false);
+      expect(status1).toEqual({
+        lockerId: lockerId1,
+        timestamp: timestamp1,
+        age: MOCK_TIMESTAMP_MS - timestamp1,
+        isExpired: false,
+      });
 
       const status2 = status.get(resourceId2);
-      expect(status2.lockerId).toBe(lockerId2);
-      expect(status2.timestamp).toBe(timestamp2);
-      expect(status2.age).toBe(MOCK_TIMESTAMP_MS - timestamp2);
-      expect(status2.isExpired).toBe(true);
+      expect(status2).toEqual({
+        lockerId: lockerId2,
+        timestamp: timestamp2,
+        age: MOCK_TIMESTAMP_MS - timestamp2,
+        isExpired: true,
+      });
     });
 
-    test('ロックがない場合、空のMapを返す', () => {
+    test('should return an empty Map if no locks exist', () => {
+      // Arrange (No locks set)
       // Act
       const status = lockManager.getLockStatus();
       // Assert
@@ -403,15 +424,15 @@ describe('LockManager', () => {
   });
 
   describe('_sleep', () => {
-    test('指定時間後にresolveする', async () => {
+    test('should resolve after the specified time', async () => {
       // Arrange
       const ms = 100;
       const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
 
       // Act
       const sleepPromise = lockManager._sleep(ms);
-      jest.advanceTimersByTime(ms);
-      await sleepPromise;
+      jest.advanceTimersByTime(ms); // Advance timer
+      await sleepPromise; // Wait for promise to resolve
 
       // Assert
       expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), ms);

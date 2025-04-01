@@ -5,54 +5,12 @@
  * CRUD操作、バリデーション、アーカイブなどの基本機能を提供します。
  */
 
-/**
- * 検証エラークラス
- */
-class ValidationError extends Error {
-  /**
-   * コンストラクタ
-   * @param {string} message - エラーメッセージ
-   * @param {Array} errors - エラー詳細の配列
-   */
-  constructor(message, errors = []) {
-    // エラーメッセージにエラー詳細を追加
-    const fullMessage =
-      errors.length > 0 ? `${message}: ${errors.join(', ')}` : message;
-    super(fullMessage);
-    this.name = 'ValidationError';
-    this.errors = errors;
-  }
-}
-
-/**
- * 未検出エラークラス
- */
-class NotFoundError extends Error {
-  /**
-   * コンストラクタ
-   * @param {string} message - エラーメッセージ
-   */
-  constructor(message) {
-    super(message);
-    this.name = 'NotFoundError';
-  }
-}
-
-/**
- * データ整合性エラークラス
- */
-class DataConsistencyError extends Error {
-  /**
-   * コンストラクタ
-   * @param {string} message - エラーメッセージ
-   * @param {Object} context - エラーコンテキスト
-   */
-  constructor(message, context = {}) {
-    super(message);
-    this.name = 'DataConsistencyError';
-    this.context = context;
-  }
-}
+// src/lib/utils/errors.js からエラークラスをインポート
+const {
+  ValidationError,
+  NotFoundError,
+  DataConsistencyError,
+} = require('../utils/errors');
 
 /**
  * リポジトリ基本クラス
@@ -60,25 +18,40 @@ class DataConsistencyError extends Error {
 class Repository {
   /**
    * コンストラクタ
-   * @param {Object} storageService - ストレージサービス
-   * @param {string} entityName - エンティティ名
    * @param {Object} options - オプション
-   * @param {string} options.directory - ディレクトリパス
-   * @param {string} options.currentFile - 現在のファイル名
-   * @param {string} options.historyDirectory - 履歴ディレクトリ名
-   * @param {Object} options.validator - バリデータ
+   * @param {Object} options.storageService - ストレージサービス (必須)
+   * @param {string} options.entityName - エンティティ名 (必須)
+   * @param {Object} options.logger - ロガーインスタンス (必須)
+   * @param {Object} [options.eventEmitter] - イベントエミッターインスタンス
+   * @param {Object} [options.errorHandler] - エラーハンドラーインスタンス
+   * @param {string} [options.directory] - ディレクトリパス
+   * @param {string} [options.currentFile] - 現在のファイル名
+   * @param {string} [options.historyDirectory] - 履歴ディレクトリ名
    */
-  constructor(storageService, entityName, options = {}) {
-    if (!storageService) {
+  constructor(options = {}) {
+    if (!options.storageService) {
       throw new Error('Repository requires a storageService instance');
     }
+    if (!options.entityName) {
+      throw new Error('Repository requires an entityName');
+    }
+    if (!options.logger) {
+      throw new Error('Repository requires a logger instance');
+    }
 
-    this.storage = storageService;
-    this.entityName = entityName;
-    this.directory = options.directory || `ai-context/${entityName}s`;
-    this.currentFile = options.currentFile || `current-${entityName}.json`;
-    this.historyDirectory = options.historyDirectory || `${entityName}-history`;
-    this.validator = options.validator;
+    this.storage = options.storageService;
+    this.entityName = options.entityName;
+    this.logger = options.logger;
+    this.eventEmitter = options.eventEmitter; // 任意
+    this.errorHandler = options.errorHandler; // 任意
+
+    // entityName を options から取得するように修正
+    this.directory = options.directory || `ai-context/${options.entityName}s`;
+    this.currentFile =
+      options.currentFile || `current-${options.entityName}.json`;
+    this.historyDirectory =
+      options.historyDirectory || `${options.entityName}-history`;
+    // this.validator = options.validator;
 
     // ディレクトリの存在確認
     this.storage.ensureDirectoryExists(this.directory);
@@ -98,6 +71,12 @@ class Repository {
       }
       return { [`${this.entityName}s`]: [] };
     } catch (error) {
+      if (this.errorHandler) {
+        return this.errorHandler.handle(error, 'Repository', 'getAll', {
+          entityName: this.entityName,
+        });
+      }
+      this.logger.error(`Failed to get all ${this.entityName}s`, { error });
       throw new Error(
         `Failed to get all ${this.entityName}s: ${error.message}`
       );
@@ -120,6 +99,15 @@ class Repository {
 
       return collection.find((entity) => entity.id === id) || null;
     } catch (error) {
+      if (this.errorHandler) {
+        return this.errorHandler.handle(error, 'Repository', 'getById', {
+          entityName: this.entityName,
+          id,
+        });
+      }
+      this.logger.error(`Failed to get ${this.entityName} by id ${id}`, {
+        error,
+      });
       throw new Error(
         `Failed to get ${this.entityName} by id ${id}: ${error.message}`
       );
@@ -133,17 +121,6 @@ class Repository {
    */
   async create(data) {
     try {
-      // バリデーション
-      if (this.validator && typeof this.validator.validate === 'function') {
-        const validation = this.validator.validate(data);
-        if (!validation.isValid) {
-          throw new ValidationError(
-            `Invalid ${this.entityName} data`,
-            validation.errors
-          );
-        }
-      }
-
       // 既存のデータを取得
       const entities = await this.getAll();
       const collection = entities[`${this.entityName}s`] || [];
@@ -168,14 +145,35 @@ class Repository {
       // 保存
       await this.storage.writeJSON(this.directory, this.currentFile, entities);
 
+      // イベント発行
+      if (this.eventEmitter) {
+        this.eventEmitter.emitStandardized(this.entityName, 'created', {
+          entity: newEntity,
+        });
+      }
+
       return newEntity;
     } catch (error) {
       if (
         error instanceof ValidationError ||
         error instanceof DataConsistencyError
       ) {
+        // 特定のエラーはそのままスロー (または errorHandler に渡すか検討)
+        if (this.errorHandler) {
+          return this.errorHandler.handle(error, 'Repository', 'create', {
+            entityName: this.entityName,
+            data,
+          });
+        }
         throw error;
       }
+      if (this.errorHandler) {
+        return this.errorHandler.handle(error, 'Repository', 'create', {
+          entityName: this.entityName,
+          data,
+        });
+      }
+      this.logger.error(`Failed to create ${this.entityName}`, { data, error });
       throw new Error(`Failed to create ${this.entityName}: ${error.message}`);
     }
   }
@@ -188,17 +186,6 @@ class Repository {
    */
   async update(id, data) {
     try {
-      // バリデーション
-      if (this.validator && typeof this.validator.validate === 'function') {
-        const validation = this.validator.validate({ ...data, id });
-        if (!validation.isValid) {
-          throw new ValidationError(
-            `Invalid ${this.entityName} data`,
-            validation.errors
-          );
-        }
-      }
-
       // 既存のデータを取得
       const entities = await this.getAll();
       const collection = entities[`${this.entityName}s`] || [];
@@ -227,11 +214,39 @@ class Repository {
       // 保存
       await this.storage.writeJSON(this.directory, this.currentFile, entities);
 
+      // イベント発行
+      if (this.eventEmitter) {
+        // 更新前後のデータを渡すか、更新後のデータのみかは要件による
+        this.eventEmitter.emitStandardized(this.entityName, 'updated', {
+          entity: updatedEntity,
+          id,
+        });
+      }
+
       return updatedEntity;
     } catch (error) {
       if (error instanceof ValidationError || error instanceof NotFoundError) {
+        // 特定のエラーはそのままスロー (または errorHandler に渡すか検討)
+        if (this.errorHandler) {
+          return this.errorHandler.handle(error, 'Repository', 'update', {
+            entityName: this.entityName,
+            id,
+            data,
+          });
+        }
         throw error;
       }
+      if (this.errorHandler) {
+        return this.errorHandler.handle(error, 'Repository', 'update', {
+          entityName: this.entityName,
+          id,
+          data,
+        });
+      }
+      this.logger.error(`Failed to update ${this.entityName} with id ${id}`, {
+        data,
+        error,
+      });
       throw new Error(
         `Failed to update ${this.entityName} with id ${id}: ${error.message}`
       );
@@ -265,11 +280,36 @@ class Repository {
       // 保存
       await this.storage.writeJSON(this.directory, this.currentFile, entities);
 
+      // イベント発行 (削除されたエンティティの情報を渡すか検討)
+      if (this.eventEmitter) {
+        // 削除されたエンティティの情報は index から取得しておく必要がある
+        // const deletedEntity = collection[index]; // splice 前に取得
+        // this.eventEmitter.emitStandardized(this.entityName, 'deleted', { id, entity: deletedEntity });
+        // ここでは ID のみを渡す
+        this.eventEmitter.emitStandardized(this.entityName, 'deleted', { id });
+      }
+
       return true;
     } catch (error) {
       if (error instanceof NotFoundError) {
+        // 特定のエラーはそのままスロー (または errorHandler に渡すか検討)
+        if (this.errorHandler) {
+          return this.errorHandler.handle(error, 'Repository', 'delete', {
+            entityName: this.entityName,
+            id,
+          });
+        }
         throw error;
       }
+      if (this.errorHandler) {
+        return this.errorHandler.handle(error, 'Repository', 'delete', {
+          entityName: this.entityName,
+          id,
+        });
+      }
+      this.logger.error(`Failed to delete ${this.entityName} with id ${id}`, {
+        error,
+      });
       throw new Error(
         `Failed to delete ${this.entityName} with id ${id}: ${error.message}`
       );
@@ -303,8 +343,24 @@ class Repository {
       return filename;
     } catch (error) {
       if (error instanceof NotFoundError) {
+        // 特定のエラーはそのままスロー (または errorHandler に渡すか検討)
+        if (this.errorHandler) {
+          return this.errorHandler.handle(error, 'Repository', 'archive', {
+            entityName: this.entityName,
+            id,
+          });
+        }
         throw error;
       }
+      if (this.errorHandler) {
+        return this.errorHandler.handle(error, 'Repository', 'archive', {
+          entityName: this.entityName,
+          id,
+        });
+      }
+      this.logger.error(`Failed to archive ${this.entityName} with id ${id}`, {
+        error,
+      });
       throw new Error(
         `Failed to archive ${this.entityName} with id ${id}: ${error.message}`
       );
@@ -323,6 +379,12 @@ class Repository {
 
       return collection.filter(predicate);
     } catch (error) {
+      if (this.errorHandler) {
+        return this.errorHandler.handle(error, 'Repository', 'find', {
+          entityName: this.entityName,
+        });
+      }
+      this.logger.error(`Failed to find ${this.entityName}s`, { error });
       throw new Error(`Failed to find ${this.entityName}s: ${error.message}`);
     }
   }
@@ -339,6 +401,12 @@ class Repository {
 
       return collection.find(predicate) || null;
     } catch (error) {
+      if (this.errorHandler) {
+        return this.errorHandler.handle(error, 'Repository', 'findOne', {
+          entityName: this.entityName,
+        });
+      }
+      this.logger.error(`Failed to find ${this.entityName}`, { error });
       throw new Error(`Failed to find ${this.entityName}: ${error.message}`);
     }
   }
@@ -363,6 +431,14 @@ class Repository {
 
       return results;
     } catch (error) {
+      if (this.errorHandler) {
+        // createMany の場合、一部成功・一部失敗の可能性もあるため、ハンドラーでの処理が複雑になる可能性
+        return this.errorHandler.handle(error, 'Repository', 'createMany', {
+          entityName: this.entityName,
+          dataArray,
+        });
+      }
+      this.logger.error(`Failed to create many ${this.entityName}s`, { error });
       throw new Error(
         `Failed to create many ${this.entityName}s: ${error.message}`
       );
@@ -396,13 +472,28 @@ class Repository {
 
       return results;
     } catch (error) {
-      // 特定のエラーはそのまま投げる
+      // 特定の入力エラーはそのままスロー
       if (
         error.message === 'Each update item must have an id' ||
         error.message === 'updateArray must be an array'
       ) {
+        if (this.errorHandler) {
+          // 入力エラーもハンドラーに渡すか検討
+          return this.errorHandler.handle(error, 'Repository', 'updateMany', {
+            entityName: this.entityName,
+            updateArray,
+          });
+        }
         throw error;
       }
+      if (this.errorHandler) {
+        // updateMany の場合、一部成功・一部失敗の可能性もあるため、ハンドラーでの処理が複雑になる可能性
+        return this.errorHandler.handle(error, 'Repository', 'updateMany', {
+          entityName: this.entityName,
+          updateArray,
+        });
+      }
+      this.logger.error(`Failed to update many ${this.entityName}s`, { error });
       throw new Error(
         `Failed to update many ${this.entityName}s: ${error.message}`
       );
@@ -427,12 +518,50 @@ class Repository {
           const result = await this.delete(id);
           results.push({ id, success: result });
         } catch (error) {
-          results.push({ id, success: false, error: error.message });
+          if (this.errorHandler) {
+            // errorHandler に処理を委譲。ハンドラーがエラーをスローする可能性がある。
+            // ハンドラーが値を返した場合（エラーをスローしなかった場合）は、エラー情報を記録する。
+            try {
+              this.errorHandler.handle(error, 'Repository', 'deleteMany', {
+                entityName: this.entityName,
+                id,
+              });
+              // ハンドラーがスローしなかった場合のみエラー情報を記録
+              results.push({ id, success: false, error: error.message });
+            } catch (handlerError) {
+              // errorHandler がエラーをスローした場合、ループを中断して rethrow する
+              throw handlerError;
+            }
+          } else {
+            // errorHandler がない場合はログ出力してエラー情報を記録
+            this.logger.error(`Failed during deleteMany for id ${id}`, {
+              error,
+            });
+            results.push({ id, success: false, error: error.message });
+          }
         }
       }
 
       return results;
     } catch (error) {
+      // 特定の入力エラーはそのままスロー
+      if (error.message === 'ids must be an array') {
+        if (this.errorHandler) {
+          return this.errorHandler.handle(error, 'Repository', 'deleteMany', {
+            entityName: this.entityName,
+            ids,
+          });
+        }
+        throw error;
+      }
+      if (this.errorHandler) {
+        // deleteMany の場合、一部成功・一部失敗の可能性もあるため、ハンドラーでの処理が複雑になる可能性
+        return this.errorHandler.handle(error, 'Repository', 'deleteMany', {
+          entityName: this.entityName,
+          ids,
+        });
+      }
+      this.logger.error(`Failed to delete many ${this.entityName}s`, { error });
       throw new Error(
         `Failed to delete many ${this.entityName}s: ${error.message}`
       );

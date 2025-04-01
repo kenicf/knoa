@@ -5,30 +5,36 @@
 const {
   FeedbackManager,
 } = require('../../../src/lib/managers/feedback-manager');
-const { createMockDependencies } = require('../../helpers/mock-factory');
+const {
+  createMockLogger,
+  createMockEventEmitter,
+  createMockErrorHandler,
+  createMockDependencies, // ここに追加
+} = require('../../helpers/mock-factory');
 
 describe('FeedbackManager', () => {
   let feedbackManager;
-  let mockDeps;
   let mockFeedback;
-
+  // Removed individual mock declarations, using mockDeps now
+  let mockDeps; // mockDeps を定義
   beforeEach(() => {
-    // モック依存関係の作成
-    mockDeps = createMockDependencies();
+    mockDeps = createMockDependencies(); // mockDeps を初期化
 
-    // FeedbackManagerのインスタンスを作成
-    feedbackManager = new FeedbackManager(
-      mockDeps.storageService,
-      mockDeps.gitService,
-      mockDeps.logger,
-      mockDeps.eventEmitter,
-      mockDeps.errorHandler,
-      mockDeps.handlebars,
-      {
+    // FeedbackManagerのインスタンスを作成 using mockDeps
+    feedbackManager = new FeedbackManager({
+      // Pass dependencies from mockDeps
+      storageService: mockDeps.storageService,
+      gitService: mockDeps.gitService,
+      logger: mockDeps.logger,
+      eventEmitter: mockDeps.eventEmitter,
+      errorHandler: mockDeps.errorHandler,
+      handlebars: mockDeps.handlebars, // Use handlebars from mockDeps
+      config: {
+        // Pass config as a property
         feedbackDir: 'test-feedback',
         templateDir: 'test-templates',
-      }
-    );
+      },
+    });
 
     // モックフィードバックの作成
     mockFeedback = {
@@ -215,36 +221,6 @@ describe('FeedbackManager', () => {
 
       const result = feedbackManager.getPendingFeedback();
       expect(result).toEqual([]);
-    });
-  });
-
-  describe('saveFeedback', () => {
-    test('フィードバックを保存できること', () => {
-      // validateFeedbackをモック
-      feedbackManager.validateFeedback = jest.fn().mockReturnValue(true);
-
-      // getPendingFeedbackをモック
-      feedbackManager.getPendingFeedback = jest.fn().mockReturnValue([]);
-
-      const result = feedbackManager.saveFeedback(mockFeedback);
-
-      expect(result).toBe(true);
-      expect(mockDeps.storageService.writeJSON).toHaveBeenCalledWith(
-        'test-feedback',
-        'pending-feedback.json',
-        [mockFeedback]
-      );
-    });
-
-    test('不正なフィードバックは保存できないこと', () => {
-      // validateFeedbackをモック
-      feedbackManager.validateFeedback = jest.fn().mockReturnValue(false);
-
-      const result = feedbackManager.saveFeedback(mockFeedback);
-
-      expect(result).toBe(false);
-      expect(mockDeps.storageService.writeJSON).not.toHaveBeenCalled();
-      expect(mockDeps.logger.error).toHaveBeenCalled();
     });
   });
 

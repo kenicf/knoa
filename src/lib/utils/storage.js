@@ -23,6 +23,8 @@ class StorageService {
    * @param {Object} options.logger - ロガーインスタンス (必須)
    * @param {Object} [options.eventEmitter] - イベントエミッターインスタンス
    * @param {Object} [options.errorHandler] - エラーハンドラー
+   * @param {Function} [options.traceIdGenerator] - トレースID生成関数 ★★★ 追加 ★★★
+   * @param {Function} [options.requestIdGenerator] - リクエストID生成関数 ★★★ 追加 ★★★
    */
   constructor(options = {}) {
     // logger を必須にする
@@ -34,7 +36,7 @@ class StorageService {
     this.eventEmitter = options.eventEmitter;
     this.errorHandler = options.errorHandler;
 
-    // TODO: Step 5 で ID 生成を集約
+    // ★★★ ID ジェネレーターを保存 ★★★
     this._traceIdGenerator =
       options.traceIdGenerator ||
       (() => `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
@@ -156,13 +158,12 @@ class StorageService {
     };
     let nativeFilePath = '';
     try {
+      nativeFilePath = this._getNativeFilePath(directory, filename); // ★★★ イベント発行前にパス取得 ★★★
+
       this._emitEvent('file_write_before', {
-        directory,
-        filename,
+        path: nativeFilePath, // ★★★ path を使用 ★★★
         type: 'json',
       });
-
-      nativeFilePath = this._getNativeFilePath(directory, filename);
 
       // _ensureDirectoryExists は _getNativeFilePath 内で処理されるため不要
 
@@ -170,8 +171,7 @@ class StorageService {
       fs.writeFileSync(nativeFilePath, JSON.stringify(data, null, 2), 'utf8');
 
       this._emitEvent('file_write_after', {
-        directory,
-        filename,
+        path: nativeFilePath, // ★★★ path を使用 ★★★
         type: 'json',
         success: true,
       });
@@ -179,14 +179,14 @@ class StorageService {
       return true;
     } catch (error) {
       this._emitEvent('file_write_error', {
-        directory,
-        filename,
+        // ★★★ イベント名を変更 ★★★
+        path: nativeFilePath || path.join(this.basePath, directory, filename), // ★★★ path を使用 ★★★
         type: 'json',
         error: error.message,
       });
 
       this._handleError(
-        `JSONファイルの書き込みに失敗しました: ${nativeFilePath || path.join(directory, filename)}`,
+        `JSONファイルの書き込みに失敗しました: ${nativeFilePath || path.join(this.basePath, directory, filename)}`, // ★★★ basePath を追加 ★★★
         error,
         operationContext
       );
@@ -204,13 +204,12 @@ class StorageService {
     const operationContext = { operation: 'readText', directory, filename };
     let nativeFilePath = '';
     try {
+      nativeFilePath = this._getNativeFilePath(directory, filename); // ★★★ イベント発行前にパス取得 ★★★
+
       this._emitEvent('file_read_before', {
-        directory,
-        filename,
+        path: nativeFilePath, // ★★★ path を使用 ★★★
         type: 'text',
       });
-
-      nativeFilePath = this._getNativeFilePath(directory, filename);
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(nativeFilePath)) {
@@ -225,8 +224,7 @@ class StorageService {
       const content = fs.readFileSync(nativeFilePath, 'utf8');
 
       this._emitEvent('file_read_after', {
-        directory,
-        filename,
+        path: nativeFilePath, // ★★★ path を使用 ★★★
         type: 'text',
         success: true,
       });
@@ -234,15 +232,14 @@ class StorageService {
       return content;
     } catch (error) {
       this._emitEvent('file_read_after', {
-        directory,
-        filename,
+        path: nativeFilePath || path.join(this.basePath, directory, filename), // ★★★ path を使用 ★★★
         type: 'text',
         success: false,
         error: error.message,
       });
 
       return this._handleError(
-        `テキストファイルの読み込みに失敗しました: ${nativeFilePath || path.join(directory, filename)}`,
+        `テキストファイルの読み込みに失敗しました: ${nativeFilePath || path.join(this.basePath, directory, filename)}`, // ★★★ basePath を追加 ★★★
         error,
         operationContext
       );
@@ -264,21 +261,20 @@ class StorageService {
     };
     let nativeFilePath = '';
     try {
+      nativeFilePath = this._getNativeFilePath(directory, filename); // ★★★ イベント発行前にパス取得 ★★★
+
       this._emitEvent('file_write_before', {
-        directory,
-        filename,
+        path: nativeFilePath, // ★★★ path を使用 ★★★
         type: 'text',
       });
 
-      nativeFilePath = this._getNativeFilePath(directory, filename);
       // _ensureDirectoryExists は _getNativeFilePath 内で処理されるため不要
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       fs.writeFileSync(nativeFilePath, content, 'utf8');
 
       this._emitEvent('file_write_after', {
-        directory,
-        filename,
+        path: nativeFilePath, // ★★★ path を使用 ★★★
         type: 'text',
         success: true,
       });
@@ -286,14 +282,14 @@ class StorageService {
       return true;
     } catch (error) {
       this._emitEvent('file_write_error', {
-        directory,
-        filename,
+        // ★★★ イベント名を変更 ★★★
+        path: nativeFilePath || path.join(this.basePath, directory, filename), // ★★★ path を使用 ★★★
         type: 'text',
         error: error.message,
       });
 
       this._handleError(
-        `テキストファイルの書き込みに失敗しました: ${nativeFilePath || path.join(directory, filename)}`,
+        `テキストファイルの書き込みに失敗しました: ${nativeFilePath || path.join(this.basePath, directory, filename)}`, // ★★★ basePath を追加 ★★★
         error,
         operationContext
       );
@@ -316,31 +312,37 @@ class StorageService {
     };
     let nativeFilePath = '';
     try {
-      this._emitEvent('file_write_before', { directory, filename });
+      nativeFilePath = this._getNativeFilePath(directory, filename); // ★★★ イベント発行前にパス取得 ★★★
 
-      nativeFilePath = this._getNativeFilePath(directory, filename);
+      this._emitEvent('file_write_before', { path: nativeFilePath }); // ★★★ path を使用 ★★★
+
       // _ensureDirectoryExists は _getNativeFilePath 内で処理されるため不要
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       fs.writeFileSync(nativeFilePath, content);
-
+      this.logger.debug(
+        `writeFile successful for ${nativeFilePath}, emitting event...`
+      ); // Add log
       this._emitEvent('file_write_after', {
-        directory,
-        filename,
+        path: nativeFilePath, // ★★★ path を使用 ★★★
         success: true,
       });
 
       return true;
     } catch (error) {
-      this._emitEvent('file_write_after', {
-        directory,
-        filename,
-        success: false,
+      this.logger.debug(
+        `writeFile failed for ${nativeFilePath}, emitting event...`,
+        error
+      ); // Add log
+      this._emitEvent('file_write_error', {
+        // ★★★ イベント名を変更 ★★★
+        path: nativeFilePath || path.join(this.basePath, directory, filename), // ★★★ path を使用 ★★★
+        success: false, // ★★★ success を削除 (エラーイベントのため) ★★★
         error: error.message,
       });
 
       this._handleError(
-        `ファイルの書き込みに失敗しました: ${nativeFilePath || path.join(directory, filename)}`,
+        `ファイルの書き込みに失敗しました: ${nativeFilePath || path.join(this.basePath, directory, filename)}`, // ★★★ basePath を追加 ★★★
         error,
         operationContext
       );
@@ -363,13 +365,12 @@ class StorageService {
     };
     let nativeFilePath = '';
     try {
+      nativeFilePath = this._getNativeFilePath(directory, filename); // ★★★ イベント発行前にパス取得 ★★★
+
       this._emitEvent('file_update_before', {
-        directory,
-        filename,
+        path: nativeFilePath, // ★★★ path を使用 ★★★
         type: 'json',
       });
-
-      nativeFilePath = this._getNativeFilePath(directory, filename);
 
       let data = {};
       let fileExists = false;
@@ -394,24 +395,23 @@ class StorageService {
       );
 
       this._emitEvent('file_update_after', {
-        directory,
-        filename,
+        path: nativeFilePath, // ★★★ path を使用 ★★★
         type: 'json',
         success: true,
       });
 
       return fileExists ? true : null;
     } catch (error) {
-      this._emitEvent('file_update_after', {
-        directory,
-        filename,
+      this._emitEvent('file_update_error', {
+        // ★★★ イベント名を変更 ★★★
+        path: nativeFilePath || path.join(this.basePath, directory, filename), // ★★★ path を使用 ★★★
         type: 'json',
-        success: false,
+        success: false, // ★★★ success を削除 (エラーイベントのため) ★★★
         error: error.message,
       });
 
       this._handleError(
-        `JSONファイルの更新に失敗しました: ${nativeFilePath || path.join(directory, filename)}`,
+        `JSONファイルの更新に失敗しました: ${nativeFilePath || path.join(this.basePath, directory, filename)}`, // ★★★ basePath を追加 ★★★
         error,
         operationContext
       );
@@ -466,8 +466,8 @@ class StorageService {
                 // eslint-disable-next-line security/detect-non-literal-fs-filename -- lockPath は内部で安全に導出されるため抑制
                 fs.unlinkSync(lockPath);
                 // }
-                // eslint-disable-next-line security/detect-non-literal-fs-filename
-                fs.unlinkSync(lockPath);
+
+                // fs.unlinkSync(lockPath); // ★★★ 重複削除 ★★★
                 this._emitEvent('file_lock_released', {
                   path: nativeFilePath,
                   lockPath,
@@ -555,7 +555,7 @@ class StorageService {
         (args.length === 1
           ? args[0]
           : args.length === 2
-            ? path.join(args[0], args[1])
+            ? path.join(this.basePath, args[0], args[1]) // ★★★ basePath を追加 ★★★
             : '不明なパス');
       this._handleError(
         `ファイルの存在確認中にエラーが発生しました: ${errorPath}`,
@@ -576,13 +576,16 @@ class StorageService {
     const operationContext = { operation: 'listFiles', directory, pattern };
     let nativeDirPath = '';
     try {
-      this._emitEvent('directory_list_before', { directory, pattern });
+      nativeDirPath = path.join(this.basePath, directory); // ★★★ イベント発行前にパス取得 ★★★
 
-      nativeDirPath = path.join(this.basePath, directory);
+      this._emitEvent('directory_list_before', {
+        path: nativeDirPath,
+        pattern,
+      }); // ★★★ path を使用 ★★★
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(nativeDirPath)) {
-        this._emitEvent('directory_not_found', { directory });
+        this._emitEvent('directory_not_found', { path: nativeDirPath }); // ★★★ path を使用 ★★★
         return [];
       }
 
@@ -596,7 +599,7 @@ class StorageService {
       }
 
       this._emitEvent('directory_list_after', {
-        directory,
+        path: nativeDirPath, // ★★★ path を使用 ★★★
         pattern,
         success: true,
         count: files.length,
@@ -604,15 +607,16 @@ class StorageService {
 
       return files;
     } catch (error) {
-      this._emitEvent('directory_list_after', {
-        directory,
+      this._emitEvent('directory_list_error', {
+        // ★★★ イベント名を変更 ★★★
+        path: nativeDirPath || path.join(this.basePath, directory), // ★★★ path を使用 ★★★
         pattern,
-        success: false,
+        success: false, // ★★★ success を削除 (エラーイベントのため) ★★★
         error: error.message,
       });
 
       return this._handleError(
-        `ディレクトリの一覧取得に失敗しました: ${nativeDirPath || directory}`,
+        `ディレクトリの一覧取得に失敗しました: ${nativeDirPath || path.join(this.basePath, directory)}`, // ★★★ basePath を追加 ★★★
         error,
         operationContext
       );
@@ -629,13 +633,13 @@ class StorageService {
     const operationContext = { operation: 'deleteFile', directory, filename };
     let nativeFilePath = '';
     try {
-      this._emitEvent('file_delete_before', { directory, filename });
+      nativeFilePath = this._getNativeFilePath(directory, filename); // ★★★ イベント発行前にパス取得 ★★★
 
-      nativeFilePath = this._getNativeFilePath(directory, filename);
+      this._emitEvent('file_delete_before', { path: nativeFilePath }); // ★★★ path を使用 ★★★
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(nativeFilePath)) {
-        this._emitEvent('file_not_found', { directory, filename });
+        this._emitEvent('file_not_found', { path: nativeFilePath }); // ★★★ path を使用 ★★★
         return false;
       }
 
@@ -643,22 +647,21 @@ class StorageService {
       fs.unlinkSync(nativeFilePath);
 
       this._emitEvent('file_delete_after', {
-        directory,
-        filename,
+        path: nativeFilePath, // ★★★ path を使用 ★★★
         success: true,
       });
 
       return true;
     } catch (error) {
-      this._emitEvent('file_delete_after', {
-        directory,
-        filename,
-        success: false,
+      this._emitEvent('file_delete_error', {
+        // ★★★ イベント名を変更 ★★★
+        path: nativeFilePath || path.join(this.basePath, directory, filename), // ★★★ path を使用 ★★★
+        success: false, // ★★★ success を削除 (エラーイベントのため) ★★★
         error: error.message,
       });
 
       this._handleError(
-        `ファイルの削除に失敗しました: ${nativeFilePath || path.join(directory, filename)}`,
+        `ファイルの削除に失敗しました: ${nativeFilePath || path.join(this.basePath, directory, filename)}`, // ★★★ basePath を追加 ★★★
         error,
         operationContext
       );
@@ -680,13 +683,16 @@ class StorageService {
     };
     let nativeDirPath = '';
     try {
-      this._emitEvent('directory_delete_before', { directory, recursive });
+      nativeDirPath = path.join(this.basePath, directory); // ★★★ イベント発行前にパス取得 ★★★
 
-      nativeDirPath = path.join(this.basePath, directory);
+      this._emitEvent('directory_delete_before', {
+        path: nativeDirPath,
+        recursive,
+      }); // ★★★ path を使用 ★★★
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(nativeDirPath)) {
-        this._emitEvent('directory_not_found', { directory });
+        this._emitEvent('directory_not_found', { path: nativeDirPath }); // ★★★ path を使用 ★★★
         return false;
       }
 
@@ -695,22 +701,23 @@ class StorageService {
       fs.rmSync(nativeDirPath, { recursive: recursive, force: recursive }); // force は recursive が true の場合のみ有効
 
       this._emitEvent('directory_delete_after', {
-        directory,
+        path: nativeDirPath, // ★★★ path を使用 ★★★
         recursive,
         success: true,
       });
 
       return true;
     } catch (error) {
-      this._emitEvent('directory_delete_after', {
-        directory,
+      this._emitEvent('directory_delete_error', {
+        // ★★★ イベント名を変更 ★★★
+        path: nativeDirPath || path.join(this.basePath, directory), // ★★★ path を使用 ★★★
         recursive,
-        success: false,
+        success: false, // ★★★ success を削除 (エラーイベントのため) ★★★
         error: error.message,
       });
 
       this._handleError(
-        `ディレクトリの削除に失敗しました: ${nativeDirPath || directory}`,
+        `ディレクトリの削除に失敗しました: ${nativeDirPath || path.join(this.basePath, directory)}`, // ★★★ basePath を追加 ★★★
         error,
         operationContext
       );
@@ -737,50 +744,45 @@ class StorageService {
     let sourcePath = '';
     let destPath = '';
     try {
-      this._emitEvent('file_copy_before', {
-        sourceDir,
-        sourceFile,
-        destDir,
-        destFile,
-      });
+      sourcePath = this._getNativeFilePath(sourceDir, sourceFile); // ★★★ イベント発行前にパス取得 ★★★
+      destPath = this._getNativeFilePath(destDir, destFile); // ★★★ イベント発行前にパス取得 ★★★
 
-      sourcePath = this._getNativeFilePath(sourceDir, sourceFile);
+      this._emitEvent('file_copy_before', {
+        sourcePath, // ★★★ path を使用 ★★★
+        destPath, // ★★★ path を使用 ★★★
+      });
 
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(sourcePath)) {
         this._emitEvent('file_not_found', {
-          directory: sourceDir,
-          filename: sourceFile,
+          path: sourcePath, // ★★★ path を使用 ★★★
         });
         return false;
       }
 
-      destPath = this._getNativeFilePath(destDir, destFile);
       // _ensureDirectoryExists は _getNativeFilePath 内で処理されるため不要
 
       fs.copyFileSync(sourcePath, destPath);
 
       this._emitEvent('file_copy_after', {
-        sourceDir,
-        sourceFile,
-        destDir,
-        destFile,
+        sourcePath, // ★★★ path を使用 ★★★
+        destPath, // ★★★ path を使用 ★★★
         success: true,
       });
 
       return true;
     } catch (error) {
-      this._emitEvent('file_copy_after', {
-        sourceDir,
-        sourceFile,
-        destDir,
-        destFile,
-        success: false,
+      this._emitEvent('file_copy_error', {
+        // ★★★ イベント名を変更 ★★★
+        sourcePath:
+          sourcePath || path.join(this.basePath, sourceDir, sourceFile), // ★★★ path を使用 ★★★
+        destPath: destPath || path.join(this.basePath, destDir, destFile), // ★★★ path を使用 ★★★
+        success: false, // ★★★ success を削除 (エラーイベントのため) ★★★
         error: error.message,
       });
 
       this._handleError(
-        `ファイルのコピーに失敗しました: ${sourcePath || path.join(sourceDir, sourceFile)} -> ${destPath || path.join(destDir, destFile)}`,
+        `ファイルのコピーに失敗しました: ${sourcePath || path.join(this.basePath, sourceDir, sourceFile)} -> ${destPath || path.join(this.basePath, destDir, destFile)}`, // ★★★ basePath を追加 ★★★
         error,
         operationContext
       );
@@ -803,22 +805,29 @@ class StorageService {
     }
 
     try {
+      // ★★★ ID ジェネレーターを使用して ID を生成 ★★★
       const traceId = this._traceIdGenerator();
       const requestId = this._requestIdGenerator();
 
       const standardizedData = {
         ...data,
         timestamp: new Date().toISOString(),
-        traceId,
-        requestId,
+        traceId, // ★★★ 追加 ★★★
+        requestId, // ★★★ 追加 ★★★
       };
 
-      // イベント名のコロンをアンダースコアに置換
-      const finalEventName = eventName.replace(/:/g, '_');
+      // イベント名のコロンをアンダースコアに置換 (不要な処理のため削除)
+      // const finalEventName = eventName.replace(/:/g, '_');
+
+      // Add logging to check event emission
+      this.logger.debug(
+        `Emitting standardized event: storage:${eventName}`, // ★★★ finalEventName を eventName に戻す ★★★
+        standardizedData
+      );
 
       this.eventEmitter.emitStandardized(
         'storage', // component name
-        finalEventName, // 置換後のイベント名を使用
+        eventName, // ★★★ finalEventName を eventName に戻す ★★★
         standardizedData
       );
     } catch (error) {
@@ -838,7 +847,7 @@ class StorageService {
    * @private
    */
   _handleError(message, error, context = {}) {
-    const storageError = new StorageError(message, error);
+    const storageError = new StorageError(message, { cause: error, context }); // ★★★ cause と context を options に渡す ★★★
 
     if (this.errorHandler && typeof this.errorHandler.handle === 'function') {
       return this.errorHandler.handle(

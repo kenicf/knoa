@@ -424,7 +424,10 @@ class EnhancedEventEmitter {
    * @returns {string} 標準化されたイベント名
    */
   createStandardEventName(component, action) {
-    return `${component}:${action}`;
+    // コンポーネント名とアクション名を小文字に変換し、ハイフンとアンダースコアを除去
+    const formattedComponent = component.toLowerCase().replace(/[-_]/g, '');
+    const formattedAction = action.toLowerCase().replace(/[-_]/g, '');
+    return `${formattedComponent}:${formattedAction}`;
   }
 
   /**
@@ -766,18 +769,19 @@ class EnhancedEventEmitter {
    */
   emitCataloged(eventName, data = {}) {
     if (!this.catalog) {
-      if (this.logger && typeof this.logger.warn === 'function') {
-        this.logger.warn('イベントカタログが設定されていません');
-      }
-      return false;
+      // カタログがない場合はエラーをスロー
+      throw new EventError('イベントカタログが設定されていません', {
+        code: 'ERR_EVENT_CATALOG_NOT_SET',
+      });
     }
 
     const eventDef = this.catalog.getEventDefinition(eventName);
     if (!eventDef) {
-      if (this.logger && typeof this.logger.warn === 'function') {
-        this.logger.warn(`未登録のイベント: ${eventName}`);
-      }
-      return false;
+      // 未登録イベントの場合はエラーをスロー
+      throw new EventError(`未登録のイベント: ${eventName}`, {
+        code: 'ERR_EVENT_NOT_REGISTERED',
+        context: { eventName },
+      });
     }
 
     const [component, action] = eventName.split(':');
@@ -808,17 +812,32 @@ class EventCatalog {
    */
   registerEvent(eventName, definition) {
     if (!eventName.includes(':')) {
+      // イベント名形式が不正な場合は警告ログを出力して失敗
+      if (this.logger && typeof this.logger.warn === 'function') {
+        this.logger.warn(`不正なイベント名形式: ${eventName}`);
+      }
       return false;
     }
 
     const [category] = eventName.split(':');
-    this.events.set(eventName, definition);
+    // デフォルト値を持つ完全な定義オブジェクトを作成
+    const fullDefinition = {
+      name: eventName,
+      description: definition.description || '',
+      category: definition.category || category || 'uncategorized', // カテゴリがなければイベント名から推測、それもなければ 'uncategorized'
+      schema: definition.schema || {},
+      examples: definition.examples || [],
+      ...definition, // 渡された定義で上書き
+    };
+    this.events.set(eventName, fullDefinition);
 
-    if (!this.categories.has(category)) {
-      this.categories.set(category, []);
+    const currentCategory = fullDefinition.category; // デフォルト値適用後のカテゴリを使用
+    // カテゴリが存在しない場合は初期化
+    if (!this.categories.has(currentCategory)) {
+      this.categories.set(currentCategory, []);
     }
-
-    this.categories.get(category).push(eventName);
+    // 初期化後に push する
+    this.categories.get(currentCategory).push(eventName);
     return true;
   }
 

@@ -18,6 +18,7 @@
 *   **例:**
     ```javascript
     const EventEmitter = require('./event-emitter'); // 仮
+    const { generateTraceId, generateRequestId } = require('./id-generators'); // 仮
     const myTransport = {
       type: 'file',
       write: (entry) => { /* ファイル書き込み処理 */ }
@@ -31,7 +32,9 @@
         appName: () => 'MyApplication',
         pid: () => process.pid
       },
-      eventEmitter: eventEmitter
+      eventEmitter: eventEmitter,
+      traceIdGenerator: generateTraceId, // 注入例
+      requestIdGenerator: generateRequestId // 注入例
     });
     ```
 
@@ -48,7 +51,7 @@
 *   `fatal(message, [context])`
 
 *   **`message` (string):** ログメッセージ本体。
-*   **`context` (Object):** オプション。そのログエントリ固有の追加情報を含むオブジェクト。`traceId` や `requestId` を含めることができます。
+*   **`context` (Object):** オプション。そのログエントリ固有の追加情報を含むオブジェクト。`traceId` や `requestId` を含めることができます。**ここで指定された `traceId`/`requestId` は、Logger インスタンスのジェネレーターよりも優先されます。** ★★★ 修正 ★★★
 
 *   **ログエントリ構造:** トランスポートの `write` 関数やイベントリスナーには、以下の構造を持つ `entry` オブジェクトが渡されます。
     ```json
@@ -63,8 +66,8 @@
         "appName": "MyApplication",
         "pid": 12345,
         // 自動生成または context から引き継がれた ID
-        "traceId": "trace-...",
-        "requestId": "req-...",
+        "traceId": "trace-...", // ★★★ Loggerのジェネレーターまたはcontext引数から取得 ★★★
+        "requestId": "req-...", // ★★★ Loggerのジェネレーターまたはcontext引数から取得 ★★★
         "trace_id": "trace-...", // 後方互換性 (削除検討)
         "request_id": "req-..." // 後方互換性 (削除検討)
       }
@@ -77,6 +80,7 @@
     try {
       // ... some operation ...
     } catch (error) {
+      // 既存のトレースIDを引き継ぐ場合
       logger.error('Operation failed', { error: error.message, traceId: currentTraceId });
     }
     ```
@@ -91,7 +95,7 @@
 
 ## 4. 発行されるイベント (EventEmitter が指定されている場合)
 
-`eventEmitter.emitStandardized()` を通じて以下のイベントが発行されます。
+`eventEmitter.emitStandardized()` を通じて以下のイベントが発行されます。**これらのイベントデータにも、`timestamp`, `traceId`, `requestId` が自動的に含まれます。** ★★★ 修正 ★★★
 
 *   **`log:message_created`:** ログレベルに関わらず、ログメッセージが記録されるたびに発行されます。データには完全なログエントリが含まれます。
 *   **`log:alert_created`:** `error` または `fatal` レベルのログが記録されたときに発行されます。データには完全なログエントリが含まれます。外部の監視・通知システムとの連携に使用できます。
@@ -102,6 +106,7 @@
 
 *   **ログレベルの適切な設定:** 開発環境では `debug`、本番環境では `info` や `warn` など、環境に応じて適切なログレベルを設定してください。
 *   **コンテキスト情報の活用:** 問題追跡を容易にするため、ログメッセージには関連するコンテキスト情報（ユーザーID、リクエストID、関連データなど）を積極的に含めてください。`traceId` と `requestId` は、一連の操作やリクエストを追跡するために特に重要です。
+*   **IDジェネレーター:** `traceIdGenerator` と `requestIdGenerator` はオプションですが、アプリケーション全体で一貫したトレースを行うために、外部から共通のジェネレーターを注入することを推奨します。★★★ 追加 ★★★
 *   **個人情報・機密情報のマスキング:** ログにパスワード、APIキー、個人情報などの機密情報が含まれないように注意してください。必要に応じてマスキング処理を行うか、専用のセキュアなログシステムを検討してください。
 *   **パフォーマンス:** 大量のログを頻繁に出力すると、アプリケーションのパフォーマンスに影響を与える可能性があります。特に `debug` レベルのログは、本番環境では抑制することを検討してください。非同期トランスポートを使用することも有効です。
 *   **トランスポートの選択:** ログの量や重要度に応じて、適切なトランスポート（コンソール、ファイル、外部ログサービスなど）を選択してください。

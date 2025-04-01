@@ -12,12 +12,15 @@
     *   **`eventEmitter` (Object):** オプション。Git 操作イベントを発行するために使用する EventEmitter インスタンス。
     *   **`errorHandler` (Object):** オプション。Git 操作中にエラーが発生した場合の処理をカスタマイズするためのエラーハンドラー。指定しない場合、エラーはログに出力され、`GitError` がスローされます。
     *   **`taskIdPattern` (RegExp):** オプション。コミットメッセージからタスクIDを抽出するための正規表現。デフォルトは `/#(T[0-9]{3})/g`。
+    *   **`traceIdGenerator` (Function):** オプション。トレースIDを生成する関数。デフォルトは内部のジェネレーター。★★★ 追加 ★★★
+    *   **`requestIdGenerator` (Function):** オプション。リクエストIDを生成する関数。デフォルトは内部のジェネレーター。★★★ 追加 ★★★
 
 *   **例:**
     ```javascript
     const Logger = require('./logger'); // 仮
     const EventEmitter = require('./event-emitter'); // 仮
     const ErrorHandler = require('./error-handler'); // 仮
+    const { generateTraceId, generateRequestId } = require('./id-generators'); // 仮
 
     const logger = new Logger();
     const eventEmitter = new EventEmitter({ logger });
@@ -28,7 +31,9 @@
       logger: logger,
       eventEmitter: eventEmitter,
       errorHandler: errorHandler,
-      taskIdPattern: /TASK-(\d+)/g // カスタムパターン
+      taskIdPattern: /TASK-(\d+)/g, // カスタムパターン
+      traceIdGenerator: generateTraceId, // 注入例
+      requestIdGenerator: generateRequestId // 注入例
     });
     ```
 
@@ -124,13 +129,14 @@
 
 ## 4. 発行されるイベント (EventEmitter が指定されている場合)
 
-各 Git 操作の前後 (`_before`, `_after`) に `git:` プレフィックスを持つイベントが発行されます。詳細は各メソッドの説明を参照してください。イベントデータには通常、操作の引数、結果（成功/失敗、ハッシュ、ファイルリストなど）、エラーメッセージなどが含まれます。
+各 Git 操作の前後 (`_before`, `_after`) に `git:` プレフィックスを持つイベントが発行されます。詳細は各メソッドの説明を参照してください。イベントデータには通常、操作の引数、結果（成功/失敗、ハッシュ、ファイルリストなど）、エラーメッセージなどが含まれます。**また、これらのイベントデータには自動的に `timestamp`, `traceId`, `requestId` が含まれます。** ★★★ 修正 ★★★
 
 *   例: `git:commit_get_hash_before`, `git:commit_get_hash_after`, `git:stage_before`, `git:stage_after`, `git:commit_create_after`
 
 ## 5. 注意点とベストプラクティス
 
 *   **エラーハンドリング:** `GitService` のメソッドはエラー発生時に `GitError` をスローします（`errorHandler` がない場合）。呼び出し元で適切に `try...catch` を使用してエラーを処理してください。`errorHandler` を使用する場合は、そのハンドラーがエラーをどのように処理するか（例外をスローするか、デフォルト値を返すかなど）を理解しておく必要があります。
+*   **IDジェネレーター:** `traceIdGenerator` と `requestIdGenerator` はオプションですが、アプリケーション全体で一貫したトレースを行うために、外部から共通のジェネレーターを注入することを推奨します。
 *   **リポジトリの状態:** `GitService` は、操作対象のリポジトリが有効な状態であることを前提としています。リポジトリが存在しない、破損している、などの場合は予期しないエラーが発生する可能性があります。
 *   **競合:** 複数のプロセスや操作が同時に同じリポジトリに対して書き込み操作（コミット、ステージングなど）を行うと、競合が発生する可能性があります。必要に応じて `LockManager` などを使用して排他制御を行ってください。
 *   **`simple-git` への依存:** このサービスは内部で `simple-git` ライブラリを使用しています。`simple-git` のバージョンアップによって挙動が変わる可能性に注意してください。

@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/173</span>
+                <span class='fraction'>0/172</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/172</span>
+                <span class='fraction'>0/171</span>
             </div>
         
             
@@ -858,7 +858,9 @@
 <a name='L793'></a><a href='#L793'>793</a>
 <a name='L794'></a><a href='#L794'>794</a>
 <a name='L795'></a><a href='#L795'>795</a>
-<a name='L796'></a><a href='#L796'>796</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L796'></a><a href='#L796'>796</a>
+<a name='L797'></a><a href='#L797'>797</a>
+<a name='L798'></a><a href='#L798'>798</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -890,6 +892,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -926,11 +929,11 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1196,6 +1199,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1682,9 +1686,10 @@ class ErrorHandler {
    * コンストラクタ
    * @param {Object} logger - ロガーインスタンス（必須）
    * @param {Object} eventEmitter - イベントエミッターインスタンス（必須）
-   * @param {Object} options - 追加オプション
+   * @param {Object} _options - 追加オプション (現在は未使用)
    */
-<span class="fstat-no" title="function not covered" >  co</span>nstructor(logger, eventEmitter, options = <span class="branch-0 cbranch-no" title="branch not covered" >{})</span> {
+<span class="fstat-no" title="function not covered" >  co</span>nstructor(logger, eventEmitter, _options = <span class="branch-0 cbranch-no" title="branch not covered" >{})</span> {
+    // options -&gt; _options
 <span class="cstat-no" title="statement not covered" >    if (!logger) {</span>
 <span class="cstat-no" title="statement not covered" >      throw new Error('ErrorHandler requires a logger instance');</span>
     }
@@ -1723,7 +1728,7 @@ class ErrorHandler {
 <span class="fstat-no" title="function not covered" >  as</span>ync handle(error, component, operation, options = <span class="branch-0 cbranch-no" title="branch not covered" >{})</span> {
     const traceId = <span class="cstat-no" title="statement not covered" >options.traceId || this._generateTraceId();</span>
     const requestId = <span class="cstat-no" title="statement not covered" >options.requestId || this._generateRequestId();</span>
-    const timestamp = <span class="cstat-no" title="statement not covered" >new Date().toISOString();</span>
+    // const timestamp = new Date().toISOString(); // 未使用のためコメントアウト
 &nbsp;
     // アプリケーションエラーでなければラップする
 <span class="cstat-no" title="statement not covered" >    if (!(error instanceof ApplicationError)) {</span>
@@ -1997,7 +2002,8 @@ class ErrorHandler {
    * エラーカウントを更新
    * @private
    */
-<span class="fstat-no" title="function not covered" >  _u</span>pdateErrorCounts(error, component, operation) {
+<span class="fstat-no" title="function not covered" >  _u</span>pdateErrorCounts(error, component, _operation) {
+    // operation -&gt; _operation
     // エラータイプ別カウント
     const errorType = <span class="cstat-no" title="statement not covered" >error.constructor.name;</span>
     const errorTypeKey = <span class="cstat-no" title="statement not covered" >`type:${errorType}`;</span>
@@ -2455,7 +2461,7 @@ class ErrorHandler {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-03-29T11:46:38.498Z
+                at 2025-04-01T22:13:42.734Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

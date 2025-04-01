@@ -15,23 +15,23 @@ describe('IntegrationManager', () => {
     // モック依存関係の作成
     mockDeps = createMockDependencies();
 
-    // IntegrationManagerのインスタンスを作成
-    integrationManager = new IntegrationManager(
-      mockDeps.taskManagerAdapter,
-      mockDeps.sessionManagerAdapter,
-      mockDeps.feedbackManagerAdapter,
-      mockDeps.stateManager,
-      mockDeps.cacheManager,
-      mockDeps.eventEmitter,
-      mockDeps.lockManager,
-      mockDeps.logger,
-      mockDeps.pluginManager,
-      mockDeps.validator,
-      mockDeps.errorHandler,
-      {
+    // IntegrationManagerのインスタンスを作成 (options オブジェクトで渡す)
+    integrationManager = new IntegrationManager({
+      taskManager: mockDeps.taskManagerAdapter,
+      sessionManager: mockDeps.sessionManagerAdapter,
+      feedbackManager: mockDeps.feedbackManagerAdapter,
+      stateManager: mockDeps.stateManager,
+      cacheManager: mockDeps.cacheManager,
+      eventEmitter: mockDeps.eventEmitter,
+      lockManager: mockDeps.lockManager,
+      logger: mockDeps.logger,
+      pluginManager: mockDeps.pluginManager,
+      validator: mockDeps.validator,
+      errorHandler: mockDeps.errorHandler,
+      config: {
         syncInterval: 10000,
-      }
-    );
+      },
+    });
   });
 
   test('コンストラクタで依存関係を正しく設定する', () => {

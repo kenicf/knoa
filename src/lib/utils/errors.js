@@ -16,6 +16,7 @@ const {
   AuthorizationError, // 必要に応じて追加
   NotFoundError, // 必要に応じて追加
   ExternalServiceError, // 必要に応じて追加
+  StorageError, // core から StorageError をインポート
 } = require('../core/error-framework');
 
 // GitError と StorageError はこのモジュール固有のため残す
@@ -35,10 +36,11 @@ class GitError extends ApplicationError {
   }
 }
 
+// StorageError の再定義を削除 (core からインポートするため)
 /**
- * ストレージエラークラス
+ * CLIエラークラス
  */
-class StorageError extends ApplicationError {
+class CliError extends ApplicationError {
   /**
    * コンストラクタ
    * @param {string} message - エラーメッセージ
@@ -46,8 +48,13 @@ class StorageError extends ApplicationError {
    * @param {Object} [context] - 追加コンテキスト
    */
   constructor(message, cause, context = {}) {
-    super(message, { cause, code: 'ERR_STORAGE', context });
-    this.name = 'StorageError';
+    // context に code があればそれを優先し、なければデフォルト 'ERR_CLI' を使う
+    const errorCode = context?.code || 'ERR_CLI';
+    // context から code を削除して super に渡す (元の context を変更しないようにコピー)
+    const contextWithoutCode = { ...context };
+    delete contextWithoutCode.code;
+    super(message, { cause, code: errorCode, context: contextWithoutCode });
+    this.name = 'CliError';
   }
 }
 
@@ -66,4 +73,5 @@ module.exports = {
   // このモジュール固有のエラー
   GitError,
   StorageError,
+  CliError, // CliError をエクスポートに追加
 };

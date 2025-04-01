@@ -12,6 +12,7 @@ function createMockLogger() {
     warn: jest.fn(),
     error: jest.fn(),
     debug: jest.fn(),
+    fatal: jest.fn(), // fatal メソッドを追加
   };
 }
 
@@ -20,13 +21,31 @@ function createMockLogger() {
  * @returns {Object} モックイベントエミッター
  */
 function createMockEventEmitter() {
+  // デフォルトのID生成ロジックを模倣するモック関数
+  const mockTraceIdGenerator = jest.fn(
+    () => `trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  );
+  const mockRequestIdGenerator = jest.fn(
+    () => `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  );
+
   return {
     emit: jest.fn(),
-    emitStandardized: jest.fn(),
+    emitStandardized: jest.fn(), // ★単純な jest.fn() に戻す
+    emitStandardizedAsync: jest.fn().mockResolvedValue(true), // 非同期版も単純なモックで良い場合が多い
     on: jest.fn(),
     once: jest.fn(),
     removeListener: jest.fn(),
     removeAllListeners: jest.fn(),
+    listenerCount: jest.fn().mockReturnValue(0),
+    getRegisteredEvents: jest.fn().mockReturnValue([]),
+    getHistory: jest.fn().mockReturnValue([]),
+    // テストコードが期待するIDジェネレーターメソッドを追加
+    _traceIdGenerator: mockTraceIdGenerator,
+    _requestIdGenerator: mockRequestIdGenerator,
+    // logger と debugMode もテストで参照されることがあるため追加
+    logger: createMockLogger(), // 簡易的なモックロガーを設定
+    debugMode: false,
   };
 }
 
@@ -89,53 +108,224 @@ function createMockErrorHandler(options = {}) {
 }
 
 /**
+ * モック StorageService を作成
+ * @returns {Object} モック StorageService
+ */
+function createMockStorageService() {
+  return {
+    readJSON: jest.fn().mockResolvedValue(null), // デフォルトは null を返す
+    writeJSON: jest.fn().mockResolvedValue(true), // デフォルトは成功
+    readText: jest.fn().mockResolvedValue(null),
+    writeText: jest.fn().mockResolvedValue(true),
+    writeFile: jest.fn().mockResolvedValue(true),
+    updateJSON: jest.fn().mockResolvedValue(null),
+    fileExists: jest.fn().mockResolvedValue(false),
+    listFiles: jest.fn().mockResolvedValue([]),
+    deleteFile: jest.fn().mockResolvedValue(true),
+    deleteDirectory: jest.fn().mockResolvedValue(true),
+    copyFile: jest.fn().mockResolvedValue(true),
+    ensureDirectoryExists: jest.fn().mockResolvedValue(true),
+    // 必要に応じて他のメソッドも追加
+  };
+}
+
+/**
+ * モック Validator を作成
+ * @returns {Object} モック Validator
+ */
+function createMockValidator() {
+  return {
+    validateTaskInput: jest.fn().mockReturnValue({ isValid: true, errors: [] }),
+    validateSessionInput: jest
+      .fn()
+      .mockReturnValue({ isValid: true, errors: [] }),
+    validateFeedbackInput: jest
+      .fn()
+      .mockReturnValue({ isValid: true, errors: [] }),
+    sanitizeString: jest.fn((str) => String(str || '')), // 基本的なサニタイズ動作
+    // 必要に応じて他のメソッドも追加
+  };
+}
+
+/**
  * 時間をモック
  * @param {string} isoString - ISO形式の時間文字列
  */
 function mockTimestamp(isoString) {
   // Dateのモック
   const mockDate = new Date(isoString);
-  global.Date = class extends Date {
-    constructor() {
-      return mockDate;
+  const OriginalDate = Date; // 元の Date を保持
+  global.Date = class extends OriginalDate {
+    // 元の Date を継承
+    constructor(...args) {
+      // 引数がある場合は元のコンストラクタを呼び出す
+      if (args.length > 0) {
+        super(...args);
+      } else {
+        // 引数がない場合はモック時刻を返す
+        return mockDate;
+      }
     }
 
     static now() {
       return mockDate.getTime();
     }
   };
+  // 元の Date の静的メソッドをコピー (念のため)
+  Object.getOwnPropertyNames(OriginalDate)
+    .filter(
+      (prop) =>
+        typeof OriginalDate[prop] === 'function' &&
+        prop !== 'now' &&
+        prop !== 'call' &&
+        prop !== 'apply' &&
+        prop !== 'bind'
+    )
+    .forEach((prop) => {
+      global.Date[prop] = OriginalDate[prop];
+    });
 
   // 現在時刻を返す関数のモック
   global.Date.now = jest.fn(() => mockDate.getTime());
 
-  // requestIdとtraceIdの生成をモック
+  // requestIdとtraceIdの生成をモック (より安定したID生成に変更)
+  let reqCounter = 0;
+  let traceCounter = 0;
   global.generateRequestId = jest.fn(
-    () =>
-      `req-${mockDate.getTime()}-${Math.random().toString(36).substring(2, 10)}`
+    () => `req-${mockDate.getTime()}-${++reqCounter}`
   );
   global.generateTraceId = jest.fn(
-    () =>
-      `trace-${mockDate.getTime()}-${Math.random().toString(36).substring(2, 10)}`
+    () => `trace-${mockDate.getTime()}-${++traceCounter}`
   );
 }
 
 /**
  * 共通のモック依存関係オブジェクトを作成
- * @returns {Object} モック依存関係オブジェクト { logger, eventEmitter, errorHandler }
+ * @returns {Object} モック依存関係オブジェクト { logger, eventEmitter, errorHandler, storageService, validator, ... }
  */
 function createMockDependencies() {
   const mockLogger = createMockLogger();
   const mockEventEmitter = createMockEventEmitter();
   const mockErrorHandler = createMockErrorHandler();
+  const mockStorageService = createMockStorageService(); // 作成した関数を使用
+  const mockValidator = createMockValidator(); // 作成した関数を使用
 
   // 必要に応じて他の共通モックを追加
-  // 例: const mockStorageService = { ... };
+  const mockGitService = {
+    getCurrentCommitHash: jest.fn(),
+    getCommitsBetween: jest.fn(),
+    getChangedFilesInCommit: jest.fn(),
+    getCommitDiffStats: jest.fn(),
+    getCommitHistory: jest.fn(),
+    getFileHistory: jest.fn(),
+    getCommitDetails: jest.fn(),
+    stageFiles: jest.fn(),
+    createCommit: jest.fn(),
+    getBranches: jest.fn(),
+    getCurrentBranch: jest.fn(),
+    extractTaskIdsFromCommitMessage: jest.fn(),
+  };
+  // Add mocks for other managers and adapters needed by IntegrationManager
+  const mockTaskManagerAdapter = {
+    createTask: jest.fn(),
+    updateTaskStatus: jest.fn(),
+    getAllTasks: jest.fn(),
+    getTaskById: jest.fn(),
+    updateTaskProgress: jest.fn(),
+    deleteTask: jest.fn(),
+    addGitCommitToTask: jest.fn(),
+    importTask: jest.fn(),
+    updateTask: jest.fn(),
+  };
+  const mockSessionManagerAdapter = {
+    createNewSession: jest.fn(),
+    getLatestSession: jest.fn(),
+    addTaskToSession: jest.fn(), // このメソッドは使われていない可能性
+    getSession: jest.fn(),
+    endSession: jest.fn(),
+    getAllSessions: jest.fn(),
+    importSession: jest.fn(),
+  };
+  const mockFeedbackManagerAdapter = {
+    collectFeedback: jest.fn(), // collectTestResults だった？ 要確認
+    collectTestResults: jest.fn(),
+    getPendingFeedback: jest.fn(),
+    updateFeedbackStatus: jest.fn(),
+    getFeedbackByTaskId: jest.fn(),
+    generateFeedbackMarkdown: jest.fn(),
+    prioritizeFeedback: jest.fn(),
+    linkFeedbackToGitCommit: jest.fn(),
+    linkFeedbackToSession: jest.fn(),
+    integrateFeedbackWithTask: jest.fn(),
+    integrateFeedbackWithSession: jest.fn(),
+  };
+  const mockStateManager = {
+    // stateManagerAdapter ではなく stateManager? 要確認
+    setState: jest.fn(),
+    getState: jest.fn(),
+    getCurrentState: jest.fn(),
+    transitionTo: jest.fn(),
+    canTransitionTo: jest.fn(),
+    getStateHistory: jest.fn(),
+    getPreviousState: jest.fn(),
+  };
+  const mockStateManagerAdapter = mockStateManager; // エイリアスとして追加
+
+  const mockCacheManager = {
+    get: jest.fn(),
+    set: jest.fn(),
+    clear: jest.fn(),
+    invalidate: jest.fn(),
+    getStats: jest.fn(),
+  };
+  const mockLockManager = {
+    acquireLock: jest.fn(),
+    releaseLock: jest.fn(),
+    getLockStatus: jest.fn(),
+  };
+  const mockPluginManager = {
+    loadPlugins: jest.fn(),
+    executeHook: jest.fn(),
+    registerPlugin: jest.fn(),
+    unregisterPlugin: jest.fn(),
+    invokePlugin: jest.fn(),
+  };
+  const mockHandlebars = {
+    compile: jest.fn().mockReturnValue(jest.fn()),
+    registerHelper: jest.fn(),
+  }; // Handlebars mock
+  // IntegrationManagerAdapter のモックも追加
+  const mockIntegrationManagerAdapter = {
+    initializeWorkflow: jest.fn(),
+    startSession: jest.fn(),
+    endSession: jest.fn(),
+    createTask: jest.fn(),
+    updateTaskStatus: jest.fn(),
+    collectFeedback: jest.fn(),
+    resolveFeedback: jest.fn(),
+    syncComponents: jest.fn(),
+    generateReport: jest.fn(),
+    getWorkflowStatus: jest.fn(), // これは直接使われていない可能性
+  };
 
   return {
     logger: mockLogger,
     eventEmitter: mockEventEmitter,
     errorHandler: mockErrorHandler,
-    // storageService: mockStorageService,
+    storageService: mockStorageService,
+    gitService: mockGitService,
+    // Add other mocks to the returned object
+    taskManagerAdapter: mockTaskManagerAdapter,
+    sessionManagerAdapter: mockSessionManagerAdapter,
+    feedbackManagerAdapter: mockFeedbackManagerAdapter,
+    stateManager: mockStateManager, // or stateManagerAdapter
+    stateManagerAdapter: mockStateManagerAdapter,
+    cacheManager: mockCacheManager,
+    lockManager: mockLockManager,
+    pluginManager: mockPluginManager,
+    validator: mockValidator,
+    handlebars: mockHandlebars,
+    integrationManagerAdapter: mockIntegrationManagerAdapter, // 追加
   };
 }
 
@@ -143,6 +333,8 @@ module.exports = {
   createMockLogger,
   createMockEventEmitter,
   createMockErrorHandler,
+  createMockStorageService, // エクスポート追加
+  createMockValidator, // エクスポート追加
   mockTimestamp,
   createMockDependencies,
 };

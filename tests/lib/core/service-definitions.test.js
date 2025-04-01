@@ -17,7 +17,7 @@ jest.mock('../../../src/lib/utils/git');
 jest.mock('../../../src/lib/managers/session-manager');
 jest.mock('../../../src/lib/managers/feedback-manager');
 jest.mock('../../../src/lib/managers/task-manager', () => ({}));
-jest.mock('../../../src/lib/utils/state-manager');
+jest.mock('../../../src/lib/managers/state-manager'); // Path was already correct, re-checking
 jest.mock('../../../src/lib/utils/cache-manager');
 jest.mock('../../../src/lib/utils/lock-manager');
 jest.mock('../../../src/lib/utils/logger');
@@ -137,7 +137,7 @@ describe('ServiceDefinitions', () => {
     const GitService = require('../../../src/lib/utils/git');
     const SessionManager = require('../../../src/lib/managers/session-manager');
     const FeedbackManager = require('../../../src/lib/managers/feedback-manager');
-    const StateManager = require('../../../src/lib/utils/state-manager');
+    const StateManager = require('../../../src/lib/managers/state-manager'); // Corrected path
     const CacheManager = require('../../../src/lib/utils/cache-manager');
     const LockManager = require('../../../src/lib/utils/lock-manager');
     const Logger = require('../../../src/lib/utils/logger');

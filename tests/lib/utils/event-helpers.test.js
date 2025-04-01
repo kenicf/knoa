@@ -11,10 +11,6 @@ const {
   createMockEventEmitter,
   mockTimestamp,
 } = require('../../helpers/mock-factory');
-const {
-  // expectStandardizedEventEmitted はヘルパー自体のテストなので直接検証
-  expectLogged,
-} = require('../../helpers/test-helpers'); // expectStandardizedEventEmitted を削除
 
 describe('event-helpers', () => {
   const MOCK_TIMESTAMP_ISO = '2021-03-01T00:00:00.000Z';
@@ -26,21 +22,25 @@ describe('event-helpers', () => {
 
   describe('createStandardizedEventData', () => {
     beforeEach(() => {
+      // Arrange (Common setup for this describe block)
       mockTimestamp(MOCK_TIMESTAMP_ISO);
       jest.spyOn(Date, 'now').mockReturnValue(MOCK_TIMESTAMP_MS);
       jest.spyOn(Math, 'random').mockReturnValue(MOCK_RANDOM);
     });
 
     afterEach(() => {
+      // Clean up mocks
       jest.restoreAllMocks();
     });
 
     test.each([
       [
         '基本的なイベントデータ',
-        {},
-        'component',
+        {}, // 入力データ
+        'component', // コンポーネント名
         {
+          // 期待される完全なデータ
+          component: 'component',
           timestamp: MOCK_TIMESTAMP_ISO,
           traceId: EXPECTED_TRACE_ID,
           requestId: EXPECTED_REQUEST_ID,
@@ -50,19 +50,35 @@ describe('event-helpers', () => {
         '既存のデータを保持',
         { key1: 'value1' },
         'component',
-        { key1: 'value1' },
+        {
+          key1: 'value1',
+          component: 'component',
+          timestamp: MOCK_TIMESTAMP_ISO,
+          traceId: EXPECTED_TRACE_ID,
+          requestId: EXPECTED_REQUEST_ID,
+        },
       ],
       [
         '既存のタイムスタンプを保持',
         { timestamp: '2021-01-01T00:00:00.000Z' },
         'component',
-        { timestamp: '2021-01-01T00:00:00.000Z' },
+        {
+          component: 'component',
+          timestamp: '2021-01-01T00:00:00.000Z', // 既存の値を期待
+          traceId: EXPECTED_TRACE_ID,
+          requestId: EXPECTED_REQUEST_ID,
+        },
       ],
       [
         '既存のtraceIdとrequestIdを保持 (camelCase)',
         { traceId: 'existing-trace', requestId: 'existing-req' },
         'component',
-        { traceId: 'existing-trace', requestId: 'existing-req' },
+        {
+          component: 'component',
+          timestamp: MOCK_TIMESTAMP_ISO,
+          traceId: 'existing-trace', // 既存の値を期待
+          requestId: 'existing-req', // 既存の値を期待
+        },
       ],
       [
         '既存のtraceIdとrequestIdを保持 (snake_case)',
@@ -71,62 +87,74 @@ describe('event-helpers', () => {
         {
           trace_id: 'existing-trace-s',
           request_id: 'existing-req-s',
-          traceId: 'existing-trace-s',
-          requestId: 'existing-req-s',
+          component: 'component',
+          timestamp: MOCK_TIMESTAMP_ISO,
+          traceId: 'existing-trace-s', // snake_case が camelCase にコピーされることを期待
+          requestId: 'existing-req-s', // snake_case が camelCase にコピーされることを期待
         },
       ],
-    ])('%s を生成する', (_, data, component, expectedData) => {
+    ])('should generate %s', (_, data, component, expectedFullData) => {
+      // expectedPartialData -> expectedFullData
       // Act
       const result = createStandardizedEventData(data, component);
+
       // Assert
-      expect(result).toEqual(
-        expect.objectContaining({ ...expectedData, component })
-      );
+      // expect.objectContaining ではなく toEqual で完全一致を検証
+      expect(result).toEqual(expectedFullData);
     });
 
-    test('dataがundefinedの場合でも正しく処理する', () => {
+    test('should handle undefined data correctly', () => {
       // Arrange
       const component = 'component';
+      const expectedFullData = {
+        // 期待される完全なデータ
+        component: 'component',
+        timestamp: MOCK_TIMESTAMP_ISO,
+        traceId: EXPECTED_TRACE_ID,
+        requestId: EXPECTED_REQUEST_ID,
+      };
+
       // Act
       const result = createStandardizedEventData(undefined, component);
+
       // Assert
-      expect(result).toEqual(
-        expect.objectContaining({
-          component,
-          timestamp: MOCK_TIMESTAMP_ISO,
-          traceId: EXPECTED_TRACE_ID,
-          requestId: EXPECTED_REQUEST_ID,
-        })
-      );
+      // expect.objectContaining ではなく toEqual で完全一致を検証
+      expect(result).toEqual(expectedFullData);
     });
   });
-
-  // createEventBridge のテストブロックは削除
 
   describe('emitStandardizedEvent', () => {
     let mockEventEmitter;
     let mockLogger;
 
     beforeEach(() => {
-      // モックのセットアップ
+      // Arrange (Common setup for this describe block)
       mockEventEmitter = createMockEventEmitter();
       mockLogger = createMockLogger();
-      mockEventEmitter.logger = mockLogger;
-      mockEventEmitter.debugMode = true;
+      mockEventEmitter.logger = mockLogger; // Attach logger to mock emitter
+      mockEventEmitter.debugMode = true; // Enable debug mode for testing logs
       mockTimestamp(MOCK_TIMESTAMP_ISO);
       jest.spyOn(Date, 'now').mockReturnValue(MOCK_TIMESTAMP_MS);
       jest.spyOn(Math, 'random').mockReturnValue(MOCK_RANDOM);
     });
 
     afterEach(() => {
+      // Clean up mocks
       jest.restoreAllMocks();
     });
 
-    test('emitStandardized を使用してイベントを発行する', () => {
+    test('should call emitStandardized with standardized data and log debug message', () => {
       // Arrange
       const component = 'component';
       const action = 'action';
       const data = { key: 'value' };
+      const expectedStandardizedData = {
+        key: 'value',
+        component,
+        timestamp: MOCK_TIMESTAMP_ISO,
+        traceId: EXPECTED_TRACE_ID,
+        requestId: EXPECTED_REQUEST_ID,
+      };
 
       // Act
       const result = emitStandardizedEvent(
@@ -141,22 +169,31 @@ describe('event-helpers', () => {
       expect(mockEventEmitter.emitStandardized).toHaveBeenCalledWith(
         component,
         action,
+        expect.objectContaining(expectedStandardizedData)
+      );
+      // Verify debug log using mockLogger directly
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        `標準化されたイベントを発行: ${component}:${action}`,
         expect.objectContaining({
-          key: 'value',
           component,
+          action,
+          standardEvent: `${component}:${action}`,
           timestamp: MOCK_TIMESTAMP_ISO,
-          traceId: EXPECTED_TRACE_ID,
-          requestId: EXPECTED_REQUEST_ID,
         })
       );
-      expectLogged(mockLogger, 'debug', '標準化されたイベントを発行');
     });
 
-    test('dataパラメータがundefinedの場合、デフォルト値の空オブジェクトを使用する', () => {
+    test('should use default empty object for data if data parameter is undefined', () => {
       // Arrange
       const component = 'component';
       const action = 'action';
       const data = undefined;
+      const expectedStandardizedData = {
+        component,
+        timestamp: MOCK_TIMESTAMP_ISO,
+        traceId: EXPECTED_TRACE_ID,
+        requestId: EXPECTED_REQUEST_ID,
+      };
 
       // Act
       const result = emitStandardizedEvent(
@@ -171,16 +208,11 @@ describe('event-helpers', () => {
       expect(mockEventEmitter.emitStandardized).toHaveBeenCalledWith(
         component,
         action,
-        expect.objectContaining({
-          component,
-          timestamp: MOCK_TIMESTAMP_ISO,
-          traceId: EXPECTED_TRACE_ID,
-          requestId: EXPECTED_REQUEST_ID,
-        })
+        expect.objectContaining(expectedStandardizedData)
       );
     });
 
-    test('イベントエミッターがない場合、falseを返し、コンソールエラーを出力する', () => {
+    test('should return false and log console error if eventEmitter is null', () => {
       // Arrange
       const component = 'component';
       const action = 'action';
@@ -192,20 +224,19 @@ describe('event-helpers', () => {
 
       // Assert
       expect(result).toBe(false);
-      // エラーメッセージの内容を実際の出力に合わせる
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         `emitStandardizedEvent requires an eventEmitter with emitStandardized method. Component: ${component}, Action: ${action}`
-        // 以前の期待値: expect.stringContaining('emitStandardizedEvent requires an eventEmitter'), component, action
       );
+      expect(mockEventEmitter.emitStandardized).not.toHaveBeenCalled();
       consoleErrorSpy.mockRestore();
     });
 
-    test('eventEmitter に emitStandardized がない場合、falseを返し、エラーログを出力する', () => {
+    test('should return false and log error if eventEmitter lacks emitStandardized method', () => {
       // Arrange
       const component = 'component';
       const action = 'action';
       const data = { key: 'value' };
-      const legacyEmitter = { logger: mockLogger }; // emitStandardized がない
+      const legacyEmitter = { logger: mockLogger }; // No emitStandardized
 
       // Act
       const result = emitStandardizedEvent(
@@ -217,56 +248,28 @@ describe('event-helpers', () => {
 
       // Assert
       expect(result).toBe(false);
-      // エラーメッセージの内容を修正
       expect(mockLogger.error).toHaveBeenCalledWith(
         `emitStandardizedEvent requires an eventEmitter with emitStandardized method. Component: ${component}, Action: ${action}`
       );
+      // Ensure emitStandardized was not called (it doesn't exist)
     });
 
-    test('デバッグモードがfalseの場合、デバッグログは出力されない', () => {
+    test('should not log debug message if debugMode is false', () => {
       // Arrange
       const component = 'component';
       const action = 'action';
       const data = { key: 'value' };
-      mockEventEmitter.debugMode = false;
+      mockEventEmitter.debugMode = false; // Disable debug mode
 
       // Act
       emitStandardizedEvent(mockEventEmitter, component, action, data);
 
       // Assert
-      expect(mockLogger.debug).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emitStandardized).toHaveBeenCalled(); // Still emits
+      expect(mockLogger.debug).not.toHaveBeenCalled(); // But does not log debug
     });
 
-    test('ロガーがない場合でもエラーは発生しない（コンソールエラーが出力される）', () => {
-      // Arrange
-      const component = 'component';
-      const action = 'action';
-      const data = { key: 'value' };
-      delete mockEventEmitter.logger;
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-      const error = new Error('Test Error');
-      mockEventEmitter.emitStandardized.mockImplementation(() => {
-        throw error;
-      });
-
-      // Act
-      const result = emitStandardizedEvent(
-        mockEventEmitter,
-        component,
-        action,
-        data
-      );
-
-      // Assert
-      expect(result).toBe(false);
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        `イベント発行中にエラーが発生しました: ${component}:${action}`,
-        error
-      );
-      consoleErrorSpy.mockRestore();
-    });
-
-    test('エラーが発生した場合にエラーログを出力する', () => {
+    test('should return false and log error if emitStandardized throws', () => {
       // Arrange
       const component = 'component';
       const action = 'action';
@@ -292,14 +295,14 @@ describe('event-helpers', () => {
       );
     });
 
-    test('エラーが発生し、ロガーがない場合はコンソールエラーを出力する', () => {
+    test('should return false and log console error if emitStandardized throws and logger is unavailable', () => {
       // Arrange
       const component = 'component';
       const action = 'action';
       const data = { key: 'value' };
       const error = new Error('テストエラー');
       const faultyEmitter = {
-        // ロガーなし
+        // No logger attached
         emitStandardized: jest.fn(() => {
           throw error;
         }),

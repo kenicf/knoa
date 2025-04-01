@@ -83,26 +83,10 @@ class BaseAdapter {
       });
     }
 
-    // エラーイベントを発行
-    if (this.eventEmitter) {
-      const component = this.constructor.name
-        .replace('Adapter', '')
-        .toLowerCase();
-      this.eventEmitter.emitError(
-        error,
-        component,
-        operation,
-        context,
-        details
-      );
-    } else {
-      // イベントエミッターがない場合は直接ロガーに出力
-      this.logger.error(
-        `Error in ${this.constructor.name}.${operation}:`,
-        error,
-        details
-      );
-    }
+    // エラーイベントを発行 (修正: _emitErrorEvent を使用)
+    this._emitErrorEvent(error, operation, context, details);
+
+    // イベントエミッターがない場合の直接ログ出力は _emitErrorEvent 内で行われるため削除
 
     // 構造化されたエラー情報を返す
     return {

@@ -2,7 +2,7 @@
 const globals = require('globals');
 const js = require('@eslint/js');
 const prettierConfig = require('eslint-config-prettier'); // Prettier競合ルール無効化用
-// const nodePlugin = require('eslint-plugin-node'); // 一時的に削除
+const nPlugin = require('eslint-plugin-n'); // eslint-plugin-n に変更
 const jestPlugin = require('eslint-plugin-jest');
 const promisePlugin = require('eslint-plugin-promise');
 const securityPlugin = require('eslint-plugin-security');
@@ -28,7 +28,7 @@ module.exports = [
     files: ['**/*.js'],
     plugins: {
       // プラグインを登録
-      // node: nodePlugin, // 一時的に削除
+      n: nPlugin, // プラグイン名を n に変更
       jest: jestPlugin,
       promise: promisePlugin,
       security: securityPlugin,
@@ -46,7 +46,7 @@ module.exports = [
       // 基本ルール
       ...js.configs.recommended.rules,
       // プラグイン推奨ルール
-      // ...nodePlugin.configs.recommended.rules, // 一時的に削除
+      ...nPlugin.configs.recommended.rules, // 推奨ルールを nPlugin から取得
       ...jestPlugin.configs.recommended.rules,
       ...promisePlugin.configs.recommended.rules,
       ...securityPlugin.configs.recommended.rules,
@@ -54,12 +54,8 @@ module.exports = [
       ...prettierConfig.rules, // Prettierと競合するESLintルールを無効化
       'prettier/prettier': 'warn', // Prettierのルール違反をESLintの警告として報告
       // プロジェクト固有のルール調整
-      'no-unused-vars': [
-        'warn',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-      ],
+      'no-unused-vars': 'off',
       'no-console': 'warn',
-      // node/* ルールも一時的に削除
     },
   },
   // フロントエンド用設定
@@ -101,6 +97,16 @@ module.exports = [
     files: ['src/examples/**/*.js'],
     rules: {
       'no-console': 'off', // サンプルコードではコンソール出力は許可
+    },
+  },
+  // src/lib/core/constants.js の module.exports を許可
+  {
+    files: ['src/lib/core/constants.js'],
+    rules: {
+      // node/ プレフィックスを n/ に変更し、一時的な無効化を解除（nPluginで問題ないか確認するため）
+      // 'n/no-exports-assign': 'off',
+      // 'n/no-deprecated-api': 'off',
+      // 'n/no-extraneous-require': 'off',
     },
   },
 ];

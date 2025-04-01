@@ -549,7 +549,11 @@
 <a name='L484'></a><a href='#L484'>484</a>
 <a name='L485'></a><a href='#L485'>485</a>
 <a name='L486'></a><a href='#L486'>486</a>
-<a name='L487'></a><a href='#L487'>487</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L487'></a><a href='#L487'>487</a>
+<a name='L488'></a><a href='#L488'>488</a>
+<a name='L489'></a><a href='#L489'>489</a>
+<a name='L490'></a><a href='#L490'>490</a>
+<a name='L491'></a><a href='#L491'>491</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -672,6 +676,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -758,8 +763,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -767,6 +772,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -841,6 +847,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -975,6 +982,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1044,8 +1052,8 @@
 &nbsp;
 const {
   ValidationError,
-  StateError,
-  DataConsistencyError,
+  // StateError, // 未使用のためコメントアウト
+  // DataConsistencyError, // 未使用のためコメントアウト
   LockTimeoutError,
 } = <span class="cstat-no" title="statement not covered" >require('../../lib/utils/errors');</span>
 &nbsp;
@@ -1158,6 +1166,7 @@ class IntegrationManager {
 &nbsp;
         // 開発環境では警告を表示
 <span class="cstat-no" title="statement not covered" >        if (process.env.NODE_ENV === 'development') {</span>
+          // eslint-disable-next-line no-console
 <span class="cstat-no" title="statement not covered" >          console.warn(</span>
             '非推奨のイベント名 integration:manager:initialized が使用されています。代わりに integration:system_initialized を使用してください。'
           );
@@ -1243,15 +1252,16 @@ class IntegrationManager {
               traceId,
               requestId,
             });
-&nbsp;
             // 開発環境では警告を表示
 <span class="cstat-no" title="statement not covered" >            if (process.env.NODE_ENV === 'development') {</span>
+              // eslint-disable-next-line no-console
 <span class="cstat-no" title="statement not covered" >              console.warn(</span>
                 '非推奨のイベント名 workflow:initialized が使用されています。代わりに integration:workflow_initialized を使用してください。'
               );
             }
           }
         }
+        // } // Remove extra closing brace
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        return {</span>
           project: projectInfo,
@@ -1327,6 +1337,7 @@ class IntegrationManager {
 &nbsp;
           // 開発環境では警告を表示
 <span class="cstat-no" title="statement not covered" >          if (process.env.NODE_ENV === 'development') {</span>
+            // eslint-disable-next-line no-console
 <span class="cstat-no" title="statement not covered" >            console.warn(</span>
               '非推奨のイベント名 session:started が使用されています。代わりに session:session_started を使用してください。'
             );
@@ -1461,10 +1472,11 @@ class IntegrationManager {
       // ロックの取得
 <span class="cstat-no" title="statement not covered" >      this.logger.debug('ロックの取得を試みます: sync:components');</span>
       const lockerId = <span class="cstat-no" title="statement not covered" >'integration-manager';</span>
-      const lockAcquired = <span class="cstat-no" title="statement not covered" >await this.lockManager.acquireLock(</span>
+      // const lockAcquired = // 未使用のためコメントアウト
+<span class="cstat-no" title="statement not covered" >      await this.lockManager.acquireLock(</span>
         'sync:components',
         lockerId,
-        5000
+        5000 // タイムアウトを5秒に設定
       );
 <span class="cstat-no" title="statement not covered" >      this.logger.debug('ロックの取得に成功しました: sync:components');</span>
 &nbsp;
@@ -1528,7 +1540,7 @@ class IntegrationManager {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-03-29T11:46:38.673Z
+                at 2025-04-01T22:13:43.048Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

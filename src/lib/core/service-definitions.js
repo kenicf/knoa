@@ -18,20 +18,29 @@ const EventMigrationHelper = require('./event-migration-helper');
 // ユーティリティ
 const StorageService = require('../utils/storage');
 const GitService = require('../utils/git');
-
-// マネージャークラス
-// 新しいパスを使用
-const { SessionManager } = require('../managers/session-manager');
-const { FeedbackManager } = require('../managers/feedback-manager');
-const { TaskManager } = require('../managers/task-manager');
-const IntegrationManager = require('../managers/integration-manager');
 const EventEmitter = require('../utils/event-emitter');
 const StateManager = require('../managers/state-manager');
 const CacheManager = require('../utils/cache-manager');
 const LockManager = require('../utils/lock-manager');
 const Logger = require('../utils/logger');
 const PluginManager = require('../utils/plugin-manager');
-const Validator = require('../utils/validator');
+const Validator = require('../utils/validator'); // 汎用バリデータ (utils/validator.js)
+
+// データ層コンポーネント
+const { TaskRepository } = require('../data/task-repository');
+const { SessionRepository } = require('../data/session-repository');
+const { FeedbackRepository } = require('../data/feedback-repository');
+const { TaskValidator } = require('../data/validators/task-validator');
+const { SessionValidator } = require('../data/validators/session-validator');
+const { FeedbackValidator } = require('../data/validators/feedback-validator');
+
+// マネージャークラス
+// 新しいパスを使用
+const { SessionManager } = require('../managers/session-manager');
+const { FeedbackManager } = require('../managers/feedback-manager');
+// TaskManager をオブジェクトから取り出すように修正
+const { TaskManager } = require('../managers/task-manager');
+const IntegrationManager = require('../managers/integration-manager'); // IntegrationManager も同様か確認が必要
 
 // アダプター
 // 新しいパスを使用
@@ -152,10 +161,23 @@ function registerServices(container, config = {}) {
     });
   });
 
-  container.registerFactory('validator', (c) => {
-    return new Validator({
-      logger: c.get('logger'),
-    });
+  // 汎用バリデータ (utils/validator.js)
+  container.registerFactory('validator', () => {
+    // require した結果がクラスコンストラクタなので、そのまま返す
+    return Validator;
+  });
+
+  // データ型固有バリデータ
+  container.registerFactory('taskValidator', (c) => {
+    return new TaskValidator({ logger: c.get('logger') });
+  });
+  container.registerFactory('sessionValidator', (c) => {
+    // SessionValidator は logger に依存しない想定
+    return new SessionValidator({});
+  });
+  container.registerFactory('feedbackValidator', (c) => {
+    // FeedbackValidator は logger に依存しない想定
+    return new FeedbackValidator({});
   });
 
   // マネージャークラス
@@ -192,15 +214,48 @@ function registerServices(container, config = {}) {
     });
   });
 
-  // 新しいオプションオブジェクトパターンを使用
-  container.registerFactory('taskManager', (c) => {
-    const taskConfig = c.get('config').task || {};
-    return new TaskManager({
+  // データリポジトリ
+  container.registerFactory('taskRepository', (c) => {
+    return new TaskRepository({
       storageService: c.get('storageService'),
+      taskValidator: c.get('taskValidator'), // 固有バリデータを注入
+      logger: c.get('logger'),
+      eventEmitter: c.get('eventEmitter'),
+      errorHandler: c.get('errorHandler'),
+      // directory 等のオプションは TaskRepository のデフォルト値を使用
+    });
+  });
+  container.registerFactory('sessionRepository', (c) => {
+    return new SessionRepository({
+      storageService: c.get('storageService'),
+      sessionValidator: c.get('sessionValidator'), // 固有バリデータを注入
       gitService: c.get('gitService'),
       logger: c.get('logger'),
       eventEmitter: c.get('eventEmitter'),
       errorHandler: c.get('errorHandler'),
+    });
+  });
+  container.registerFactory('feedbackRepository', (c) => {
+    return new FeedbackRepository({
+      storageService: c.get('storageService'),
+      feedbackValidator: c.get('feedbackValidator'), // 固有バリデータを注入
+      logger: c.get('logger'),
+      eventEmitter: c.get('eventEmitter'),
+      errorHandler: c.get('errorHandler'),
+    });
+  });
+
+  // 新しいオプションオブジェクトパターンを使用
+  container.registerFactory('taskManager', (c) => {
+    const taskConfig = c.get('config').task || {};
+    return new TaskManager({
+      taskRepository: c.get('taskRepository'), // Repository を注入
+      // storageService: c.get('storageService'), // Repository経由でアクセス
+      // gitService: c.get('gitService'), // Repository経由でアクセス
+      logger: c.get('logger'),
+      eventEmitter: c.get('eventEmitter'),
+      errorHandler: c.get('errorHandler'),
+      // taskValidator: c.get('taskValidator'), // Repository が持つ
       config: {
         tasksDir: taskConfig.tasksDir,
         currentTasksFile: taskConfig.currentTasksFile,
