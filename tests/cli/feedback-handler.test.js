@@ -6,12 +6,7 @@ const {
   NotFoundError,
   StorageError, // FileWriteError を削除し StorageError を追加
 } = require('../../src/lib/utils/errors');
-const {
-  createMockLogger,
-  createMockEventEmitter,
-  createMockStorageService,
-  createMockValidator,
-} = require('../helpers/mock-factory');
+const { createMockDependencies } = require('../helpers/mock-factory'); // createMockDependencies をインポート
 // expectStandardizedEventEmittedAsync をインポート
 const {
   expectStandardizedEventEmittedAsync,
@@ -33,29 +28,34 @@ describe('CliFeedbackHandler', () => {
   let mockErrorHandler;
   let cliFeedbackHandler;
 
+  let mockDependencies; // モック依存関係を保持する変数
+
   beforeEach(() => {
-    mockLogger = createMockLogger();
-    mockEventEmitter = createMockEventEmitter();
-    mockIntegrationManagerAdapter = {
-      collectFeedback: jest.fn(),
-      resolveFeedback: jest.fn(),
-    };
-    mockFeedbackManagerAdapter = {
-      // feedback.js 由来のメソッドをモック
-      getFeedbackByTaskId: jest.fn(),
-      updateFeedbackStatus: jest.fn(),
-      generateFeedbackMarkdown: jest.fn(),
-      prioritizeFeedback: jest.fn(),
-      linkFeedbackToGitCommit: jest.fn(),
-      linkFeedbackToSession: jest.fn(),
-      integrateFeedbackWithTask: jest.fn(),
-      integrateFeedbackWithSession: jest.fn(),
-    };
-    mockStorageService = createMockStorageService();
-    mockValidator = createMockValidator(); // 必要に応じて使用
-    mockErrorHandler = {
-      handle: jest.fn(),
-    };
+    mockDependencies = createMockDependencies(); // 共通モックを生成
+    mockLogger = mockDependencies.logger; // 個別変数にも代入
+    mockEventEmitter = mockDependencies.eventEmitter; // 個別変数にも代入
+    mockIntegrationManagerAdapter = mockDependencies.integrationManagerAdapter; // 共通モックから取得
+    mockFeedbackManagerAdapter = mockDependencies.feedbackManagerAdapter; // 共通モックから取得
+    mockStorageService = mockDependencies.storageService; // 共通モックから取得
+    mockValidator = mockDependencies.validator; // 共通モックから取得
+    mockErrorHandler = mockDependencies.errorHandler; // 共通モックから取得
+
+    // モックメソッドを再設定 (必要に応じて)
+    mockIntegrationManagerAdapter.collectFeedback = jest.fn();
+    mockIntegrationManagerAdapter.resolveFeedback = jest.fn();
+    mockFeedbackManagerAdapter.getFeedbackByTaskId = jest.fn();
+    mockFeedbackManagerAdapter.updateFeedbackStatus = jest.fn();
+    mockFeedbackManagerAdapter.generateFeedbackMarkdown = jest.fn();
+    mockFeedbackManagerAdapter.prioritizeFeedback = jest.fn();
+    mockFeedbackManagerAdapter.linkFeedbackToGitCommit = jest.fn();
+    mockFeedbackManagerAdapter.linkFeedbackToSession = jest.fn();
+    mockFeedbackManagerAdapter.integrateFeedbackWithTask = jest.fn();
+    mockFeedbackManagerAdapter.integrateFeedbackWithSession = jest.fn();
+    mockStorageService.writeText = jest.fn(); // writeText もモック化
+    mockValidator.validateFeedbackInput = jest
+      .fn()
+      .mockReturnValue({ isValid: true, errors: [] }); // デフォルトで成功済み
+    // mockValidator と mockErrorHandler の再定義は不要 (createMockDependencies で生成済み)
 
     // テスト対象インスタンスを作成
     cliFeedbackHandler = new CliFeedbackHandler({
@@ -63,8 +63,10 @@ describe('CliFeedbackHandler', () => {
       eventEmitter: mockEventEmitter,
       integrationManagerAdapter: mockIntegrationManagerAdapter,
       feedbackManagerAdapter: mockFeedbackManagerAdapter,
-      storageService: mockStorageService,
+      storageService: mockStorageService, // storageService を追加
       validator: mockValidator,
+      traceIdGenerator: mockDependencies.traceIdGenerator, // 注入
+      requestIdGenerator: mockDependencies.requestIdGenerator, // 注入
       // errorHandler: mockErrorHandler,
     });
 
@@ -114,28 +116,34 @@ describe('CliFeedbackHandler', () => {
       expect(result).toEqual(mockSuccessResult);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Collecting feedback'),
-        expect.objectContaining({ taskId })
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Feedback collected successfully for task: ${taskId}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_before`,
-        { taskId, testCommand }
+        'cli',
+        'feedback_collect_before', // イベント名を修正
+        { taskId, testCommand } // データ修正
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, testCommand, result: mockSuccessResult }
+        'cli',
+        'feedback_collect_after', // イベント名を修正
+        { taskId, testCommand, result: mockSuccessResult } // データ修正
       );
     });
 
@@ -150,18 +158,28 @@ describe('CliFeedbackHandler', () => {
       // エラーコード検証修正
       await expect(
         cliFeedbackHandler.collectFeedback(taskId, testCommand)
-      ).rejects.toHaveProperty('code', 'ERR_CLI'); // Default CliError code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_FEEDBACKHANDLER_COLLECTFEEDBACK'
+      ); // 修正: クラス名を含むエラーコード
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliFeedbackHandler',
         operation,
         expect.objectContaining({
-          code: 'ERR_CLI', // Default CliError code
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACKHANDLER_COLLECTFEEDBACK', // 修正後のコード
           cause: originalError,
         }),
         null,
-        { taskId, testCommand }
+        expect.objectContaining({
+          taskId,
+          testCommand,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
     test('should throw CliError if adapter returns error object', async () => {
@@ -177,14 +195,32 @@ describe('CliFeedbackHandler', () => {
       await expect(
         cliFeedbackHandler.collectFeedback(taskId, testCommand)
       ).rejects.toHaveProperty('code', 'ERR_CLI_FEEDBACK_COLLECT_ADAPTER'); // Specific code
+      // emitErrorEvent の期待値を修正
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliFeedbackHandler',
         operation,
-        expect.objectContaining({ code: 'ERR_CLI_FEEDBACK_COLLECT_ADAPTER' }),
-        null,
-        { taskId, testCommand }
+        expect.objectContaining({
+          // processedError (CliError)
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACK_COLLECT_ADAPTER', // CliError に設定されるコード
+          // cause は null
+          context: expect.objectContaining({
+            // エラーの context
+            taskId,
+            testCommand,
+            errorDetail: 'Internal feedback error',
+          }),
+        }),
+        null, // OperationContext (ここでは未使用)
+        expect.objectContaining({
+          // details (元の context)
+          taskId,
+          testCommand,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
     });
 
@@ -198,6 +234,8 @@ describe('CliFeedbackHandler', () => {
         storageService: mockStorageService,
         validator: mockValidator,
         errorHandler: mockErrorHandler, // errorHandler を提供
+        traceIdGenerator: mockDependencies.traceIdGenerator, // 注入
+        requestIdGenerator: mockDependencies.requestIdGenerator, // 注入
       });
       const originalError = new Error('Adapter failed');
       mockIntegrationManagerAdapter.collectFeedback.mockRejectedValue(
@@ -214,13 +252,19 @@ describe('CliFeedbackHandler', () => {
       expect(mockErrorHandler.handle).toHaveBeenCalledTimes(1);
       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
         expect.objectContaining({
-          // CliError が渡されることを期待
+          // CliError でラップされていることを確認
           name: 'CliError',
+          code: 'ERR_CLI_FEEDBACKHANDLER_COLLECTFEEDBACK', // 修正: クラス名を含むエラーコード
           cause: originalError,
         }),
         'CliFeedbackHandler',
         operation,
-        { taskId, testCommand }
+        expect.objectContaining({
+          taskId,
+          testCommand,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       expect(result).toEqual(errorHandlerResult); // errorHandler の戻り値が返される
       expect(emitErrorEvent).toHaveBeenCalledTimes(1); // エラーイベントは発行される
@@ -246,28 +290,34 @@ describe('CliFeedbackHandler', () => {
       expect(result).toEqual(mockSuccessResult);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Resolving feedback'),
-        expect.objectContaining({ feedbackId })
+        expect.objectContaining({
+          feedbackId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Feedback resolved successfully for: ${feedbackId}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_before`,
-        { feedbackId }
+        'cli',
+        'feedback_resolve_before', // イベント名を修正
+        { feedbackId } // データ修正
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_after`,
-        { feedbackId, result: mockSuccessResult }
+        'cli',
+        'feedback_resolve_after', // イベント名を修正
+        { feedbackId, result: mockSuccessResult } // データ修正
       );
     });
 
@@ -282,18 +332,27 @@ describe('CliFeedbackHandler', () => {
       // エラーコード検証修正
       await expect(
         cliFeedbackHandler.resolveFeedback(feedbackId)
-      ).rejects.toHaveProperty('code', 'ERR_CLI'); // Default CliError code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_FEEDBACKHANDLER_RESOLVEFEEDBACK'
+      ); // 修正: クラス名を含むエラーコード
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliFeedbackHandler',
         operation,
         expect.objectContaining({
-          code: 'ERR_CLI', // Default CliError code
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACKHANDLER_RESOLVEFEEDBACK', // 修正後のコード
           cause: originalError,
         }),
         null,
-        { feedbackId }
+        expect.objectContaining({
+          feedbackId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     }); // ← 修正済みの閉じ括弧
 
@@ -307,6 +366,8 @@ describe('CliFeedbackHandler', () => {
         storageService: mockStorageService,
         validator: mockValidator,
         errorHandler: mockErrorHandler, // errorHandler を提供
+        traceIdGenerator: mockDependencies.traceIdGenerator, // 注入
+        requestIdGenerator: mockDependencies.requestIdGenerator, // 注入
       });
       const originalError = new Error('Adapter failed');
       mockIntegrationManagerAdapter.resolveFeedback.mockRejectedValue(
@@ -320,13 +381,18 @@ describe('CliFeedbackHandler', () => {
       expect(mockErrorHandler.handle).toHaveBeenCalledTimes(1);
       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
         expect.objectContaining({
-          // CliError が渡されることを期待
+          // CliError でラップされていることを確認
           name: 'CliError',
+          code: 'ERR_CLI_FEEDBACKHANDLER_RESOLVEFEEDBACK', // 修正: クラス名を含むエラーコード
           cause: originalError,
         }),
         'CliFeedbackHandler',
         operation,
-        { feedbackId }
+        expect.objectContaining({
+          feedbackId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       expect(result).toEqual(errorHandlerResult); // errorHandler の戻り値が返される
       expect(emitErrorEvent).toHaveBeenCalledTimes(1); // エラーイベントは発行される
@@ -345,14 +411,30 @@ describe('CliFeedbackHandler', () => {
       await expect(
         cliFeedbackHandler.resolveFeedback(feedbackId)
       ).rejects.toHaveProperty('code', 'ERR_CLI_FEEDBACK_RESOLVE_ADAPTER'); // Specific code
+      // emitErrorEvent の期待値を修正
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliFeedbackHandler',
         operation,
-        expect.objectContaining({ code: 'ERR_CLI_FEEDBACK_RESOLVE_ADAPTER' }),
-        null,
-        { feedbackId }
+        expect.objectContaining({
+          // processedError (CliError)
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACK_RESOLVE_ADAPTER', // CliError に設定されるコード
+          // cause は null
+          context: expect.objectContaining({
+            // エラーの context
+            feedbackId,
+            errorDetail: 'Cannot resolve feedback',
+          }),
+        }),
+        null, // OperationContext (ここでは未使用)
+        expect.objectContaining({
+          // details (元の context)
+          feedbackId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
     });
   });
@@ -376,26 +458,34 @@ describe('CliFeedbackHandler', () => {
       expect(result).toEqual(mockFeedback);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Getting feedback status'),
-        expect.objectContaining({ taskId })
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining(`Feedback status retrieved for task: ${taskId}`)
+        expect.stringContaining(
+          `Feedback status retrieved for task: ${taskId}`
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_before`,
-        { taskId }
+        'cli',
+        'feedback_status_get_before', // イベント名を修正
+        { taskId } // データ修正
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, feedbackFound: true }
+        'cli',
+        'feedback_status_get_after', // イベント名を修正
+        { taskId, feedbackFound: true } // データ修正
       );
     });
 
@@ -408,18 +498,43 @@ describe('CliFeedbackHandler', () => {
       await expect(
         cliFeedbackHandler.getFeedbackStatus(taskId)
       ).rejects.toHaveProperty('code', 'ERR_CLI_FEEDBACK_NOT_FOUND'); // Specific code
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Feedback not found'),
-        expect.objectContaining({ taskId })
-      );
+      // _handleError 内で emitErrorEvent が呼ばれることを検証
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliFeedbackHandler',
         operation,
-        expect.objectContaining({ code: 'ERR_CLI_FEEDBACK_NOT_FOUND' }),
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_FEEDBACK_NOT_FOUND',
+          context: expect.objectContaining({ taskId }),
+        }),
         null,
-        { taskId }
+        expect.objectContaining({
+          // 元の context
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
+      );
+      // logger.warn は呼ばれないはずなので削除
+      expect(emitErrorEvent).toHaveBeenCalledWith(
+        mockEventEmitter,
+        mockLogger,
+        'CliFeedbackHandler',
+        operation,
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_FEEDBACK_NOT_FOUND',
+        }),
+        null,
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -434,18 +549,27 @@ describe('CliFeedbackHandler', () => {
       // エラーコード検証修正
       await expect(
         cliFeedbackHandler.getFeedbackStatus(taskId)
-      ).rejects.toHaveProperty('code', 'ERR_CLI'); // Default CliError code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_FEEDBACKHANDLER_GETFEEDBACKSTATUS'
+      ); // 修正: クラス名を含むエラーコード
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliFeedbackHandler',
         operation,
         expect.objectContaining({
-          code: 'ERR_CLI', // Default CliError code
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACKHANDLER_GETFEEDBACKSTATUS', // 修正後のコード
           cause: originalError,
         }),
         null,
-        { taskId }
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -477,28 +601,34 @@ describe('CliFeedbackHandler', () => {
       expect(result).toEqual(mockUpdatedFeedback);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Reopening feedback'),
-        expect.objectContaining({ taskId })
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Feedback reopened successfully for task: ${taskId}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_before`,
-        { taskId }
+        'cli',
+        'feedback_reopen_before', // イベント名を修正
+        { taskId } // データ修正
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, result: mockUpdatedFeedback }
+        'cli',
+        'feedback_reopen_after', // イベント名を修正
+        { taskId, result: mockUpdatedFeedback } // データ修正
       );
     });
 
@@ -519,9 +649,17 @@ describe('CliFeedbackHandler', () => {
         mockLogger,
         'CliFeedbackHandler',
         operation,
-        expect.objectContaining({ code: 'ERR_CLI_FEEDBACK_NOT_FOUND' }),
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_FEEDBACK_NOT_FOUND',
+        }),
         null,
-        { taskId }
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -539,18 +677,27 @@ describe('CliFeedbackHandler', () => {
       // エラーコード検証修正
       await expect(
         cliFeedbackHandler.reopenFeedback(taskId)
-      ).rejects.toHaveProperty('code', 'ERR_CLI'); // Default CliError code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_FEEDBACKHANDLER_REOPENFEEDBACK'
+      ); // 修正: クラス名を含むエラーコード
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliFeedbackHandler',
         operation,
         expect.objectContaining({
-          code: 'ERR_CLI', // Default CliError code
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACKHANDLER_REOPENFEEDBACK', // 修正後のコード
           cause: originalError,
         }),
         null,
-        { taskId }
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -572,28 +719,35 @@ describe('CliFeedbackHandler', () => {
       expect(mockStorageService.writeText).not.toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Generating feedback report'),
-        expect.objectContaining({ taskId })
+        expect.objectContaining({
+          taskId,
+          outputPath: null,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Feedback report generated successfully for task: ${taskId}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_before`,
-        { taskId, outputPath: null }
+        'cli',
+        'feedback_report_generate_before', // イベント名を修正
+        { taskId, outputPath: null } // データ修正
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, outputPath: null, reportLength: mockReportContent.length }
+        'cli',
+        'feedback_report_generate_after', // イベント名を修正
+        { taskId, outputPath: null, reportLength: mockReportContent.length } // データ修正
       );
     });
 
@@ -620,19 +774,22 @@ describe('CliFeedbackHandler', () => {
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Feedback report saved successfully to: ${outputPath}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_after`,
+        'cli',
+        'feedback_report_generate_after', // イベント名を修正
         {
           taskId,
           outputPath: outputPath,
           reportLength: mockReportContent.length,
-        }
+        } // データ修正
       );
     });
 
@@ -651,9 +808,18 @@ describe('CliFeedbackHandler', () => {
         mockLogger,
         'CliFeedbackHandler',
         operation,
-        expect.objectContaining({ code: 'ERR_CLI_FEEDBACK_REPORT_GENERATE' }),
+        expect.objectContaining({
+          // CliError を期待
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACK_REPORT_GENERATE',
+        }),
         null,
-        { taskId, outputPath: null }
+        expect.objectContaining({
+          taskId,
+          outputPath: null,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -689,10 +855,15 @@ describe('CliFeedbackHandler', () => {
         expect.objectContaining({
           // StorageError インスタンスかつ特定のコードを持つことを期待
           name: 'StorageError',
-          code: 'ERR_CLI_FILE_WRITE', // コードは ERR_CLI_FILE_WRITE を期待
+          code: 'ERR_CLI_FILE_WRITE',
         }),
         null,
-        { taskId, outputPath }
+        expect.objectContaining({
+          taskId,
+          outputPath,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -722,18 +893,16 @@ describe('CliFeedbackHandler', () => {
       ).toHaveBeenCalledWith(mockFeedback);
       expect(result).toEqual(mockUpdatedFeedback);
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_before`,
-        { taskId }
+        'cli',
+        'feedback_prioritize_before', // イベント名を修正
+        { taskId } // データ修正
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, result: mockUpdatedFeedback }
+        'cli',
+        'feedback_prioritize_after', // イベント名を修正
+        { taskId, result: mockUpdatedFeedback } // データ修正
       );
     });
 
@@ -750,9 +919,17 @@ describe('CliFeedbackHandler', () => {
         expect.anything(),
         expect.anything(),
         operation,
-        expect.objectContaining({ code: 'ERR_CLI_FEEDBACK_NOT_FOUND' }),
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_FEEDBACK_NOT_FOUND',
+        }),
         null,
-        { taskId }
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -769,18 +946,27 @@ describe('CliFeedbackHandler', () => {
       ).rejects.toThrow(CliError); // ApplicationError -> CliError
       await expect(
         cliFeedbackHandler.prioritizeFeedback(taskId)
-      ).rejects.toHaveProperty('code', 'ERR_CLI'); // Default CliError code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_FEEDBACKHANDLER_PRIORITIZEFEEDBACK'
+      ); // 修正: クラス名を含むエラーコード
       expect(emitErrorEvent).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         expect.anything(),
         operation,
         expect.objectContaining({
-          code: 'ERR_CLI', // Default CliError code
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACKHANDLER_PRIORITIZEFEEDBACK', // 修正後のコード
           cause: originalError,
         }),
         null,
-        { taskId }
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -804,18 +990,16 @@ describe('CliFeedbackHandler', () => {
         mockFeedbackManagerAdapter.linkFeedbackToGitCommit
       ).toHaveBeenCalledWith(mockFeedback, commitHash);
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_before`,
-        { taskId, commitHash }
+        'cli',
+        'feedback_link_commit_before', // イベント名を修正
+        { taskId, commitHash } // データ修正
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, commitHash }
+        'cli',
+        'feedback_link_commit_after', // イベント名を修正
+        { taskId, commitHash } // データ修正
       );
     });
 
@@ -832,9 +1016,18 @@ describe('CliFeedbackHandler', () => {
         expect.anything(),
         expect.anything(),
         operation,
-        expect.objectContaining({ code: 'ERR_CLI_FEEDBACK_NOT_FOUND' }),
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_FEEDBACK_NOT_FOUND',
+        }),
         null,
-        { taskId, commitHash }
+        expect.objectContaining({
+          taskId,
+          commitHash,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -853,18 +1046,28 @@ describe('CliFeedbackHandler', () => {
       ).rejects.toThrow(CliError); // ApplicationError -> CliError
       await expect(
         cliFeedbackHandler.linkFeedbackToCommit(taskId, commitHash)
-      ).rejects.toHaveProperty('code', 'ERR_CLI'); // Default CliError code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_FEEDBACKHANDLER_LINKFEEDBACKTOCOMMIT'
+      ); // 修正: クラス名を含むエラーコード
       expect(emitErrorEvent).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         expect.anything(),
         operation,
         expect.objectContaining({
-          code: 'ERR_CLI', // Default CliError code
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACKHANDLER_LINKFEEDBACKTOCOMMIT', // 修正後のコード
           cause: originalError,
         }),
         null,
-        { taskId, commitHash }
+        expect.objectContaining({
+          taskId,
+          commitHash,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -888,18 +1091,16 @@ describe('CliFeedbackHandler', () => {
         mockFeedbackManagerAdapter.linkFeedbackToSession
       ).toHaveBeenCalledWith(mockFeedback, sessionId);
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_before`,
-        { taskId, sessionId }
+        'cli',
+        'feedback_link_session_before', // イベント名を修正
+        { taskId, sessionId } // データ修正
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, sessionId }
+        'cli',
+        'feedback_link_session_after', // イベント名を修正
+        { taskId, sessionId } // データ修正
       );
     });
 
@@ -916,9 +1117,18 @@ describe('CliFeedbackHandler', () => {
         expect.anything(),
         expect.anything(),
         operation,
-        expect.objectContaining({ code: 'ERR_CLI_FEEDBACK_NOT_FOUND' }),
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_FEEDBACK_NOT_FOUND',
+        }),
         null,
-        { taskId, sessionId }
+        expect.objectContaining({
+          taskId,
+          sessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -937,18 +1147,28 @@ describe('CliFeedbackHandler', () => {
       ).rejects.toThrow(CliError); // ApplicationError -> CliError
       await expect(
         cliFeedbackHandler.linkFeedbackToSession(taskId, sessionId)
-      ).rejects.toHaveProperty('code', 'ERR_CLI'); // Default CliError code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_FEEDBACKHANDLER_LINKFEEDBACKTOSESSION' // 修正: クラス名を含むエラーコード
+      );
       expect(emitErrorEvent).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
+        mockEventEmitter, // expect.anything() を具体的なモックに変更
+        mockLogger, // expect.anything() を具体的なモックに変更
+        'CliFeedbackHandler', // expect.anything() を具体的なクラス名に変更
         operation,
         expect.objectContaining({
-          code: 'ERR_CLI', // Default CliError code
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACKHANDLER_LINKFEEDBACKTOSESSION', // 修正後のコード
           cause: originalError,
         }),
         null,
-        { taskId, sessionId }
+        expect.objectContaining({
+          taskId,
+          sessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -968,18 +1188,16 @@ describe('CliFeedbackHandler', () => {
       ).toHaveBeenCalledWith(taskId, taskId);
       expect(result).toBe(true);
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_before`,
-        { taskId }
+        'cli',
+        'feedback_integrate_task_before', // イベント名を修正
+        { taskId } // データ修正
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, success: true }
+        'cli',
+        'feedback_integrate_task_after', // イベント名を修正
+        { taskId, success: true } // データ修正
       );
     });
 
@@ -1003,10 +1221,16 @@ describe('CliFeedbackHandler', () => {
         expect.anything(),
         operation,
         expect.objectContaining({
+          // CliError を期待
+          name: 'CliError',
           code: 'ERR_CLI_FEEDBACK_INTEGRATE_TASK_FAILED',
         }),
         null,
-        { taskId }
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -1020,18 +1244,27 @@ describe('CliFeedbackHandler', () => {
       ).rejects.toThrow(CliError); // ApplicationError -> CliError
       await expect(
         cliFeedbackHandler.integrateFeedbackWithTask(taskId)
-      ).rejects.toHaveProperty('code', 'ERR_CLI'); // Default CliError code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_FEEDBACKHANDLER_INTEGRATEFEEDBACKWITHTASK' // 修正: クラス名を含むエラーコード
+      );
       expect(emitErrorEvent).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         expect.anything(),
         operation,
         expect.objectContaining({
-          code: 'ERR_CLI', // Default CliError code
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACKHANDLER_INTEGRATEFEEDBACKWITHTASK', // 修正後のコード
           cause: originalError,
         }),
         null,
-        { taskId }
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -1055,18 +1288,16 @@ describe('CliFeedbackHandler', () => {
       ).toHaveBeenCalledWith(taskId, sessionId);
       expect(result).toBe(true);
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_before`,
-        { taskId, sessionId }
+        'cli',
+        'feedback_integrate_session_before', // イベント名を修正
+        { taskId, sessionId } // データ修正
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, sessionId, success: true }
+        'cli',
+        'feedback_integrate_session_after', // イベント名を修正
+        { taskId, sessionId, success: true } // データ修正
       );
     });
 
@@ -1090,10 +1321,17 @@ describe('CliFeedbackHandler', () => {
         expect.anything(),
         operation,
         expect.objectContaining({
+          // CliError を期待
+          name: 'CliError',
           code: 'ERR_CLI_FEEDBACK_INTEGRATE_SESSION_FAILED',
         }),
         null,
-        { taskId, sessionId }
+        expect.objectContaining({
+          taskId,
+          sessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -1107,18 +1345,28 @@ describe('CliFeedbackHandler', () => {
       ).rejects.toThrow(CliError); // ApplicationError -> CliError
       await expect(
         cliFeedbackHandler.integrateFeedbackWithSession(taskId, sessionId)
-      ).rejects.toHaveProperty('code', 'ERR_CLI'); // Default CliError code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_FEEDBACKHANDLER_INTEGRATEFEEDBACKWITHSESSION' // 修正: クラス名を含むエラーコード
+      );
       expect(emitErrorEvent).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         expect.anything(),
         operation,
         expect.objectContaining({
-          code: 'ERR_CLI', // Default CliError code
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_FEEDBACKHANDLER_INTEGRATEFEEDBACKWITHSESSION', // 修正後のコード
           cause: originalError,
         }),
         null,
-        { taskId, sessionId }
+        expect.objectContaining({
+          taskId,
+          sessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });

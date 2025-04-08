@@ -3,9 +3,11 @@ const {
   CliError,
   NotFoundError,
   StorageError,
-} = require('../lib/utils/errors'); // StorageError をインポート
+} = require('../lib/utils/errors');
 const { emitErrorEvent } = require('../lib/utils/error-helpers');
-const path = require('path'); // ファイルパス操作に必要
+const path = require('path');
+// ID生成関数をインポート (EventEmitter から取得するため不要)
+// const { generateTraceId, generateRequestId } = require('../lib/utils/id-generators');
 
 /**
  * CLIにおけるセッション関連の操作を管理するクラス
@@ -18,240 +20,325 @@ class CliSessionManager {
    * @param {object} options.integrationManagerAdapter - IntegrationManagerAdapterインスタンス (必須)
    * @param {object} options.sessionManagerAdapter - SessionManagerAdapterインスタンス (必須)
    * @param {object} options.storageService - StorageServiceインスタンス (必須)
-   * @param {object} options.errorHandler - エラーハンドラー (オプション)
+   * @param {object} [options.errorHandler] - エラーハンドラー (オプション)
+   * @param {Function} options.traceIdGenerator - トレースID生成関数 (必須)
+   * @param {Function} options.requestIdGenerator - リクエストID生成関数 (必須)
    */
   constructor(options = {}) {
-    // 必須依存関係のチェック
-    const requiredDependencies = [
-      'logger',
-      'eventEmitter',
-      'integrationManagerAdapter',
-      'sessionManagerAdapter',
-      'storageService',
-    ];
-    for (const dep of requiredDependencies) {
-      if (!options[dep]) {
-        throw new ApplicationError(
-          `CliSessionManager requires ${dep} instance.`
-        );
-      }
-    }
+    // 分割代入で依存関係を取得
+    const {
+      logger,
+      eventEmitter,
+      integrationManagerAdapter,
+      sessionManagerAdapter,
+      storageService,
+      errorHandler, // 任意
+      traceIdGenerator,
+      requestIdGenerator,
+    } = options;
 
-    this.logger = options.logger;
-    this.eventEmitter = options.eventEmitter;
-    this.integrationManager = options.integrationManagerAdapter;
-    this.sessionManager = options.sessionManagerAdapter;
-    this.storageService = options.storageService; // ファイル操作に使用
-    this.errorHandler = options.errorHandler;
+    // 必須依存関係のチェック
+    if (!logger)
+      throw new ApplicationError('CliSessionManager requires logger instance.');
+    if (!eventEmitter)
+      throw new ApplicationError(
+        'CliSessionManager requires eventEmitter instance.'
+      );
+    if (!integrationManagerAdapter)
+      throw new ApplicationError(
+        'CliSessionManager requires integrationManagerAdapter instance.'
+      );
+    if (!sessionManagerAdapter)
+      throw new ApplicationError(
+        'CliSessionManager requires sessionManagerAdapter instance.'
+      );
+    if (!storageService)
+      throw new ApplicationError(
+        'CliSessionManager requires storageService instance.'
+      );
+    if (!traceIdGenerator)
+      throw new ApplicationError(
+        'CliSessionManager requires traceIdGenerator function.'
+      );
+    if (!requestIdGenerator)
+      throw new ApplicationError(
+        'CliSessionManager requires requestIdGenerator function.'
+      );
+
+    this.logger = logger;
+    this.eventEmitter = eventEmitter;
+    this.integrationManager = integrationManagerAdapter;
+    this.sessionManager = sessionManagerAdapter;
+    this.storageService = storageService;
+    this.errorHandler = errorHandler; // 任意なのでチェック不要
+    this._traceIdGenerator = traceIdGenerator;
+    this._requestIdGenerator = requestIdGenerator;
 
     this.logger.debug('CliSessionManager initialized');
   }
 
   /**
+   * 標準化されたイベントを発行する内部ヘルパー
+   * @param {string} action - アクション名 (例: 'start_before')
+   * @param {object} [data={}] - イベントデータ
+   * @param {string} [traceId] - トレースID (指定されなければ生成)
+   * @param {string} [requestId] - リクエストID (指定されなければ生成)
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _emitEvent(action, data = {}, traceId, requestId) {
+    if (
+      !this.eventEmitter ||
+      typeof this.eventEmitter.emitStandardizedAsync !== 'function'
+    ) {
+      this.logger.warn(
+        `Cannot emit event session_${action}: eventEmitter or emitStandardizedAsync is missing.`
+      );
+      return;
+    }
+    const finalTraceId = traceId || this._traceIdGenerator();
+    const finalRequestId = requestId || this._requestIdGenerator();
+    const eventData = {
+      ...data,
+      traceId: finalTraceId,
+      requestId: finalRequestId,
+    };
+    try {
+      // コンポーネント名を 'cli'、アクション名を 'session_action' 形式に統一
+      await this.eventEmitter.emitStandardizedAsync(
+        'cli',
+        `session_${action}`,
+        eventData
+      );
+    } catch (error) {
+      this.logger.warn(`イベント発行中にエラー: cli:session_${action}`, {
+        error,
+      });
+    }
+  }
+
+  /**
+   * エラー処理を行う内部ヘルパー
+   * @param {Error} error - 発生したエラー
+   * @param {string} operation - 操作名
+   * @param {object} [context={}] - エラーコンテキスト
+   * @returns {*} エラーハンドラーの戻り値、またはエラーを再スロー
+   * @throws {CliError|ApplicationError|NotFoundError|StorageError} エラーハンドラーがない場合、またはエラーハンドラーがエラーをスローした場合
+   * @private
+   */
+  _handleError(error, operation, context = {}) {
+    // 特定のエラーコードや型はそのまま使う
+    const knownErrorCodes = [
+      'ERR_CLI_SESSION_START_FAILED',
+      'ERR_CLI_SESSION_START_UNEXPECTED',
+      'ERR_CLI_NO_ACTIVE_SESSION', // NotFoundError から来る可能性
+      'ERR_CLI_SESSION_END_FAILED',
+      'ERR_CLI_SESSION_END_UNEXPECTED',
+      'ERR_CLI_SESSION_NOT_FOUND', // NotFoundError から来る可能性
+      'ERR_CLI_FILE_WRITE', // StorageError から来る可能性
+      'ERR_CLI_FILE_READ', // StorageError から来る可能性
+      'ERR_CLI_SESSION_IMPORT_UNEXPECTED',
+      'ERR_CLI_HANDOVER_SAVE', // StorageError から来る可能性 (endSession内)
+    ];
+    const isKnownCliError =
+      error instanceof CliError && knownErrorCodes.includes(error.code);
+    const isKnownError =
+      error instanceof NotFoundError ||
+      error instanceof StorageError ||
+      isKnownCliError;
+
+    const processedError = isKnownError
+      ? error
+      : new CliError(`Failed during ${operation}`, error, {
+          // エラーコード生成ルールを統一 (コンポーネント名を含む)
+          code: `ERR_CLI_SESSIONMANAGER_${operation.toUpperCase()}`,
+          ...context,
+        });
+
+    emitErrorEvent(
+      this.eventEmitter,
+      this.logger,
+      'CliSessionManager',
+      operation,
+      processedError,
+      null,
+      context
+    );
+
+    if (this.errorHandler) {
+      return this.errorHandler.handle(
+        processedError,
+        'CliSessionManager',
+        operation,
+        context
+      );
+    } else {
+      throw processedError;
+    }
+  }
+
+  /**
    * 新しいセッションを開始する
-   * @param {string|null} previousSessionId - 前回のセッションID (オプション)
+   * @param {string|null} [previousSessionId=null] - 前回のセッションID (オプション)
    * @returns {Promise<object>} 開始されたセッション情報
    * @throws {CliError} セッション開始に失敗した場合
    */
   async startSession(previousSessionId = null) {
     const operation = 'startSession';
-    this.logger.info('Starting new session...', {
-      operation,
-      previousSessionId,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_session',
-      `${operation}_before`,
-      { previousSessionId }
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { previousSessionId, traceId, requestId };
+    await this._emitEvent(
+      'start_before',
+      { previousSessionId },
+      traceId,
+      requestId
     );
+    this.logger.info('Starting new session...', context);
 
     try {
-      // integrationManagerAdapter を使用してセッションを開始
       const result =
         await this.integrationManager.startSession(previousSessionId);
 
       if (result && result.error) {
-        // CliError を使用し、CLI固有コードを設定
         throw new CliError(`Session start failed: ${result.error}`, null, {
-          code: 'ERR_CLI_SESSION_START_FAILED', // CLI固有コード
-          context: { previousSessionId, errorDetail: result.error },
+          code: 'ERR_CLI_SESSION_START_FAILED',
+          previousSessionId, // ネストを削除
+          errorDetail: result.error, // フラットに渡す
         });
       }
       if (!result || !result.session_id) {
-        // CliError を使用し、CLI固有コードを設定
         throw new CliError(
           'Session start did not return expected result.',
-          null, // cause は null
+          null,
           {
-            code: 'ERR_CLI_SESSION_START_UNEXPECTED', // CLI固有コード
+            code: 'ERR_CLI_SESSION_START_UNEXPECTED',
             context: { previousSessionId, result },
           }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_session',
-        `${operation}_after`,
-        { previousSessionId, result }
+      await this._emitEvent(
+        'start_after',
+        { previousSessionId, result },
+        traceId,
+        requestId
       );
-      this.logger.info(`Session started successfully: ${result.session_id}`);
+      this.logger.info(`Session started successfully: ${result.session_id}`, {
+        traceId,
+        requestId,
+      });
       return result;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        error instanceof CliError && // 特定の CliError はそのまま
-        (error.code === 'ERR_CLI_SESSION_START_FAILED' ||
-          error.code === 'ERR_CLI_SESSION_START_UNEXPECTED')
-          ? error
-          : new CliError(`Failed to start session`, error, {
-              // それ以外は CliError でラップ
-              code: 'ERR_CLI_SESSION_START',
-              context: { previousSessionId },
-            });
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliSessionManager',
-        operation,
-        cliError,
-        null,
-        { previousSessionId }
-      );
-
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliSessionManager',
-          operation,
-          { previousSessionId }
-        );
-      } else {
-        throw cliError; // エラーハンドラがなければスロー
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
   /**
    * セッションを終了する
-   * @param {string|null} sessionId - 終了するセッションID (nullの場合は最新)
+   * @param {string|null} [sessionId=null] - 終了するセッションID (nullの場合は最新)
    * @returns {Promise<object>} 終了されたセッション情報
-   * @throws {CliError|NotFoundError} セッション終了に失敗した場合
+   * @throws {CliError|NotFoundError} セッション終了または引継ぎドキュメント保存に失敗した場合
    */
   async endSession(sessionId = null) {
     const operation = 'endSession';
-    this.logger.info(`Ending session: ${sessionId || 'latest'}`, {
-      operation,
-      sessionId,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_session',
-      `${operation}_before`,
-      { sessionId }
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { sessionId, traceId, requestId }; // 初期コンテキスト
+    await this._emitEvent('end_before', { sessionId }, traceId, requestId);
+    this.logger.info(`Ending session: ${sessionId || 'latest'}`, context);
+
+    let targetSessionId = sessionId; // エラーハンドリング用に保持
 
     try {
-      let targetSessionId = sessionId;
-      // セッションIDが指定されていない場合は最新のセッションを取得
       if (!targetSessionId) {
         const latestSession = await this.sessionManager.getLatestSession();
         if (latestSession) {
           targetSessionId = latestSession.session_id;
-          this.logger.debug(`Using latest session ID: ${targetSessionId}`);
+          context.sessionId = targetSessionId; // コンテキスト更新
+          this.logger.debug(`Using latest session ID: ${targetSessionId}`, {
+            traceId,
+            requestId,
+          });
         } else {
-          // NotFoundError を使用し、CLI固有コードを設定 (第2引数に options を渡す)
           throw new NotFoundError('No active session found to end.', {
-            code: 'ERR_CLI_NO_ACTIVE_SESSION', // CLI固有コード
+            code: 'ERR_CLI_NO_ACTIVE_SESSION',
           });
         }
       }
 
-      // integrationManagerAdapter を使用してセッションを終了
       const result = await this.integrationManager.endSession(targetSessionId);
 
       if (result && result.error) {
-        // CliError を使用し、CLI固有コードを設定
         throw new CliError(`Session end failed: ${result.error}`, null, {
-          code: 'ERR_CLI_SESSION_END_FAILED', // CLI固有コード
+          code: 'ERR_CLI_SESSION_END_FAILED',
           context: { sessionId: targetSessionId, errorDetail: result.error },
         });
       }
       if (!result || !result.session_id || !result.handover_document) {
-        // CliError を使用し、CLI固有コードを設定
         throw new CliError(
           'Session end did not return expected result.',
-          null, // cause は null
+          null,
           {
-            code: 'ERR_CLI_SESSION_END_UNEXPECTED', // CLI固有コード
+            code: 'ERR_CLI_SESSION_END_UNEXPECTED',
             context: { sessionId: targetSessionId, result },
           }
         );
       }
 
-      // 引継ぎドキュメントを StorageService を使って保存
-      const handoverFilename = 'session-handover.md'; // 固定ファイル名
-      const handoverDir = path.join('ai-context', 'sessions'); // 保存先ディレクトリ
-      const writeSuccess = await this.storageService.writeText(
-        handoverDir,
-        handoverFilename,
-        result.handover_document
-      );
-
-      if (!writeSuccess) {
-        this.logger.warn(
-          `Failed to save handover document to ${path.join(handoverDir, handoverFilename)}`,
-          { operation }
+      // 引継ぎドキュメント保存 (エラーは警告ログのみ)
+      try {
+        const handoverFilename = 'session-handover.md';
+        const handoverDir = path.join('ai-context', 'sessions');
+        const writeSuccess = await this.storageService.writeText(
+          handoverDir,
+          handoverFilename,
+          result.handover_document
         );
-        // 保存失敗は致命的ではないかもしれないが、警告は出す
-      } else {
-        this.logger.info(
-          `Handover document saved to ${path.join(handoverDir, handoverFilename)}`
-        );
+        if (!writeSuccess) {
+          // ログレベルを error に変更し、StorageError を作成してログコンテキストに含める
+          const saveError = new StorageError(
+            `Failed to save handover document to ${path.join(handoverDir, handoverFilename)}`,
+            {
+              code: 'ERR_CLI_HANDOVER_SAVE', // 新しいコード
+              context: { sessionId: targetSessionId },
+            }
+          );
+          this.logger.error('Failed to save handover document.', {
+            error: saveError,
+            traceId,
+            requestId,
+          });
+        } else {
+          this.logger.info(
+            `Handover document saved to ${path.join(handoverDir, handoverFilename)}`,
+            { traceId, requestId }
+          );
+        }
+      } catch (saveError) {
+        // storageService.writeText が例外をスローした場合もエラーログ
+        this.logger.error('Error saving handover document.', {
+          error: saveError,
+          traceId,
+          requestId,
+        });
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_session',
-        `${operation}_after`,
-        { sessionId: targetSessionId, result }
+      await this._emitEvent(
+        'end_after',
+        { sessionId: targetSessionId, result },
+        traceId,
+        requestId
       );
-      this.logger.info(`Session ended successfully: ${result.session_id}`);
+      this.logger.info(`Session ended successfully: ${result.session_id}`, {
+        traceId,
+        requestId,
+      });
       return result;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        error instanceof NotFoundError || // NotFoundError はそのまま
-        (error instanceof CliError && // 特定の CliError もそのまま
-          (error.code === 'ERR_CLI_SESSION_END_FAILED' ||
-            error.code === 'ERR_CLI_SESSION_END_UNEXPECTED'))
-          ? error
-          : new CliError( // それ以外は CliError でラップ
-              `Failed to end session ${sessionId || 'latest'}`,
-              error,
-              {
-                code: 'ERR_CLI_SESSION_END',
-                context: { sessionId },
-              }
-            );
-
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliSessionManager',
-        operation,
-        cliError, // 正しいエラーオブジェクト
-        null,
-        { sessionId }
-      );
-
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliSessionManager',
-          operation,
-          { sessionId }
-        );
-      } else {
-        throw cliError;
-      }
+      // targetSessionId をコンテキストに含める
+      context.sessionId = targetSessionId;
+      return this._handleError(error, operation, context);
     }
   }
 
@@ -262,41 +349,22 @@ class CliSessionManager {
    */
   async listSessions() {
     const operation = 'listSessions';
-    this.logger.info('Listing all sessions...', { operation });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_session',
-      `${operation}_before`
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { traceId, requestId };
+    await this._emitEvent('list_before', {}, traceId, requestId);
+    this.logger.info('Listing all sessions...', { ...context, operation });
 
     try {
       const sessions = await this.sessionManager.getAllSessions();
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_session',
-        `${operation}_after`,
-        { count: sessions?.length || 0 }
-      );
-      this.logger.info(`Found ${sessions?.length || 0} sessions.`);
-      return sessions || []; // sessions が null や undefined の場合も考慮
+      const count = sessions?.length || 0;
+      await this._emitEvent('list_after', { count }, traceId, requestId);
+      this.logger.info(`Found ${count} sessions.`, { traceId, requestId });
+      return sessions || [];
     } catch (error) {
-      // CliError でラップ (常に)
-      const cliError = new CliError('Failed to list sessions', error, {
-        code: 'ERR_CLI_SESSION_LIST',
-      });
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliSessionManager',
-        operation,
-        cliError
-      );
-      if (this.errorHandler) {
-        return (
-          this.errorHandler.handle(cliError, 'CliSessionManager', operation) ||
-          []
-        ); // エラー時は空配列を返すなど
-      } else {
-        throw cliError; // エラーハンドラがなければスロー
-      }
+      // エラーハンドラが値を返さない場合は空配列を返す
+      const handledResult = this._handleError(error, operation, context);
+      return handledResult === undefined ? [] : handledResult;
     }
   }
 
@@ -307,240 +375,136 @@ class CliSessionManager {
    */
   async getCurrentSessionInfo() {
     const operation = 'getCurrentSessionInfo';
-    this.logger.info('Getting current session info...', { operation });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_session',
-      `${operation}_before`
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { traceId, requestId };
+    await this._emitEvent('current_get_before', {}, traceId, requestId);
+    this.logger.info('Getting current session info...', {
+      ...context,
+      operation,
+    });
 
     try {
       const session = await this.sessionManager.getLatestSession();
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_session',
-        `${operation}_after`,
-        { sessionFound: !!session }
+      await this._emitEvent(
+        'current_get_after',
+        { sessionFound: !!session },
+        traceId,
+        requestId
       );
       if (session) {
-        this.logger.info(`Current session found: ${session.session_id}`);
+        this.logger.info(`Current session found: ${session.session_id}`, {
+          traceId,
+          requestId,
+        });
       } else {
-        this.logger.info('No active session found.');
+        this.logger.info('No active session found.', { traceId, requestId });
       }
       return session;
     } catch (error) {
-      // CliError でラップ (常に)
-      const cliError = new CliError(
-        'Failed to get current session info',
-        error,
-        {
-          code: 'ERR_CLI_SESSION_CURRENT',
-        }
-      );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliSessionManager',
-        operation,
-        cliError
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliSessionManager',
-          operation
-        ); // null を返すなど
-      } else {
-        throw cliError; // エラーハンドラがなければスロー
-      }
+      // エラーハンドラが値を返さない場合は null を返す
+      const handledResult = this._handleError(error, operation, context);
+      return handledResult === undefined ? null : handledResult;
     }
   }
 
   /**
    * 指定されたIDのセッション情報を取得する
    * @param {string} sessionId - セッションID
-   * @returns {Promise<object|null>} セッション情報、または null
-   * @throws {CliError|NotFoundError} 取得に失敗した場合
+   * @returns {Promise<object>} セッション情報
+   * @throws {CliError|NotFoundError} 取得に失敗した場合、またはセッションが見つからない場合
    */
   async getSessionInfo(sessionId) {
     const operation = 'getSessionInfo';
-    this.logger.info(`Getting session info for: ${sessionId}`, {
-      operation,
-      sessionId,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_session',
-      `${operation}_before`,
-      { sessionId }
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { sessionId, traceId, requestId };
+    await this._emitEvent('info_get_before', { sessionId }, traceId, requestId);
+    this.logger.info(`Getting session info for: ${sessionId}`, context);
+
     try {
-      this.logger.debug(
-        `Calling sessionManager.getSession with ID: ${sessionId}`
-      ); // デバッグログ追加
       const session = await this.sessionManager.getSession(sessionId);
-      this.logger.debug(
-        `sessionManager.getSession returned: ${JSON.stringify(session)}`
-      ); // デバッグログ追加
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_session',
-        `${operation}_after`,
-        { sessionId, sessionFound: !!session }
-      );
-      if (session) {
-        this.logger.info(`Session info retrieved for: ${sessionId}`);
-      } else {
-        // logger.warn にコンテキストオブジェクトを渡すように修正
-        this.logger.warn(`Session not found: ${sessionId}`, { sessionId });
-        // NotFoundError を使用し、CLI固有コードを設定 (第2引数に options を渡す)
-        const notFoundError = new NotFoundError(
-          `Session not found: ${sessionId}`,
-          {
-            code: 'ERR_CLI_SESSION_NOT_FOUND', // CLI固有コード
-            context: { sessionId },
-          }
-        );
-        throw notFoundError;
+      if (!session) {
+        throw new NotFoundError(`Session not found: ${sessionId}`, {
+          code: 'ERR_CLI_SESSION_NOT_FOUND',
+          context: { sessionId },
+        });
       }
+      await this._emitEvent(
+        'info_get_after',
+        { sessionId, sessionFound: true },
+        traceId,
+        requestId
+      );
+      this.logger.info(`Session info retrieved for: ${sessionId}`, {
+        traceId,
+        requestId,
+      });
       return session;
     } catch (error) {
-      // ★★★ catch ブロックのデバッグログ ★★★
-      this.logger.error('Caught error in getSessionInfo catch block:', {
-        errorName: error.name,
-        errorCode: error.code,
-        errorMessage: error.message,
-        errorInstanceofNotFoundError: error instanceof NotFoundError,
-        errorStack: error.stack, // スタックトレースも出力
-      });
-      // ★★★ デバッグログ追加ここまで ★★★
-
-      // エラーラップロジック修正
-      const cliError =
-        error instanceof NotFoundError || // NotFoundError はそのまま
-        error instanceof CliError // CliError もそのまま
-          ? error
-          : new CliError( // それ以外は CliError でラップ
-              `Failed to get session info for ${sessionId}`,
-              error,
-              {
-                code: 'ERR_CLI_SESSION_INFO',
-                context: { sessionId },
-              }
-            );
-
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliSessionManager',
-        operation,
-        cliError, // 正しいエラーオブジェクト
-        null,
-        { sessionId }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliSessionManager',
-          operation,
-          { sessionId }
-        ); // null を返すなど
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
   /**
    * セッション情報をファイルにエクスポートする
    * @param {string} sessionId - セッションID
-   * @param {string|null} outputPath - 出力ファイルパス (nullの場合はデフォルトパス)
+   * @param {string|null} [outputPath=null] - 出力ファイルパス (nullの場合はデフォルトパス)
    * @returns {Promise<string>} エクスポートされたファイルパス
    * @throws {CliError|NotFoundError|StorageError} エクスポートに失敗した場合
    */
   async exportSession(sessionId, outputPath = null) {
     const operation = 'exportSession';
-    this.logger.info(`Exporting session: ${sessionId}`, {
-      operation,
-      sessionId,
-      outputPath,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_session',
-      `${operation}_before`,
-      { sessionId, outputPath }
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { sessionId, outputPath, traceId, requestId };
+    await this._emitEvent(
+      'export_before',
+      { sessionId, outputPath },
+      traceId,
+      requestId
     );
+    this.logger.info(`Exporting session: ${sessionId}`, context);
 
     try {
       const session = await this.sessionManager.getSession(sessionId);
       if (!session) {
-        // NotFoundError を使用し、CLI固有コードを設定 (第2引数に options を渡す)
         throw new NotFoundError(`Session not found: ${sessionId}`, {
-          code: 'ERR_CLI_SESSION_NOT_FOUND', // CLI固有コード
+          code: 'ERR_CLI_SESSION_NOT_FOUND',
           context: { sessionId },
         });
       }
 
       const finalPath = outputPath || `session-${sessionId}-export.json`;
-      // StorageService を使用して書き込み
       const writeSuccess = await this.storageService.writeJSON(
-        '.', // basePath からの相対パスなのでカレントディレクトリ
+        '.',
         finalPath,
         session
       );
 
       if (!writeSuccess) {
-        // StorageError を使用し、CLI固有コードを設定
-        // StorageService.writeJSON が false を返す場合、内部でエラーログは出力されているはず
-        // ここでは CLI 固有のエラーをスローする
-        throw new StorageError( // StorageError を直接スロー
-          `Failed to write session export file: ${finalPath}`, // message
-          null, // cause
+        throw new StorageError(
+          `Failed to write session export file: ${finalPath}`,
           {
             code: 'ERR_CLI_FILE_WRITE',
             context: { sessionId, path: finalPath },
-          } // options
+          }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_session',
-        `${operation}_after`,
-        { sessionId, path: finalPath }
+      await this._emitEvent(
+        'export_after',
+        { sessionId, path: finalPath },
+        traceId,
+        requestId
       );
-      this.logger.info(`Session exported successfully to: ${finalPath}`);
+      this.logger.info(`Session exported successfully to: ${finalPath}`, {
+        traceId,
+        requestId,
+      });
       return finalPath;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        error instanceof NotFoundError || // NotFoundError はそのまま
-        error instanceof StorageError || // StorageError もそのまま
-        error instanceof CliError // CliError もそのまま
-          ? error
-          : new CliError( // それ以外は CliError でラップ
-              `Failed to export session ${sessionId}`,
-              error,
-              {
-                code: 'ERR_CLI_SESSION_EXPORT',
-                context: { sessionId, outputPath },
-              }
-            );
-
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliSessionManager',
-        operation,
-        cliError, // 正しいエラーオブジェクト
-        null,
-        { sessionId, outputPath }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliSessionManager',
-          operation,
-          { sessionId, outputPath }
-        );
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
@@ -552,87 +516,52 @@ class CliSessionManager {
    */
   async importSession(inputPath) {
     const operation = 'importSession';
-    this.logger.info(`Importing session from: ${inputPath}`, {
-      operation,
-      inputPath,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_session',
-      `${operation}_before`,
-      { inputPath }
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { inputPath, traceId, requestId };
+    await this._emitEvent('import_before', { inputPath }, traceId, requestId);
+    this.logger.info(`Importing session from: ${inputPath}`, context);
 
     try {
-      // StorageService を使用して読み込み
-      const sessionData = await this.storageService.readJSON('.', inputPath); // basePath からの相対パス
-
+      const sessionData = await this.storageService.readJSON('.', inputPath);
       if (sessionData === null) {
-        // readJSON が null を返す場合 (ファイルが存在しないかパースエラー)
-        // StorageError を使用し、CLI固有コードを設定
-        throw new StorageError( // StorageError を直接スロー
-          `Failed to read or parse session import file: ${inputPath}`, // message
-          null, // cause
-          { code: 'ERR_CLI_FILE_READ', context: { path: inputPath } } // options
+        throw new StorageError(
+          `Failed to read or parse session import file: ${inputPath}`,
+          {
+            code: 'ERR_CLI_FILE_READ',
+            context: { path: inputPath },
+          }
         );
       }
 
-      // sessionManagerAdapter を使用してインポート
+      // TODO: インポート前に sessionData のバリデーションを行う (validator.validateSessionInput)
+
       const session = await this.sessionManager.importSession(sessionData);
 
       if (!session || !session.session_id) {
-        // importSession の成功判定 (ここは変更不要)
-        // CliError を使用し、CLI固有コードを設定
         throw new CliError(
           'Session import did not return expected result.',
-          null, // cause は null
+          null,
           {
-            code: 'ERR_CLI_SESSION_IMPORT_UNEXPECTED', // CLI固有コード
+            code: 'ERR_CLI_SESSION_IMPORT_UNEXPECTED',
             context: { inputPath, result: session },
           }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_session',
-        `${operation}_after`,
-        { inputPath, sessionId: session.session_id }
+      await this._emitEvent(
+        'import_after',
+        { inputPath, sessionId: session.session_id },
+        traceId,
+        requestId
       );
-      this.logger.info(`Session imported successfully: ${session.session_id}`);
+      this.logger.info(`Session imported successfully: ${session.session_id}`, {
+        traceId,
+        requestId,
+      });
       return session;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        error instanceof StorageError || // StorageError はそのまま
-        (error instanceof CliError &&
-          error.code === 'ERR_CLI_SESSION_IMPORT_UNEXPECTED') // 特定の CliError もそのまま
-          ? error
-          : new CliError( // それ以外は CliError でラップ
-              `Failed to import session from ${inputPath}`,
-              error,
-              {
-                code: 'ERR_CLI_SESSION_IMPORT',
-                context: { inputPath },
-              }
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliSessionManager',
-        operation,
-        cliError,
-        null,
-        { inputPath }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliSessionManager',
-          operation,
-          { inputPath }
-        );
-      } else {
-        throw cliError; // エラーハンドラがなければスロー
-      }
+      return this._handleError(error, operation, context);
     }
   }
 }

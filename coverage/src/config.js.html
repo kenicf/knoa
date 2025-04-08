@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">77.77% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/9</span>
+                <span class='fraction'>7/9</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">66.66% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/12</span>
+                <span class='fraction'>8/12</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">77.77% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/9</span>
+                <span class='fraction'>7/9</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -170,10 +170,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -237,22 +237,22 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -264,19 +264,19 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
  * アプリケーション設定
  *
  * 環境ごとの設定を管理します。
  */
 &nbsp;
-const path = <span class="cstat-no" title="statement not covered" >require('path');</span>
+const path = require('path');
 &nbsp;
 // 基本設定
-const config = <span class="cstat-no" title="statement not covered" >{</span>
+const config = {
   // 環境設定
-  env: process.env.NODE_ENV || 'development',
+  env: process.env.NODE_ENV || <span class="branch-1 cbranch-no" title="branch not covered" >'development',</span>
 &nbsp;
   // ストレージ設定
   storage: {
@@ -338,22 +338,22 @@ const config = <span class="cstat-no" title="statement not covered" >{</span>
 };
 &nbsp;
 // 環境ごとの設定をマージ
-<span class="cstat-no" title="statement not covered" >if (config.env === 'development') {</span>
+<span class="missing-if-branch" title="if path not taken" >I</span>if (config.env === 'development') {
 <span class="cstat-no" title="statement not covered" >  Object.assign(config, {</span>
     logger: {
       ...config.logger,
       level: 'debug',
     },
   });
-} else <span class="cstat-no" title="statement not covered" >if (config.env === 'production') {</span>
+} else <span class="missing-if-branch" title="if path not taken" >I</span>if (config.env === 'production') {
 <span class="cstat-no" title="statement not covered" >  Object.assign(config, {</span>
     logger: {
       ...config.logger,
       level: 'info',
     },
   });
-} else <span class="cstat-no" title="statement not covered" >if (config.env === 'test') {</span>
-<span class="cstat-no" title="statement not covered" >  Object.assign(config, {</span>
+} else <span class="missing-if-branch" title="else path not taken" >E</span>if (config.env === 'test') {
+  Object.assign(config, {
     storage: {
       ...config.storage,
       basePath: path.join(process.cwd(), 'test-data'),
@@ -365,7 +365,7 @@ const config = <span class="cstat-no" title="statement not covered" >{</span>
   });
 }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >module.exports = config;</span>
+module.exports = config;
 &nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -373,7 +373,7 @@ const config = <span class="cstat-no" title="statement not covered" >{</span>
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-04-01T22:13:43.048Z
+                at 2025-04-08T15:04:36.696Z
             </div>
         <script src="../prettify.js"></script>
         <script>

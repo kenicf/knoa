@@ -1,5 +1,7 @@
-const { ApplicationError, CliError } = require('../lib/utils/errors'); // CliError をインポート
+const { ApplicationError, CliError } = require('../lib/utils/errors');
 const { emitErrorEvent } = require('../lib/utils/error-helpers');
+// ID生成関数をインポート (EventEmitter から取得するため不要)
+// const { generateTraceId, generateRequestId } = require('../lib/utils/id-generators');
 
 /**
  * CLIにおけるワークフロー状態表示関連の操作を管理するクラス
@@ -12,49 +14,159 @@ class CliStatusViewer {
    * @param {object} options.stateManagerAdapter - StateManagerAdapterインスタンス (必須)
    * @param {object} options.taskManagerAdapter - TaskManagerAdapterインスタンス (必須)
    * @param {object} options.sessionManagerAdapter - SessionManagerAdapterインスタンス (必須)
-   * @param {object} options.errorHandler - エラーハンドラー (オプション)
+   * @param {object} [options.errorHandler] - エラーハンドラー (オプション)
+   * @param {Function} options.traceIdGenerator - トレースID生成関数 (必須)
+   * @param {Function} options.requestIdGenerator - リクエストID生成関数 (必須)
    */
   constructor(options = {}) {
-    // 必須依存関係のチェック
-    const requiredDependencies = [
-      'logger',
-      'eventEmitter',
-      'stateManagerAdapter',
-      'taskManagerAdapter',
-      'sessionManagerAdapter',
-    ];
-    for (const dep of requiredDependencies) {
-      if (!options[dep]) {
-        throw new ApplicationError(`CliStatusViewer requires ${dep} instance.`);
-      }
-    }
+    // 分割代入で依存関係を取得
+    const {
+      logger,
+      eventEmitter,
+      stateManagerAdapter,
+      taskManagerAdapter,
+      sessionManagerAdapter,
+      errorHandler, // 任意
+      traceIdGenerator,
+      requestIdGenerator,
+    } = options;
 
-    this.logger = options.logger;
-    this.eventEmitter = options.eventEmitter;
-    this.stateManager = options.stateManagerAdapter;
-    this.taskManager = options.taskManagerAdapter;
-    this.sessionManager = options.sessionManagerAdapter;
-    this.errorHandler = options.errorHandler;
+    // 必須依存関係のチェック
+    if (!logger)
+      throw new ApplicationError('CliStatusViewer requires logger instance.');
+    if (!eventEmitter)
+      throw new ApplicationError(
+        'CliStatusViewer requires eventEmitter instance.'
+      );
+    if (!stateManagerAdapter)
+      throw new ApplicationError(
+        'CliStatusViewer requires stateManagerAdapter instance.'
+      );
+    if (!taskManagerAdapter)
+      throw new ApplicationError(
+        'CliStatusViewer requires taskManagerAdapter instance.'
+      );
+    if (!sessionManagerAdapter)
+      throw new ApplicationError(
+        'CliStatusViewer requires sessionManagerAdapter instance.'
+      );
+    if (!traceIdGenerator)
+      throw new ApplicationError(
+        'CliStatusViewer requires traceIdGenerator function.'
+      );
+    if (!requestIdGenerator)
+      throw new ApplicationError(
+        'CliStatusViewer requires requestIdGenerator function.'
+      );
+
+    this.logger = logger;
+    this.eventEmitter = eventEmitter;
+    this.stateManager = stateManagerAdapter;
+    this.taskManager = taskManagerAdapter;
+    this.sessionManager = sessionManagerAdapter;
+    this.errorHandler = errorHandler; // 任意なのでチェック不要
+    this._traceIdGenerator = traceIdGenerator;
+    this._requestIdGenerator = requestIdGenerator;
 
     this.logger.debug('CliStatusViewer initialized');
   }
 
   /**
+   * 標準化されたイベントを発行する内部ヘルパー
+   * @param {string} action - アクション名 (例: 'get_before')
+   * @param {object} [data={}] - イベントデータ
+   * @param {string} [traceId] - トレースID (指定されなければ生成)
+   * @param {string} [requestId] - リクエストID (指定されなければ生成)
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _emitEvent(action, data = {}, traceId, requestId) {
+    if (
+      !this.eventEmitter ||
+      typeof this.eventEmitter.emitStandardizedAsync !== 'function'
+    ) {
+      this.logger.warn(
+        `Cannot emit event status_${action}: eventEmitter or emitStandardizedAsync is missing.`
+      );
+      return;
+    }
+    const finalTraceId = traceId || this._traceIdGenerator();
+    const finalRequestId = requestId || this._requestIdGenerator();
+    const eventData = {
+      ...data,
+      traceId: finalTraceId,
+      requestId: finalRequestId,
+    };
+    try {
+      // コンポーネント名を 'cli'、アクション名を 'status_action' 形式に統一
+      await this.eventEmitter.emitStandardizedAsync(
+        'cli',
+        `status_${action}`,
+        eventData
+      );
+    } catch (error) {
+      this.logger.warn(`イベント発行中にエラー: cli:status_${action}`, {
+        error,
+      });
+    }
+  }
+
+  /**
+   * エラー処理を行う内部ヘルパー
+   * @param {Error} error - 発生したエラー
+   * @param {string} operation - 操作名
+   * @param {object} [context={}] - エラーコンテキスト
+   * @returns {*} エラーハンドラーの戻り値、またはエラーを再スロー
+   * @throws {CliError} エラーハンドラーがない場合、またはエラーハンドラーがエラーをスローした場合
+   * @private
+   */
+  _handleError(error, operation, context = {}) {
+    // エラーを CliError でラップ (常に)
+    const processedError = new CliError(`Failed during ${operation}`, error, {
+      // エラーコード生成ルールを統一 (コンポーネント名を含む)
+      code: `ERR_CLI_STATUSVIEWER_${operation.toUpperCase()}`,
+      ...context,
+    });
+
+    emitErrorEvent(
+      this.eventEmitter,
+      this.logger,
+      'CliStatusViewer',
+      operation,
+      processedError,
+      null,
+      context
+    );
+
+    if (this.errorHandler) {
+      return this.errorHandler.handle(
+        processedError,
+        'CliStatusViewer',
+        operation,
+        context
+      );
+    } else {
+      throw processedError;
+    }
+  }
+
+  /**
    * 現在のワークフロー状態を取得し、整形して返す
    * @returns {Promise<object>} ワークフロー状態情報
-   * @throws {ApplicationError} 状態取得に失敗した場合
+   * @throws {CliError} 状態取得に失敗した場合
    */
   async getWorkflowStatus() {
     const operation = 'getWorkflowStatus';
-    this.logger.info('Getting workflow status...', { operation });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_status',
-      `${operation}_before`
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { traceId, requestId }; // エラーハンドリング用コンテキスト
+
+    await this._emitEvent('get_before', {}, traceId, requestId);
+    this.logger.info('Getting workflow status...', { ...context, operation });
 
     try {
-      // 各アダプターから情報を取得
-      const currentState = this.stateManager.getCurrentState(); // 同期？
+      // 各アダプターから情報を取得 (Promise.all で並列化も検討可能だが、依存関係がなければ現状維持)
+      const currentState = this.stateManager.getCurrentState(); // 同期処理と仮定
       const tasksResult = await this.taskManager.getAllTasks();
       const sessionResult = await this.sessionManager.getLatestSession();
 
@@ -76,7 +188,7 @@ class CliStatusViewer {
               id: sessionResult.session_id,
               timestamp:
                 sessionResult.session_handover?.session_timestamp ||
-                sessionResult.created_at, // handover 優先
+                sessionResult.created_at,
               previousSessionId:
                 sessionResult.session_handover?.previous_session_id ||
                 sessionResult.previous_session_id,
@@ -84,46 +196,21 @@ class CliStatusViewer {
           : null,
       };
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_status',
-        `${operation}_after`,
-        { statusInfo }
-      );
-      this.logger.info('Workflow status retrieved successfully.');
+      await this._emitEvent('get_after', { statusInfo }, traceId, requestId);
+      this.logger.info('Workflow status retrieved successfully.', {
+        traceId,
+        requestId,
+      });
       return statusInfo;
     } catch (error) {
-      // CliError でラップするように修正
-      const cliError = new CliError(
-        'Failed to get workflow status',
-        error, // cause
-        { code: 'ERR_CLI_STATUS_GET' } // context (エラーコードのみ指定)
-      );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliStatusViewer',
-        operation,
-        cliError, // 正しく生成されたエラーオブジェクトを使用
-        null // context は emitErrorEvent には渡さない (cliError 内に含まれる)
-      );
-      if (this.errorHandler) {
-        // エラーハンドラーが状態オブジェクトの代替を返すことも可能
-        // handle メソッドの第4引数 (context) は null を渡す
-        return (
-          this.errorHandler.handle(
-            cliError,
-            'CliStatusViewer',
-            operation,
-            null
-          ) || {
-            error: cliError.message,
-          }
-        );
-      } else {
-        throw cliError; // 正しく生成されたエラーオブジェクトをスロー
-      }
+      // エラーハンドラが値を返さない場合はエラー情報を含むオブジェクトを返す
+      const handledResult = this._handleError(error, operation, context);
+      return handledResult === undefined
+        ? { error: error.message || 'Failed to get status' }
+        : handledResult;
     }
   }
+
   /**
    * タスクリストから状態ごとの件数を計算する内部ヘルパー
    * @param {Array<object>} tasks - タスクオブジェクトの配列
@@ -137,7 +224,7 @@ class CliStatusViewer {
         return counts;
       },
       { pending: 0, in_progress: 0, completed: 0, blocked: 0 }
-    ); // 初期値を設定
+    );
   }
 
   /**

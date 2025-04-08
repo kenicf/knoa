@@ -1,11 +1,13 @@
 const {
-  ApplicationError, // これは基底クラスとして残す場合がある
+  ApplicationError,
   ValidationError,
-  NotFoundError, // 追加
-  StorageError, // 追加
-  CliError, // 追加
-} = require('../lib/utils/errors'); // インポート元を統一
+  NotFoundError,
+  StorageError,
+  CliError,
+} = require('../lib/utils/errors');
 const { emitErrorEvent } = require('../lib/utils/error-helpers');
+// ID生成関数をインポート (EventEmitter から取得するため不要)
+// const { generateTraceId, generateRequestId } = require('../lib/utils/id-generators');
 
 /**
  * CLIにおけるタスク関連の操作を管理するクラス
@@ -19,65 +21,195 @@ class CliTaskManager {
    * @param {object} options.taskManagerAdapter - TaskManagerAdapterインスタンス (必須)
    * @param {object} options.storageService - StorageServiceインスタンス (必須)
    * @param {object} options.validator - Validatorインスタンス (必須)
-   * @param {object} options.errorHandler - エラーハンドラー (オプション)
+   * @param {object} [options.errorHandler] - エラーハンドラー (オプション)
+   * @param {Function} options.traceIdGenerator - トレースID生成関数 (必須)
+   * @param {Function} options.requestIdGenerator - リクエストID生成関数 (必須)
    */
   constructor(options = {}) {
-    // 必須依存関係のチェック
-    const requiredDependencies = [
-      'logger',
-      'eventEmitter',
-      'integrationManagerAdapter',
-      'taskManagerAdapter',
-      'storageService',
-      'validator',
-    ];
-    for (const dep of requiredDependencies) {
-      if (!options[dep]) {
-        throw new ApplicationError(`CliTaskManager requires ${dep} instance.`);
-      }
-    }
+    // 分割代入で依存関係を取得
+    const {
+      logger,
+      eventEmitter,
+      integrationManagerAdapter,
+      taskManagerAdapter,
+      storageService,
+      validator,
+      errorHandler, // 任意
+      traceIdGenerator,
+      requestIdGenerator,
+    } = options;
 
-    this.logger = options.logger;
-    this.eventEmitter = options.eventEmitter;
-    this.integrationManager = options.integrationManagerAdapter;
-    this.taskManager = options.taskManagerAdapter;
-    this.storageService = options.storageService;
-    this.validator = options.validator; // タスク入力検証用
-    this.errorHandler = options.errorHandler;
+    // 必須依存関係のチェック
+    if (!logger)
+      throw new ApplicationError('CliTaskManager requires logger instance.');
+    if (!eventEmitter)
+      throw new ApplicationError(
+        'CliTaskManager requires eventEmitter instance.'
+      );
+    if (!integrationManagerAdapter)
+      throw new ApplicationError(
+        'CliTaskManager requires integrationManagerAdapter instance.'
+      );
+    if (!taskManagerAdapter)
+      throw new ApplicationError(
+        'CliTaskManager requires taskManagerAdapter instance.'
+      );
+    if (!storageService)
+      throw new ApplicationError(
+        'CliTaskManager requires storageService instance.'
+      );
+    if (!validator)
+      throw new ApplicationError('CliTaskManager requires validator instance.');
+    if (!traceIdGenerator)
+      throw new ApplicationError(
+        'CliTaskManager requires traceIdGenerator function.'
+      );
+    if (!requestIdGenerator)
+      throw new ApplicationError(
+        'CliTaskManager requires requestIdGenerator function.'
+      );
+
+    this.logger = logger;
+    this.eventEmitter = eventEmitter;
+    this.integrationManager = integrationManagerAdapter;
+    this.taskManager = taskManagerAdapter;
+    this.storageService = storageService;
+    this.validator = validator;
+    this.errorHandler = errorHandler; // 任意なのでチェック不要
+    this._traceIdGenerator = traceIdGenerator;
+    this._requestIdGenerator = requestIdGenerator;
 
     this.logger.debug('CliTaskManager initialized');
+  }
+
+  /**
+   * 標準化されたイベントを発行する内部ヘルパー
+   * @param {string} action - アクション名 (例: 'create_before')
+   * @param {object} [data={}] - イベントデータ
+   * @param {string} [traceId] - トレースID (指定されなければ生成)
+   * @param {string} [requestId] - リクエストID (指定されなければ生成)
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _emitEvent(action, data = {}, traceId, requestId) {
+    if (
+      !this.eventEmitter ||
+      typeof this.eventEmitter.emitStandardizedAsync !== 'function'
+    ) {
+      this.logger.warn(
+        `Cannot emit event task_${action}: eventEmitter or emitStandardizedAsync is missing.`
+      );
+      return;
+    }
+    const finalTraceId = traceId || this._traceIdGenerator();
+    const finalRequestId = requestId || this._requestIdGenerator();
+    const eventData = {
+      ...data,
+      traceId: finalTraceId,
+      requestId: finalRequestId,
+    };
+    try {
+      // コンポーネント名を 'cli'、アクション名を 'task_action' 形式に統一
+      await this.eventEmitter.emitStandardizedAsync(
+        'cli',
+        `task_${action}`,
+        eventData
+      );
+    } catch (error) {
+      this.logger.warn(`イベント発行中にエラー: cli:task_${action}`, { error });
+    }
+  }
+
+  /**
+   * エラー処理を行う内部ヘルパー
+   * @param {Error} error - 発生したエラー
+   * @param {string} operation - 操作名
+   * @param {object} [context={}] - エラーコンテキスト
+   * @returns {*} エラーハンドラーの戻り値、またはエラーを再スロー
+   * @throws {CliError|ApplicationError|NotFoundError|StorageError|ValidationError} エラーハンドラーがない場合、またはエラーハンドラーがエラーをスローした場合
+   * @private
+   */
+  _handleError(error, operation, context = {}) {
+    // 特定のエラーコードや型はそのまま使う
+    const knownErrorCodes = [
+      'ERR_TASK_CREATE',
+      'ERR_TASK_CREATE_UNEXPECTED',
+      'ERR_TASK_UPDATE',
+      'ERR_TASK_UPDATE_UNEXPECTED',
+      // 'ERR_CLI_TASK_NOT_FOUND', // isKnownError でチェック
+      'ERR_TASK_PROGRESS_UNEXPECTED',
+      'ERR_CLI_TASK_DELETE_FAILED',
+      'ERR_CLI_TASK_LINK_COMMIT_UNEXPECTED',
+      // 'ERR_CLI_FILE_WRITE', // isKnownError でチェック
+      // 'ERR_CLI_FILE_READ', // isKnownError でチェック
+      'ERR_CLI_TASK_IMPORT_UNEXPECTED',
+    ];
+    const isKnownCliError =
+      error instanceof CliError && knownErrorCodes.includes(error.code);
+    const isKnownError =
+      error instanceof NotFoundError ||
+      error instanceof StorageError ||
+      error instanceof ValidationError ||
+      isKnownCliError;
+
+    const processedError = isKnownError
+      ? error
+      : new CliError(`Failed during ${operation}`, error, {
+          // エラーコード生成ルールを統一 (コンポーネント名を含む)
+          code: `ERR_CLI_TASKMANAGER_${operation.toUpperCase()}`,
+          ...context,
+        });
+
+    emitErrorEvent(
+      this.eventEmitter,
+      this.logger,
+      'CliTaskManager',
+      operation,
+      processedError,
+      null,
+      context
+    );
+
+    if (this.errorHandler) {
+      return this.errorHandler.handle(
+        processedError,
+        'CliTaskManager',
+        operation,
+        context
+      );
+    } else {
+      throw processedError;
+    }
   }
 
   /**
    * 新しいタスクを作成する
    * @param {string} title - タスクタイトル
    * @param {string} description - タスク説明
-   * @param {object} taskOptions - その他のタスクオプション (status, priority, estimatedHours, dependencies)
+   * @param {object} [taskOptions={}] - その他のタスクオプション (status, priority, estimatedHours, dependencies)
    * @returns {Promise<object>} 作成されたタスク情報
-   * @throws {ApplicationError|ValidationError} タスク作成に失敗した場合
+   * @throws {CliError|ValidationError} タスク作成に失敗した場合
    */
   async createTask(title, description, taskOptions = {}) {
     const operation = 'createTask';
-    this.logger.info(`Creating new task: ${title}`, {
-      operation,
-      title,
-      description,
-      taskOptions,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_task',
-      `${operation}_before`,
-      { title, description, taskOptions }
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { title, description, taskOptions, traceId, requestId };
+    await this._emitEvent(
+      'create_before',
+      { title, description, taskOptions },
+      traceId,
+      requestId
     );
+    this.logger.info(`Creating new task: ${title}`, context);
 
     try {
-      // タスクデータの構築と検証
       const taskData = {
         title,
         description,
         status: taskOptions.status || 'pending',
         priority: taskOptions.priority || 3,
-        estimated_hours: taskOptions.estimatedHours, // undefined でも可
+        estimated_hours: taskOptions.estimatedHours,
         dependencies: [],
       };
 
@@ -85,8 +217,7 @@ class CliTaskManager {
         const deps =
           typeof taskOptions.dependencies === 'string'
             ? taskOptions.dependencies.split(',').map((d) => d.trim())
-            : taskOptions.dependencies; // 配列の場合も考慮
-
+            : taskOptions.dependencies;
         taskData.dependencies = deps.map((taskId) => ({
           task_id: taskId,
           type: 'strong',
@@ -100,98 +231,64 @@ class CliTaskManager {
         });
       }
 
-      // integrationManagerAdapter を使用してタスクを作成
       const result = await this.integrationManager.createTask(taskData);
 
       if (result && result.error) {
-        // CliError を使用
         throw new CliError(`Task creation failed: ${result.error}`, null, {
-          code: 'ERR_TASK_CREATE', // 元のコードを維持
+          code: 'ERR_TASK_CREATE',
           context: { taskData, errorDetail: result.error },
         });
       }
       if (!result || !result.id) {
-        // CliError を使用
         throw new CliError(
           'Task creation did not return expected result.',
           null,
-          { code: 'ERR_TASK_CREATE_UNEXPECTED', context: { taskData, result } } // 元のコードを維持
+          {
+            code: 'ERR_TASK_CREATE_UNEXPECTED',
+            context: { taskData, result },
+          }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_task',
-        `${operation}_after`,
-        { result }
-      );
-      this.logger.info(`Task created successfully: ${result.id}`);
+      await this._emitEvent('create_after', { result }, traceId, requestId);
+      this.logger.info(`Task created successfully: ${result.id}`, {
+        traceId,
+        requestId,
+      });
       return result;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        error instanceof ValidationError || // ValidationError はそのまま
-        (error instanceof CliError && // 特定の CliError もそのまま
-          (error.code === 'ERR_TASK_CREATE' ||
-            error.code === 'ERR_TASK_CREATE_UNEXPECTED'))
-          ? error
-          : new CliError(`Failed to create task "${title}"`, error, {
-              // それ以外は CliError でラップ
-              code: 'ERR_CLI_TASK_CREATE',
-              context: { title, description, taskOptions },
-            });
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliTaskManager',
-        operation,
-        cliError,
-        null,
-        { title, description, taskOptions }
-      );
-
-      if (this.errorHandler) {
-        return this.errorHandler.handle(cliError, 'CliTaskManager', operation, {
-          title,
-          description,
-          taskOptions,
-        });
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
   /**
-   * タスクの状態と進捗を更新する (integration.js の update-task に相当)
+   * タスクの状態と進捗を更新する
    * @param {string} taskId - タスクID
    * @param {string} status - 新しい状態
    * @param {number|undefined} progress - 進捗率 (0-100)
    * @returns {Promise<object>} 更新されたタスク情報
-   * @throws {ApplicationError|ValidationError} 更新に失敗した場合
+   * @throws {CliError|ValidationError} 更新に失敗した場合
    */
   async updateTask(taskId, status, progress) {
     const operation = 'updateTask';
-    this.logger.info(`Updating task: ${taskId}`, {
-      operation,
-      taskId,
-      status,
-      progress,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_task',
-      `${operation}_before`,
-      { taskId, status, progress }
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, status, progress, traceId, requestId };
+    await this._emitEvent(
+      'update_before',
+      { taskId, status, progress },
+      traceId,
+      requestId
     );
+    this.logger.info(`Updating task: ${taskId}`, context);
 
     try {
-      // 状態の検証 (簡易)
       const validStatuses = ['pending', 'in_progress', 'completed', 'blocked'];
       if (!validStatuses.includes(status)) {
         throw new ValidationError(`Invalid status: ${status}`, {
           context: { field: 'status' },
         });
       }
-      // 進捗率の検証 (簡易)
       if (
         progress !== undefined &&
         (typeof progress !== 'number' || progress < 0 || progress > 100)
@@ -202,7 +299,6 @@ class CliTaskManager {
         );
       }
 
-      // integrationManagerAdapter を使用して更新
       const result = await this.integrationManager.updateTaskStatus(
         taskId,
         status,
@@ -210,199 +306,127 @@ class CliTaskManager {
       );
 
       if (result && result.error) {
-        // CliError を使用
         throw new CliError(`Task update failed: ${result.error}`, null, {
-          code: 'ERR_TASK_UPDATE', // 元のコードを維持
+          code: 'ERR_TASK_UPDATE',
           context: { taskId, status, progress, errorDetail: result.error },
         });
       }
       if (!result || !result.id) {
-        // CliError を使用
         throw new CliError(
           'Task update did not return expected result.',
           null,
           {
-            code: 'ERR_TASK_UPDATE_UNEXPECTED', // 元のコードを維持
+            code: 'ERR_TASK_UPDATE_UNEXPECTED',
             context: { taskId, status, progress, result },
           }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_task',
-        `${operation}_after`,
-        { taskId, status, progress, result }
+      await this._emitEvent(
+        'update_after',
+        { taskId, status, progress, result },
+        traceId,
+        requestId
       );
-      this.logger.info(`Task updated successfully: ${taskId}`);
+      this.logger.info(`Task updated successfully: ${taskId}`, {
+        traceId,
+        requestId,
+      });
       return result;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        error instanceof ValidationError || // ValidationError はそのまま
-        (error instanceof CliError && // 特定の CliError もそのまま
-          (error.code === 'ERR_TASK_UPDATE' ||
-            error.code === 'ERR_TASK_UPDATE_UNEXPECTED'))
-          ? error
-          : new CliError(`Failed to update task ${taskId}`, error, {
-              // それ以外は CliError でラップ
-              code: 'ERR_CLI_TASK_UPDATE',
-              context: { taskId, status, progress },
-            });
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliTaskManager',
-        operation,
-        cliError,
-        null,
-        { taskId, status, progress }
-      );
-
-      if (this.errorHandler) {
-        return this.errorHandler.handle(cliError, 'CliTaskManager', operation, {
-          taskId,
-          status,
-          progress,
-        });
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
   /**
    * タスク一覧を取得する
-   * @returns {Promise<object>} タスク一覧データ (taskManagerAdapter.getAllTasks の戻り値)
-   * @throws {ApplicationError} 取得に失敗した場合
+   * @returns {Promise<object>} タスク一覧データ
+   * @throws {CliError} 取得に失敗した場合
    */
   async listTasks() {
     const operation = 'listTasks';
-    this.logger.info('Listing all tasks...', { operation });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_task',
-      `${operation}_before`
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { traceId, requestId };
+    await this._emitEvent('list_before', {}, traceId, requestId);
+    this.logger.info('Listing all tasks...', { ...context, operation });
 
     try {
       const tasks = await this.taskManager.getAllTasks();
-      const taskCount = tasks?.decomposed_tasks?.length || 0;
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_task',
-        `${operation}_after`,
-        { count: taskCount }
-      );
-      this.logger.info(`Found ${taskCount} tasks.`);
-      return tasks || { decomposed_tasks: [] }; // null や undefined の場合も考慮
+      const count = tasks?.decomposed_tasks?.length || 0;
+      await this._emitEvent('list_after', { count }, traceId, requestId);
+      this.logger.info(`Found ${count} tasks.`, { traceId, requestId });
+      return tasks || { decomposed_tasks: [] };
     } catch (error) {
-      // CliError でラップ (常に)
-      const cliError = new CliError('Failed to list tasks', error, {
-        code: 'ERR_CLI_TASK_LIST',
-      });
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliTaskManager',
-        operation,
-        cliError
-      );
-      if (this.errorHandler) {
-        return (
-          this.errorHandler.handle(cliError, 'CliTaskManager', operation) || {
-            decomposed_tasks: [],
-          }
-        );
-      } else {
-        throw cliError;
-      }
+      const handledResult = this._handleError(error, operation, context);
+      return handledResult === undefined
+        ? { decomposed_tasks: [] }
+        : handledResult;
     }
   }
 
   /**
    * 指定されたIDのタスク情報を取得する
    * @param {string} taskId - タスクID
-   * @returns {Promise<object|null>} タスク情報、または null
-   * @throws {ApplicationError} 取得に失敗した場合
+   * @returns {Promise<object>} タスク情報
+   * @throws {CliError|NotFoundError} 取得に失敗した場合、またはタスクが見つからない場合
    */
   async getTaskInfo(taskId) {
     const operation = 'getTaskInfo';
-    this.logger.info(`Getting task info for: ${taskId}`, { operation, taskId });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_task',
-      `${operation}_before`,
-      { taskId }
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, traceId, requestId };
+    await this._emitEvent('info_get_before', { taskId }, traceId, requestId);
+    this.logger.info(`Getting task info for: ${taskId}`, context);
 
     try {
       const task = await this.taskManager.getTaskById(taskId);
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_task',
-        `${operation}_after`,
-        { taskId, taskFound: !!task }
-      );
-      if (task) {
-        this.logger.info(`Task info retrieved for: ${taskId}`);
-      } else {
-        // logger.warn にコンテキストオブジェクトを渡すように修正
-        this.logger.warn(`Task not found: ${taskId}`, { taskId });
-        // NotFoundError を使用し、CLI固有コードを設定
+      if (!task) {
         throw new NotFoundError(`Task not found: ${taskId}`, {
-          code: 'ERR_CLI_TASK_NOT_FOUND', // CLI固有コード
+          code: 'ERR_CLI_TASK_NOT_FOUND',
           context: { taskId },
         });
       }
+      await this._emitEvent(
+        'info_get_after',
+        { taskId, taskFound: true },
+        traceId,
+        requestId
+      );
+      this.logger.info(`Task info retrieved for: ${taskId}`, {
+        traceId,
+        requestId,
+      });
       return task;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        error instanceof NotFoundError &&
-        error.code === 'ERR_CLI_TASK_NOT_FOUND'
-          ? error // NotFoundError はそのまま
-          : new CliError(`Failed to get task info for ${taskId}`, error, {
-              // それ以外は CliError でラップ
-              code: 'ERR_CLI_TASK_INFO',
-              context: { taskId },
-            });
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliTaskManager',
-        operation,
-        cliError,
-        null,
-        { taskId }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(cliError, 'CliTaskManager', operation, {
-          taskId,
-        });
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
   /**
-   * タスクの進捗率を更新する (task.js の progress に相当)
+   * タスクの進捗率を更新する
    * @param {string} taskId - タスクID
    * @param {number} progress - 進捗率 (0-100)
    * @returns {Promise<object>} 更新されたタスク情報
-   * @throws {ApplicationError|ValidationError} 更新に失敗した場合
+   * @throws {CliError|ValidationError} 更新に失敗した場合
    */
   async updateTaskProgress(taskId, progress) {
     const operation = 'updateTaskProgress';
-    this.logger.info(`Updating task progress: ${taskId} to ${progress}%`, {
-      operation,
-      taskId,
-      progress,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_task',
-      `${operation}_before`,
-      { taskId, progress }
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, progress, traceId, requestId };
+    await this._emitEvent(
+      'progress_update_before',
+      { taskId, progress },
+      traceId,
+      requestId
+    );
+    this.logger.info(
+      `Updating task progress: ${taskId} to ${progress}%`,
+      context
     );
 
     try {
-      // 進捗率の検証
       if (typeof progress !== 'number' || progress < 0 || progress > 100) {
         throw new ValidationError(
           'Progress must be a number between 0 and 100',
@@ -410,15 +434,10 @@ class CliTaskManager {
         );
       }
 
-      // 進捗状態を決定
       let progressState = 'not_started';
-      if (progress === 100) {
-        progressState = 'completed';
-      } else if (progress > 0) {
-        progressState = 'in_progress';
-      }
+      if (progress === 100) progressState = 'completed';
+      else if (progress > 0) progressState = 'in_progress';
 
-      // taskManagerAdapter を使用して更新
       const result = await this.taskManager.updateTaskProgress(
         taskId,
         progress,
@@ -426,56 +445,29 @@ class CliTaskManager {
       );
 
       if (!result || !result.id) {
-        // CliError を使用
         throw new CliError(
           'Task progress update did not return expected result.',
           null,
           {
-            code: 'ERR_TASK_PROGRESS_UNEXPECTED', // 元のコードを維持
+            code: 'ERR_TASK_PROGRESS_UNEXPECTED',
             context: { taskId, progress, result },
           }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_task',
-        `${operation}_after`,
-        { taskId, progress, result }
+      await this._emitEvent(
+        'progress_update_after',
+        { taskId, progress, result },
+        traceId,
+        requestId
       );
-      this.logger.info(`Task progress updated successfully for: ${taskId}`);
+      this.logger.info(`Task progress updated successfully for: ${taskId}`, {
+        traceId,
+        requestId,
+      });
       return result;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        error instanceof ValidationError || // ValidationError はそのまま
-        (error instanceof CliError &&
-          error.code === 'ERR_TASK_PROGRESS_UNEXPECTED') // 特定の CliError もそのまま
-          ? error
-          : new CliError( // それ以外は CliError でラップ
-              `Failed to update task progress for ${taskId}`,
-              error,
-              {
-                code: 'ERR_CLI_TASK_PROGRESS',
-                context: { taskId, progress },
-              }
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliTaskManager',
-        operation,
-        cliError,
-        null,
-        { taskId, progress }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(cliError, 'CliTaskManager', operation, {
-          taskId,
-          progress,
-        });
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
@@ -483,64 +475,39 @@ class CliTaskManager {
    * タスクを削除する
    * @param {string} taskId - タスクID
    * @returns {Promise<boolean>} 削除に成功したかどうか
-   * @throws {ApplicationError} 削除に失敗した場合
+   * @throws {CliError} 削除に失敗した場合
    */
   async deleteTask(taskId) {
     const operation = 'deleteTask';
-    this.logger.info(`Deleting task: ${taskId}`, { operation, taskId });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_task',
-      `${operation}_before`,
-      { taskId }
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, traceId, requestId };
+    await this._emitEvent('delete_before', { taskId }, traceId, requestId);
+    this.logger.info(`Deleting task: ${taskId}`, context);
 
     try {
       const result = await this.taskManager.deleteTask(taskId);
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_task',
-        `${operation}_after`,
-        { taskId, success: result }
-      );
-      if (result) {
-        this.logger.info(`Task deleted successfully: ${taskId}`);
-      } else {
-        this.logger.warn(`Failed to delete task or task not found: ${taskId}`);
-        // deleteTask が false を返す場合、エラーとするか警告に留めるか検討
-        // CliError を使用し、CLI固有コードを設定
+      if (!result) {
+        // deleteTask が false を返す場合はエラーとして扱う
         throw new CliError(`Failed to delete task ${taskId}`, null, {
           code: 'ERR_CLI_TASK_DELETE_FAILED',
           context: { taskId },
         });
       }
+      await this._emitEvent(
+        'delete_after',
+        { taskId, success: result },
+        traceId,
+        requestId
+      );
+      this.logger.info(`Task deleted successfully: ${taskId}`, {
+        traceId,
+        requestId,
+      });
       return result;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        error instanceof CliError && error.code === 'ERR_CLI_TASK_DELETE_FAILED'
-          ? error // 特定の CliError はそのまま
-          : new CliError(`Failed to delete task ${taskId}`, error, {
-              // それ以外は CliError でラップ
-              code: 'ERR_CLI_TASK_DELETE',
-              context: { taskId },
-            });
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliTaskManager',
-        operation,
-        cliError,
-        null,
-        { taskId }
-      );
-      if (this.errorHandler) {
-        return (
-          this.errorHandler.handle(cliError, 'CliTaskManager', operation, {
-            taskId,
-          }) || false
-        ); // エラー時は false を返すなど
-      } else {
-        throw cliError;
-      }
+      const handledResult = this._handleError(error, operation, context);
+      return handledResult === undefined ? false : handledResult;
     }
   }
 
@@ -549,106 +516,80 @@ class CliTaskManager {
    * @param {string} taskId - タスクID
    * @param {string} commitHash - コミットハッシュ
    * @returns {Promise<object>} 更新されたタスク情報
-   * @throws {ApplicationError} 関連付けに失敗した場合
+   * @throws {CliError|NotFoundError} 関連付けに失敗した場合
    */
   async linkTaskToCommit(taskId, commitHash) {
     const operation = 'linkTaskToCommit';
-    this.logger.info(`Linking commit ${commitHash} to task ${taskId}`, {
-      operation,
-      taskId,
-      commitHash,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_task',
-      `${operation}_before`,
-      { taskId, commitHash }
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, commitHash, traceId, requestId };
+    await this._emitEvent(
+      'link_commit_before',
+      { taskId, commitHash },
+      traceId,
+      requestId
     );
+    this.logger.info(`Linking commit ${commitHash} to task ${taskId}`, context);
 
     try {
+      // getTaskById で存在確認を行う方がより安全かもしれないが、現状は adapter に任せる
       const task = await this.taskManager.addGitCommitToTask(
         taskId,
         commitHash
       );
       if (!task || !task.id) {
-        // CliError を使用
+        // addGitCommitToTask が null や期待しない値を返す場合のエラー
         throw new CliError(
           'Linking commit to task did not return expected result.',
           null,
           {
-            code: 'ERR_CLI_TASK_LINK_COMMIT_UNEXPECTED', // 元のコードを維持
+            code: 'ERR_CLI_TASK_LINK_COMMIT_UNEXPECTED',
             context: { taskId, commitHash, result: task },
           }
         );
       }
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_task',
-        `${operation}_after`,
-        { taskId, commitHash, task }
+      await this._emitEvent(
+        'link_commit_after',
+        { taskId, commitHash, task },
+        traceId,
+        requestId
       );
       this.logger.info(
-        `Commit ${commitHash} linked to task ${taskId} successfully.`
+        `Commit ${commitHash} linked to task ${taskId} successfully.`,
+        { traceId, requestId }
       );
       return task;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        error instanceof CliError &&
-        error.code === 'ERR_CLI_TASK_LINK_COMMIT_UNEXPECTED'
-          ? error // 特定の CliError はそのまま
-          : new CliError( // それ以外は CliError でラップ
-              `Failed to link commit ${commitHash} to task ${taskId}`,
-              error,
-              {
-                code: 'ERR_CLI_TASK_LINK_COMMIT',
-                context: { taskId, commitHash },
-              }
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliTaskManager',
-        operation,
-        cliError,
-        null,
-        { taskId, commitHash }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(cliError, 'CliTaskManager', operation, {
-          taskId,
-          commitHash,
-        });
-      } else {
-        throw cliError;
-      }
+      // addGitCommitToTask が NotFoundError をスローする可能性も考慮
+      return this._handleError(error, operation, context);
     }
   }
 
   /**
    * タスク情報をファイルにエクスポートする
    * @param {string} taskId - タスクID
-   * @param {string|null} outputPath - 出力ファイルパス (nullの場合はデフォルトパス)
+   * @param {string|null} [outputPath=null] - 出力ファイルパス (nullの場合はデフォルトパス)
    * @returns {Promise<string>} エクスポートされたファイルパス
-   * @throws {ApplicationError} エクスポートに失敗した場合
+   * @throws {CliError|NotFoundError|StorageError} エクスポートに失敗した場合
    */
   async exportTask(taskId, outputPath = null) {
     const operation = 'exportTask';
-    this.logger.info(`Exporting task: ${taskId}`, {
-      operation,
-      taskId,
-      outputPath,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_task',
-      `${operation}_before`,
-      { taskId, outputPath }
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, outputPath, traceId, requestId };
+    await this._emitEvent(
+      'export_before',
+      { taskId, outputPath },
+      traceId,
+      requestId
     );
+    this.logger.info(`Exporting task: ${taskId}`, context);
 
     try {
       const task = await this.taskManager.getTaskById(taskId);
       if (!task) {
-        // NotFoundError を使用し、CLI固有コードを設定
         throw new NotFoundError(`Task not found: ${taskId}`, {
-          code: 'ERR_CLI_TASK_NOT_FOUND', // CLI固有コード
+          code: 'ERR_CLI_TASK_NOT_FOUND',
           context: { taskId },
         });
       }
@@ -661,53 +602,28 @@ class CliTaskManager {
       );
 
       if (!writeSuccess) {
-        // StorageError を使用 (コンストラクタ呼び出し修正)
         throw new StorageError(
           `Failed to write task export file: ${finalPath}`,
           {
-            // options オブジェクト
-            code: 'ERR_CLI_FILE_WRITE', // CLI固有コードを維持
+            code: 'ERR_CLI_FILE_WRITE',
             context: { taskId, path: finalPath },
           }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_task',
-        `${operation}_after`,
-        { taskId, path: finalPath }
+      await this._emitEvent(
+        'export_after',
+        { taskId, path: finalPath },
+        traceId,
+        requestId
       );
-      this.logger.info(`Task exported successfully to: ${finalPath}`);
+      this.logger.info(`Task exported successfully to: ${finalPath}`, {
+        traceId,
+        requestId,
+      });
       return finalPath;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        (error instanceof NotFoundError &&
-          error.code === 'ERR_CLI_TASK_NOT_FOUND') ||
-        (error instanceof StorageError && error.code === 'ERR_CLI_FILE_WRITE')
-          ? error // 特定のエラーはそのまま
-          : new CliError(`Failed to export task ${taskId}`, error, {
-              // それ以外は CliError でラップ
-              code: 'ERR_CLI_TASK_EXPORT',
-              context: { taskId, outputPath },
-            });
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliTaskManager',
-        operation,
-        cliError,
-        null,
-        { taskId, outputPath }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(cliError, 'CliTaskManager', operation, {
-          taskId,
-          outputPath,
-        });
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
@@ -715,87 +631,62 @@ class CliTaskManager {
    * ファイルからタスク情報をインポートする
    * @param {string} inputPath - 入力ファイルパス
    * @returns {Promise<object>} インポートされたタスク情報
-   * @throws {ApplicationError} インポートに失敗した場合
+   * @throws {CliError|StorageError|ValidationError} インポートに失敗した場合
    */
   async importTask(inputPath) {
     const operation = 'importTask';
-    this.logger.info(`Importing task from: ${inputPath}`, {
-      operation,
-      inputPath,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_task',
-      `${operation}_before`,
-      { inputPath }
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { inputPath, traceId, requestId };
+    await this._emitEvent('import_before', { inputPath }, traceId, requestId);
+    this.logger.info(`Importing task from: ${inputPath}`, context);
 
     try {
       const taskData = await this.storageService.readJSON('.', inputPath);
       if (taskData === null) {
-        // StorageError を使用 (コンストラクタ呼び出し修正)
         throw new StorageError(
           `Failed to read or parse task import file: ${inputPath}`,
           {
-            // options オブジェクト
-            code: 'ERR_CLI_FILE_READ', // CLI固有コードを維持
+            code: 'ERR_CLI_FILE_READ',
             context: { path: inputPath },
           }
         );
       }
 
-      // TODO: インポート前に taskData のバリデーションを行うべきか検討
-      // const validationResult = this.validator.validateTaskInput(taskData);
-      // if (!validationResult.isValid) { ... }
+      // インポートデータのバリデーション
+      const validationResult = this.validator.validateTaskInput(taskData);
+      if (!validationResult.isValid) {
+        throw new ValidationError('Invalid task data in import file', {
+          context: { errors: validationResult.errors, path: inputPath },
+        });
+      }
 
       const task = await this.taskManager.importTask(taskData);
 
       if (!task || !task.id) {
-        // CliError を使用
         throw new CliError(
           'Task import did not return expected result.',
           null,
           {
-            code: 'ERR_CLI_TASK_IMPORT_UNEXPECTED', // 元のコードを維持
+            code: 'ERR_CLI_TASK_IMPORT_UNEXPECTED',
             context: { inputPath, result: task },
           }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_task',
-        `${operation}_after`,
-        { inputPath, taskId: task.id }
+      await this._emitEvent(
+        'import_after',
+        { inputPath, taskId: task.id },
+        traceId,
+        requestId
       );
-      this.logger.info(`Task imported successfully: ${task.id}`);
+      this.logger.info(`Task imported successfully: ${task.id}`, {
+        traceId,
+        requestId,
+      });
       return task;
     } catch (error) {
-      // エラーラップロジック修正
-      const cliError =
-        (error instanceof StorageError && error.code === 'ERR_CLI_FILE_READ') ||
-        (error instanceof CliError &&
-          error.code === 'ERR_CLI_TASK_IMPORT_UNEXPECTED')
-          ? error // 特定のエラーはそのまま
-          : new CliError(`Failed to import task from ${inputPath}`, error, {
-              // それ以外は CliError でラップ
-              code: 'ERR_CLI_TASK_IMPORT',
-              context: { inputPath },
-            });
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliTaskManager',
-        operation,
-        cliError,
-        null,
-        { inputPath }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(cliError, 'CliTaskManager', operation, {
-          inputPath,
-        });
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 }

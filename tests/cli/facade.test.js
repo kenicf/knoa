@@ -1,17 +1,17 @@
+/**
+ * @fileoverview CliFacade クラスのテスト
+ */
 const CliFacade = require('../../src/cli/facade');
 const {
   ApplicationError,
   ValidationError,
-  CliError, // 追加
-} = require('../../src/lib/utils/errors'); // インポート元を変更
-const {
-  createMockLogger,
-  createMockEventEmitter,
-} = require('../helpers/mock-factory'); // 共通ヘルパーを利用
-// expectStandardizedEventEmittedAsync をインポート
+  CliError,
+} = require('../../src/lib/utils/errors');
+const { createMockDependencies } = require('../helpers/mock-factory'); // createMockDependencies をインポート
 const {
   expectStandardizedEventEmittedAsync,
 } = require('../helpers/test-helpers');
+
 // emitErrorEvent もモック化
 jest.mock('../../src/lib/utils/error-helpers', () => ({
   emitErrorEvent: jest.fn(),
@@ -42,9 +42,13 @@ describe('CliFacade', () => {
   let cliFacade;
   let managers; // モックマネージャーへの参照を保持するオブジェクト
 
+  let mockDependencies; // モック依存関係を保持する変数
+
   beforeEach(() => {
-    mockLogger = createMockLogger();
-    mockEventEmitter = createMockEventEmitter();
+    // Arrange (Common setup)
+    mockDependencies = createMockDependencies(); // 共通モックを生成
+    mockLogger = mockDependencies.logger; // 個別変数にも代入
+    mockEventEmitter = mockDependencies.eventEmitter; // 個別変数にも代入
 
     // 各マネージャー/ハンドラーのモックインスタンスを作成し、メソッドもモック化
     mockWorkflowManager = {
@@ -101,8 +105,8 @@ describe('CliFacade', () => {
       prioritizeFeedback: jest
         .fn()
         .mockResolvedValue({ feedback_loop: { task_id: 'T001' } }),
-      linkFeedbackToCommit: jest.fn().mockResolvedValue(undefined), // void
-      linkFeedbackToSession: jest.fn().mockResolvedValue(undefined), // void
+      linkFeedbackToCommit: jest.fn().mockResolvedValue(undefined),
+      linkFeedbackToSession: jest.fn().mockResolvedValue(undefined),
       integrateFeedbackWithTask: jest.fn().mockResolvedValue(true),
       integrateFeedbackWithSession: jest.fn().mockResolvedValue(true),
     };
@@ -112,212 +116,219 @@ describe('CliFacade', () => {
     mockStatusViewer = {
       getWorkflowStatus: jest.fn().mockResolvedValue({ currentState: 'ready' }),
     };
-    mockInteractiveMode = { start: jest.fn().mockResolvedValue(undefined) }; // void
+    mockInteractiveMode = { start: jest.fn().mockResolvedValue(undefined) };
     mockComponentSyncer = { syncComponents: jest.fn().mockResolvedValue(true) };
 
-    // モックマネージャーのルックアップオブジェクトを作成
+    // モックマネージャーのルックアップオブジェクトを作成 (共通モックから取得)
     managers = {
-      workflowManager: mockWorkflowManager,
-      sessionManager: mockSessionManager,
-      taskManager: mockTaskManager,
-      feedbackHandler: mockFeedbackHandler,
-      reportGenerator: mockReportGenerator,
-      statusViewer: mockStatusViewer,
-      interactiveMode: mockInteractiveMode,
-      componentSyncer: mockComponentSyncer,
+      workflowManager:
+        mockDependencies.cliWorkflowManager || mockWorkflowManager, // 共通モックにあれば使う
+      sessionManager: mockDependencies.cliSessionManager || mockSessionManager,
+      taskManager: mockDependencies.cliTaskManager || mockTaskManager,
+      feedbackHandler:
+        mockDependencies.cliFeedbackHandler || mockFeedbackHandler,
+      reportGenerator:
+        mockDependencies.cliReportGenerator || mockReportGenerator,
+      statusViewer: mockDependencies.cliStatusViewer || mockStatusViewer,
+      interactiveMode:
+        mockDependencies.cliInteractiveMode || mockInteractiveMode,
+      componentSyncer:
+        mockDependencies.cliComponentSyncer || mockComponentSyncer,
     };
 
     // CliFacade インスタンスを作成
+    // CliFacade インスタンスを作成 (依存関係は共通モックから取得したものを渡す)
     cliFacade = new CliFacade({
       logger: mockLogger,
       eventEmitter: mockEventEmitter,
-      cliWorkflowManager: mockWorkflowManager,
-      cliSessionManager: mockSessionManager,
-      cliTaskManager: mockTaskManager,
-      cliFeedbackHandler: mockFeedbackHandler,
-      cliReportGenerator: mockReportGenerator,
-      cliStatusViewer: mockStatusViewer,
-      cliInteractiveMode: mockInteractiveMode,
-      cliComponentSyncer: mockComponentSyncer,
+      cliWorkflowManager: managers.workflowManager,
+      cliSessionManager: managers.sessionManager,
+      cliTaskManager: managers.taskManager,
+      cliFeedbackHandler: managers.feedbackHandler,
+      cliReportGenerator: managers.reportGenerator,
+      cliStatusViewer: managers.statusViewer,
+      cliInteractiveMode: managers.interactiveMode,
+      cliComponentSyncer: managers.componentSyncer,
+      // Facade 自体は ID 生成関数を直接必要としない
     });
 
     // emitErrorEvent のモックをクリア
     emitErrorEvent.mockClear();
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   // 各コマンドに対するテストケース
-  // expectedManager を文字列に変更
   const testCases = [
     // command, args, managerName (string), expectedMethod, expectedArgs
     [
       'init',
       { projectId: 'P1', request: 'Req1' },
-      'workflowManager', // 文字列に変更
+      'workflowManager',
       'initializeWorkflow',
       ['P1', 'Req1'],
     ],
     [
       'start-session',
       { previousSessionId: 'S0' },
-      'sessionManager', // 文字列に変更
+      'sessionManager',
       'startSession',
       ['S0'],
     ],
     [
       'end-session',
       { sessionId: 'S1' },
-      'sessionManager', // 文字列に変更
+      'sessionManager',
       'endSession',
       ['S1'],
     ],
     [
       'create-task',
       { title: 'T', description: 'D', priority: 1 },
-      'taskManager', // 文字列に変更
+      'taskManager',
       'createTask',
       ['T', 'D', expect.objectContaining({ priority: 1 })],
     ],
     [
       'update-task',
       { taskId: 'T1', status: 'done', progress: 100 },
-      'taskManager', // 文字列に変更
+      'taskManager',
       'updateTask',
       ['T1', 'done', 100],
     ],
     [
       'collect-feedback',
       { taskId: 'T1', testCommand: 'npm test' },
-      'feedbackHandler', // 文字列に変更
+      'feedbackHandler',
       'collectFeedback',
       ['T1', 'npm test'],
     ],
     [
       'resolve-feedback',
       { feedbackId: 'F1' },
-      'feedbackHandler', // 文字列に変更
+      'feedbackHandler',
       'resolveFeedback',
       ['F1'],
     ],
-    ['sync', {}, 'componentSyncer', 'syncComponents', []], // 文字列に変更
+    ['sync', {}, 'componentSyncer', 'syncComponents', []],
     [
       'report',
       { type: 'task_summary', format: 'json' },
-      'reportGenerator', // 文字列に変更
+      'reportGenerator',
       'generateReport',
       ['task_summary', expect.objectContaining({ format: 'json' })],
     ],
-    ['status', {}, 'statusViewer', 'getWorkflowStatus', []], // 文字列に変更
-    ['interactive', {}, 'interactiveMode', 'start', []], // 文字列に変更
-    // session.js 由来
-    ['list-sessions', {}, 'sessionManager', 'listSessions', []], // 文字列に変更
-    ['current-session', {}, 'sessionManager', 'getCurrentSessionInfo', []], // 文字列に変更
+    ['status', {}, 'statusViewer', 'getWorkflowStatus', []],
+    ['interactive', {}, 'interactiveMode', 'start', []],
+    ['list-sessions', {}, 'sessionManager', 'listSessions', []],
+    ['current-session', {}, 'sessionManager', 'getCurrentSessionInfo', []],
     [
       'session-info',
       { sessionId: 'S2' },
-      'sessionManager', // 文字列に変更
+      'sessionManager',
       'getSessionInfo',
       ['S2'],
     ],
     [
       'export-session',
       { sessionId: 'S2', path: 'out.json' },
-      'sessionManager', // 文字列に変更
+      'sessionManager',
       'exportSession',
       ['S2', 'out.json'],
     ],
     [
       'import-session',
       { path: 'in.json' },
-      'sessionManager', // 文字列に変更
+      'sessionManager',
       'importSession',
       ['in.json'],
     ],
-    // task.js 由来
-    ['list-tasks', {}, 'taskManager', 'listTasks', []], // 文字列に変更
-    ['task-info', { taskId: 'T2' }, 'taskManager', 'getTaskInfo', ['T2']], // 文字列に変更
+    ['list-tasks', {}, 'taskManager', 'listTasks', []],
+    ['task-info', { taskId: 'T2' }, 'taskManager', 'getTaskInfo', ['T2']],
     [
       'update-task-progress',
       { taskId: 'T2', progress: 75 },
-      'taskManager', // 文字列に変更
+      'taskManager',
       'updateTaskProgress',
       ['T2', 75],
     ],
-    ['delete-task', { taskId: 'T2' }, 'taskManager', 'deleteTask', ['T2']], // 文字列に変更
+    ['delete-task', { taskId: 'T2' }, 'taskManager', 'deleteTask', ['T2']],
     [
       'link-task-commit',
       { taskId: 'T2', commitHash: 'abc' },
-      'taskManager', // 文字列に変更
+      'taskManager',
       'linkTaskToCommit',
       ['T2', 'abc'],
     ],
     [
       'export-task',
       { taskId: 'T2', path: 'task.json' },
-      'taskManager', // 文字列に変更
+      'taskManager',
       'exportTask',
       ['T2', 'task.json'],
     ],
     [
       'import-task',
       { path: 'task_in.json' },
-      'taskManager', // 文字列に変更
+      'taskManager',
       'importTask',
       ['task_in.json'],
     ],
-    // feedback.js 由来
     [
       'feedback-status',
       { taskId: 'T3' },
-      'feedbackHandler', // 文字列に変更
+      'feedbackHandler',
       'getFeedbackStatus',
       ['T3'],
     ],
     [
       'reopen-feedback',
       { taskId: 'T3' },
-      'feedbackHandler', // 文字列に変更
+      'feedbackHandler',
       'reopenFeedback',
       ['T3'],
     ],
     [
       'report-feedback',
       { taskId: 'T3', outputPath: 'fb.md' },
-      'feedbackHandler', // 文字列に変更
+      'feedbackHandler',
       'generateFeedbackReport',
       ['T3', 'fb.md'],
     ],
     [
       'prioritize-feedback',
       { taskId: 'T3' },
-      'feedbackHandler', // 文字列に変更
+      'feedbackHandler',
       'prioritizeFeedback',
       ['T3'],
     ],
     [
       'link-feedback-commit',
       { taskId: 'T3', commitHash: 'def' },
-      'feedbackHandler', // 文字列に変更
+      'feedbackHandler',
       'linkFeedbackToCommit',
       ['T3', 'def'],
     ],
     [
       'link-feedback-session',
       { taskId: 'T3', sessionId: 'S3' },
-      'feedbackHandler', // 文字列に変更
+      'feedbackHandler',
       'linkFeedbackToSession',
       ['T3', 'S3'],
     ],
     [
       'integrate-feedback-task',
       { taskId: 'T3' },
-      'feedbackHandler', // 文字列に変更
+      'feedbackHandler',
       'integrateFeedbackWithTask',
       ['T3'],
     ],
     [
       'integrate-feedback-session',
       { taskId: 'T3', sessionId: 'S3' },
-      'feedbackHandler', // 文字列に変更
+      'feedbackHandler',
       'integrateFeedbackWithSession',
       ['T3', 'S3'],
     ],
@@ -325,76 +336,79 @@ describe('CliFacade', () => {
 
   describe.each(testCases)(
     'execute(%s)',
-    // managerName を受け取るように変更
     (command, args, managerName, expectedMethod, expectedArgs) => {
       test(`should call correct manager method with correct arguments`, async () => {
-        // managerName から実際のモックオブジェクトを取得
+        // Arrange
         // eslint-disable-next-line security/detect-object-injection
         const expectedManager = managers[managerName];
-        if (!expectedManager) {
-          throw new Error(`Mock manager not found for name: ${managerName}`);
-        }
-        // eslint-disable-next-line security/detect-object-injection
-        if (typeof expectedManager[expectedMethod] !== 'function') {
+        if (
+          !expectedManager ||
+          typeof expectedManager[expectedMethod] !== 'function'
+        ) {
           throw new Error(
-            `Mock method ${expectedMethod} not found on manager ${managerName}`
+            `Mock manager or method not found: ${managerName}.${expectedMethod}`
           );
         }
-
         const mockResult = { success: true, data: 'mock data' };
         // eslint-disable-next-line security/detect-object-injection
-        expectedManager[expectedMethod].mockResolvedValue(mockResult); // メソッドの戻り値を設定
+        expectedManager[expectedMethod].mockResolvedValue(mockResult);
 
+        // Act
         const result = await cliFacade.execute(command, args);
 
+        // Assert
         // eslint-disable-next-line security/detect-object-injection
         expect(expectedManager[expectedMethod]).toHaveBeenCalledTimes(1);
         // eslint-disable-next-line security/detect-object-injection
         expect(expectedManager[expectedMethod]).toHaveBeenCalledWith(
           ...expectedArgs
         );
-        expect(result).toEqual(mockResult); // Facade が結果をそのまま返すことを確認
+        expect(result).toEqual(mockResult);
       });
 
       test('should emit _before and _after events', async () => {
-        // managerName から実際のモックオブジェクトを取得
+        // Arrange
         // eslint-disable-next-line security/detect-object-injection
         const expectedManager = managers[managerName];
-        if (!expectedManager) {
-          throw new Error(`Mock manager not found for name: ${managerName}`);
-        }
-        // eslint-disable-next-line security/detect-object-injection
-        if (typeof expectedManager[expectedMethod] !== 'function') {
+        if (
+          !expectedManager ||
+          typeof expectedManager[expectedMethod] !== 'function'
+        ) {
           throw new Error(
-            `Mock method ${expectedMethod} not found on manager ${managerName}`
+            `Mock manager or method not found: ${managerName}.${expectedMethod}`
           );
         }
+        const mockResult = { success: true };
         // eslint-disable-next-line security/detect-object-injection
-        expectedManager[expectedMethod].mockResolvedValue({ success: true }); // イベントテスト用に最低限の戻り値を設定
+        expectedManager[expectedMethod].mockResolvedValue(mockResult);
+
+        // Act
         await cliFacade.execute(command, args);
 
-        // expectStandardizedEventEmittedAsync に変更
-        expectStandardizedEventEmittedAsync(
+        // Assert
+        // イベント名とデータ構造を修正
+        await expectStandardizedEventEmittedAsync(
           mockEventEmitter,
           'cli',
           `${command}_before`,
           { args }
         );
-        expectStandardizedEventEmittedAsync(
+        await expectStandardizedEventEmittedAsync(
           mockEventEmitter,
           'cli',
           `${command}_after`,
-          { args, result: expect.anything() }
+          { args, result: mockResult }
         );
       });
     }
   );
 
-  test('should throw CliError for unknown command', async () => {
-    // ApplicationError -> CliError
+  test('should throw CliError for unknown command and emit error event', async () => {
+    // Arrange
     const unknownCommand = 'unknown_command';
     const args = {};
 
+    // Act & Assert
     await expect(cliFacade.execute(unknownCommand, args)).rejects.toThrow(
       CliError
     );
@@ -402,71 +416,84 @@ describe('CliFacade', () => {
       cliFacade.execute(unknownCommand, args)
     ).rejects.toHaveProperty('code', 'ERR_CLI_UNKNOWN_COMMAND');
 
-    // エラーイベントが発行されることを確認
+    // エラーイベント発行の検証
     expect(emitErrorEvent).toHaveBeenCalledWith(
       mockEventEmitter,
       mockLogger,
       'CliFacade',
       `execute_${unknownCommand}`,
-      expect.any(CliError), // スローされたエラーオブジェクトの型を確認
+      expect.objectContaining({
+        // CliError インスタンス
+        name: 'CliError',
+        code: 'ERR_CLI_UNKNOWN_COMMAND',
+        context: expect.objectContaining({ command: unknownCommand }),
+      }),
       null,
       { args }
     );
   });
 
-  test('should re-throw error from manager/handler and emit error event', async () => {
+  test('should re-throw error from manager/handler as CliError and emit error event', async () => {
+    // Arrange
     const command = 'init';
     const args = { projectId: 'P_ERR', request: 'Fail' };
     const originalError = new Error('Manager failed');
-    mockWorkflowManager.initializeWorkflow.mockRejectedValue(originalError); // マネージャーがエラーをスロー
+    mockWorkflowManager.initializeWorkflow.mockRejectedValue(originalError);
 
-    let thrownError;
-    try {
-      await cliFacade.execute(command, args);
-    } catch (error) {
-      thrownError = error;
-    }
+    // Act & Assert
+    await expect(cliFacade.execute(command, args)).rejects.toThrow(CliError);
+    await expect(cliFacade.execute(command, args)).rejects.toHaveProperty(
+      'cause',
+      originalError
+    );
+    await expect(cliFacade.execute(command, args)).rejects.toHaveProperty(
+      'code',
+      'ERR_CLI'
+    ); // Default CliError code
 
-    // エラーがスローされたことを確認
-    expect(thrownError).toBeDefined();
-    // スローされたエラーが CliError のインスタンスであることを確認
-    expect(thrownError).toBeInstanceOf(CliError);
-    // cause プロパティが元のエラーと一致することを確認
-    expect(thrownError.cause).toBe(originalError);
-    // code プロパティが期待通りであることを確認 (CliError のデフォルト)
-    expect(thrownError.code).toBe('ERR_CLI');
-
-    // エラーイベントが発行されることを確認
-    expect(emitErrorEvent).toHaveBeenCalledTimes(1);
+    // エラーイベント発行の検証
     expect(emitErrorEvent).toHaveBeenCalledWith(
       mockEventEmitter,
       mockLogger,
       'CliFacade',
       `execute_${command}`,
-      thrownError, // スローされたエラーオブジェクト (ラップ後のもの)
+      expect.objectContaining({
+        // CliError インスタンス
+        name: 'CliError',
+        code: 'ERR_CLI',
+        cause: originalError,
+        context: expect.objectContaining({
+          command,
+          args,
+          originalErrorName: 'Error',
+        }), // originalErrorName を追加
+      }),
       null,
       { args }
     );
   });
 
-  test('should handle ValidationError specifically if needed', async () => {
+  test('should pass through ValidationError and emit error event', async () => {
+    // Arrange
     const command = 'create-task';
-    const args = { title: '', description: 'Invalid' }; // title が空でバリデーションエラー想定
+    const args = { title: '', description: 'Invalid' };
     const validationError = new ValidationError('Invalid task data', {
       context: { errors: ['Title is required'] },
     });
-    mockTaskManager.createTask.mockRejectedValue(validationError); // バリデーションエラーをスロー
+    mockTaskManager.createTask.mockRejectedValue(validationError);
 
+    // Act & Assert
     await expect(cliFacade.execute(command, args)).rejects.toBe(
       validationError
-    );
+    ); // ValidationError はそのままスローされる
 
+    // エラーイベント発行の検証
     expect(emitErrorEvent).toHaveBeenCalledWith(
       mockEventEmitter,
       mockLogger,
       'CliFacade',
       `execute_${command}`,
-      validationError,
+      validationError, // ValidationError がそのまま渡される
       null,
       { args }
     );

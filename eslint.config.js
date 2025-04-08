@@ -52,7 +52,7 @@ module.exports = [
       ...securityPlugin.configs.recommended.rules,
       // Prettier連携 (競合無効化 + Prettierルール適用)
       ...prettierConfig.rules, // Prettierと競合するESLintルールを無効化
-      'prettier/prettier': 'warn', // Prettierのルール違反をESLintの警告として報告
+      'prettier/prettier': ['warn', { endOfLine: 'auto' }], // Prettierのルール違反をESLintの警告として報告 (改行コード自動判定)
       // プロジェクト固有のルール調整
       'no-unused-vars': 'off',
       'no-console': 'warn',

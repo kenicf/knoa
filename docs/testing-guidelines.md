@@ -114,6 +114,7 @@
           service.doWork();
           expect(mockDependency.someMethod).toHaveBeenCalled();
         });
+    *   **共通依存関係のモック:** 多くのクラスが共通の依存関係（Logger, EventEmitter, ErrorHandler など）を持つため、`tests/helpers/mock-factory.js` の `createMockDependencies()` を使用して、これらのモックをまとめて生成し、`beforeEach` で利用することを推奨します。これにより、テストセットアップの記述が簡潔になります。
         ```
 *   **メソッドのモック/スパイ:**
     *   `jest.spyOn(object, methodName)`: オブジェクトの特定のメソッドの呼び出しを監視したり、その実装を一時的に置き換えたり（スタブ化）します。元の実装を呼び出すことも、モック実装を提供することも可能です。テスト後に `jest.restoreAllMocks()` で元の実装に戻すことが重要です。
@@ -181,7 +182,8 @@
     *   `mockTimestamp(isoString)`: `Date` オブジェクトと `Date.now()` をモックし、指定された ISO 文字列の時刻を返すようにします。テスト全体で時刻を固定したい場合に使用します。
     *   `createMockDependencies()`: `logger`, `eventEmitter`, `errorHandler` を含む共通のモック依存関係オブジェクトを生成します。`beforeEach` での使用を推奨します。
 *   **`test-helpers.js`:**
-    *   `expectStandardizedEventEmitted(emitter, component, action, expectedData)`: 指定されたモック `emitter` が、期待される `component`, `action`, および `expectedData` を持つ標準化されたイベントを発行したことを検証します。`expectedData` 内で `timestamp: 'any'` や正規表現、`expect.any(String)` などを使用できます。**注意:** このヘルパーは、モックの `emitStandardized` が呼び出された際の引数を検証します。期待するデータ構造は、イベントを発行する側の実装（例: `_emitEvent` ヘルパー）と一致している必要があります（[イベントテスト](#9-イベントテスト) 参照）。
+    *   `expectStandardizedEventEmitted(emitter, component, action, expectedData)`: **同期的な**標準化イベント発行 (`emitStandardized`) を検証します。
+    *   `expectStandardizedEventEmittedAsync(emitter, component, action, expectedData)`: **非同期的な**標準化イベント発行 (`emitStandardizedAsync`) を検証します。CLIコンポーネントの `_emitEvent` ヘルパーはこちらを使用しているため、CLIのテストでは主にこちらを使用します。引数や注意点は `expectStandardizedEventEmitted` と同様です。
     *   `expectLogged(logger, level, message)`: 指定されたモック `logger` の特定の `level` のメソッドが、期待される `message` を含む文字列で呼び出されたことを検証します。
 *   **`path-helpers.js`:**
     *   `normalizePath(path)`: パス文字列の区切り文字を `/` に正規化します。OS によるパス区切り文字の違いを吸収するために使用します。
@@ -316,6 +318,11 @@
                 }),
               }
             );
+*   **`_handleError` メソッドのテスト:** CLIクラスなどで使用されている `_handleError` 内部ヘルパーメソッドをテストする場合、以下の点を検証します。
+    *   適切なエラークラス（`CliError` など）でエラーがラップされているか。
+    *   `emitErrorEvent` ヘルパーが期待される引数で呼び出されているか。
+    *   `errorHandler` が提供されている場合に、`errorHandler.handle` が期待される引数で呼び出され、その戻り値が返されるか。
+    *   `errorHandler` が提供されていない場合に、ラップされたエラーがスローされるか。
             ```
 
 ## 11. テストコードのリファクタリング

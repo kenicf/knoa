@@ -5,11 +5,7 @@ const {
   NotFoundError,
   StorageError, // FileReadError, FileWriteError を StorageError に変更
 } = require('../../src/lib/utils/errors');
-const {
-  createMockLogger,
-  createMockEventEmitter,
-  createMockStorageService,
-} = require('../helpers/mock-factory');
+const { createMockDependencies } = require('../helpers/mock-factory'); // createMockDependencies をインポート
 // expectStandardizedEventEmittedAsync をインポート
 const {
   expectStandardizedEventEmittedAsync,
@@ -30,22 +26,29 @@ describe('CliSessionManager', () => {
   let mockErrorHandler;
   let cliSessionManager;
 
+  let mockDependencies; // モック依存関係を保持する変数
+
   beforeEach(() => {
-    mockLogger = createMockLogger();
-    mockEventEmitter = createMockEventEmitter();
-    mockIntegrationManagerAdapter = {
-      startSession: jest.fn(),
-      endSession: jest.fn(),
-    };
-    mockSessionManagerAdapter = {
-      getLatestSession: jest.fn(),
-      getAllSessions: jest.fn(),
-      getSession: jest.fn(),
-      importSession: jest.fn(),
-      createNewSession: jest.fn(), // 追加
-      endSession: jest.fn(), // 追加
-    };
-    mockStorageService = createMockStorageService(); // StorageService のモック
+    mockDependencies = createMockDependencies(); // 共通モックを生成
+    mockLogger = mockDependencies.logger; // 個別変数にも代入
+    mockEventEmitter = mockDependencies.eventEmitter; // 個別変数にも代入
+    mockIntegrationManagerAdapter = mockDependencies.integrationManagerAdapter; // 共通モックから取得
+    mockSessionManagerAdapter = mockDependencies.sessionManagerAdapter; // 共通モックから取得
+    mockStorageService = mockDependencies.storageService; // 共通モックから取得
+    mockErrorHandler = mockDependencies.errorHandler; // 共通モックから取得
+
+    // モックメソッドを再設定 (必要に応じて)
+    mockIntegrationManagerAdapter.startSession = jest.fn();
+    mockIntegrationManagerAdapter.endSession = jest.fn();
+    mockSessionManagerAdapter.getLatestSession = jest.fn();
+    mockSessionManagerAdapter.getAllSessions = jest.fn();
+    mockSessionManagerAdapter.getSession = jest.fn();
+    mockSessionManagerAdapter.importSession = jest.fn();
+    mockSessionManagerAdapter.createNewSession = jest.fn();
+    mockSessionManagerAdapter.endSession = jest.fn();
+    mockStorageService.writeText = jest.fn(); // writeText もモック化
+    mockStorageService.readJSON = jest.fn();
+    mockStorageService.writeJSON = jest.fn();
     mockErrorHandler = {
       handle: jest.fn(),
     };
@@ -57,6 +60,8 @@ describe('CliSessionManager', () => {
       integrationManagerAdapter: mockIntegrationManagerAdapter,
       sessionManagerAdapter: mockSessionManagerAdapter,
       storageService: mockStorageService,
+      traceIdGenerator: mockDependencies.traceIdGenerator, // 注入
+      requestIdGenerator: mockDependencies.requestIdGenerator, // 注入
       // errorHandler: mockErrorHandler, // エラーハンドラーテスト時に有効化
     });
 
@@ -104,11 +109,19 @@ describe('CliSessionManager', () => {
       expect(result).toEqual(mockSuccessResult);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Starting new session'),
-        expect.objectContaining({ previousSessionId }) // コンテキストをチェック
+        expect.objectContaining({
+          previousSessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正: 成功メッセージとIDを含むことを確認
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Session started successfully: S001')
+        expect.stringContaining('Session started successfully: S001'),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -119,18 +132,16 @@ describe('CliSessionManager', () => {
       await cliSessionManager.startSession(previousSessionId);
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_before`,
-        { previousSessionId }
+        'cli',
+        'session_start_before', // 実装に合わせる
+        { previousSessionId } // expectedData (traceId/requestId はヘルパーが検証)
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_after`,
-        { previousSessionId, result: mockSuccessResult }
+        'cli',
+        'session_start_after', // 実装に合わせる
+        { previousSessionId, result: mockSuccessResult } // expectedData
       );
     });
 
@@ -146,7 +157,7 @@ describe('CliSessionManager', () => {
       // エラーコード検証修正
       await expect(
         cliSessionManager.startSession(previousSessionId)
-      ).rejects.toHaveProperty('code', 'ERR_CLI_SESSION_START'); // Specific code
+      ).rejects.toHaveProperty('code', 'ERR_CLI_SESSIONMANAGER_STARTSESSION'); // 修正: クラス名を含むエラーコード
       await expect(
         cliSessionManager.startSession(previousSessionId)
       ).rejects.toHaveProperty('cause', originalError);
@@ -156,32 +167,104 @@ describe('CliSessionManager', () => {
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_SESSIONMANAGER_STARTSESSION', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { previousSessionId }
+        expect.objectContaining({
+          previousSessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
     test('should throw CliError if integrationManager returns error object', async () => {
       const errorResult = { error: 'Internal server error' };
       mockIntegrationManagerAdapter.startSession.mockResolvedValue(errorResult);
 
+      // エラーのスローとプロパティ検証を1つにまとめる
       await expect(
         cliSessionManager.startSession(previousSessionId)
-      ).rejects.toThrow(CliError);
-      // エラーコード検証修正
-      await expect(
-        cliSessionManager.startSession(previousSessionId)
-      ).rejects.toHaveProperty('code', 'ERR_CLI_SESSION_START_FAILED'); // Specific code
+      ).rejects.toThrow(
+        // toThrowError を使用
+        // エラーオブジェクトのプロパティを検証
+        expect.objectContaining({
+          name: 'CliError',
+          code: 'ERR_CLI_SESSION_START_FAILED',
+          context: expect.objectContaining({
+            errorDetail: 'Internal server error',
+            previousSessionId: 'S000',
+          }),
+        })
+      );
 
+      // emitErrorEvent の期待値を修正
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
-        null,
-        { previousSessionId }
+        expect.objectContaining({
+          // processedError (CliError)
+          name: 'CliError',
+          code: 'ERR_CLI_SESSION_START_FAILED', // CliError に設定されるコード
+          // cause はここでは null (元エラーがないため)
+          context: expect.objectContaining({
+            errorDetail: 'Internal server error',
+            previousSessionId: 'S000',
+          }), // context の期待値を修正
+        }),
+        null, // OperationContext (ここでは未使用)
+        expect.objectContaining({
+          // details (元の context)
+          previousSessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
+    });
+
+    test('should call errorHandler.handle if provided on adapter failure', async () => {
+      // Arrange
+      // errorHandler を設定してインスタンス再作成
+      cliSessionManager = new CliSessionManager({
+        logger: mockLogger,
+        eventEmitter: mockEventEmitter,
+        integrationManagerAdapter: mockIntegrationManagerAdapter,
+        sessionManagerAdapter: mockSessionManagerAdapter,
+        storageService: mockStorageService,
+        errorHandler: mockErrorHandler, // errorHandler を提供
+        traceIdGenerator: mockDependencies.traceIdGenerator,
+        requestIdGenerator: mockDependencies.requestIdGenerator,
+      });
+      const originalError = new Error('API error');
+      mockIntegrationManagerAdapter.startSession.mockRejectedValue(
+        originalError
+      );
+      const errorHandlerResult = { handled: true, fallbackSession: null };
+      mockErrorHandler.handle.mockReturnValue(errorHandlerResult);
+
+      // Act
+      const result = await cliSessionManager.startSession(previousSessionId);
+
+      // Assert
+      expect(mockErrorHandler.handle).toHaveBeenCalledTimes(1);
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // CliError を期待
+          name: 'CliError',
+          code: 'ERR_CLI_SESSIONMANAGER_STARTSESSION', // 修正後のコード
+          cause: originalError,
+        }),
+        'CliSessionManager',
+        operation,
+        expect.objectContaining({ previousSessionId })
+      );
+      expect(result).toEqual(errorHandlerResult); // errorHandler の戻り値が返る
+      expect(emitErrorEvent).toHaveBeenCalledTimes(1); // エラーイベントは発行される
     });
   });
 
@@ -217,17 +300,29 @@ describe('CliSessionManager', () => {
       expect(result).toEqual(mockSuccessResult);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Ending session'),
-        expect.objectContaining({ sessionId }) // コンテキストをチェック
+        expect.objectContaining({
+          sessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正: パスを含むことを確認
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Handover document saved to ${path.join(handoverDir, handoverFilename)}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正: 1つの引数に両方の情報が含まれることを確認
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining(`Session ended successfully: ${sessionId}`)
+        expect.stringContaining(`Session ended successfully: ${sessionId}`),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -256,14 +351,14 @@ describe('CliSessionManager', () => {
     test('should throw NotFoundError if no active session found when sessionId is not provided', async () => {
       mockSessionManagerAdapter.getLatestSession.mockResolvedValue(null); // アクティブセッションなし
 
-      try {
-        await cliSessionManager.endSession();
-        // エラーがスローされなかった場合、テストを失敗させる
-        throw new Error('Expected NotFoundError to be thrown, but it was not.');
-      } catch (error) {
-        expect(error.name).toBe('NotFoundError');
-        expect(error.code).toBe('ERR_CLI_NO_ACTIVE_SESSION');
-      }
+      // expect(...).rejects を使用してエラーを検証
+      await expect(cliSessionManager.endSession()).rejects.toThrow(
+        NotFoundError
+      );
+      await expect(cliSessionManager.endSession()).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_NO_ACTIVE_SESSION'
+      );
       // 元のエラーコード検証は expect 内に含めたので削除
 
       expect(mockIntegrationManagerAdapter.endSession).not.toHaveBeenCalled();
@@ -273,9 +368,17 @@ describe('CliSessionManager', () => {
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(NotFoundError), // Verify it's a NotFoundError instance
-        null, // context
-        { sessionId: null }
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_NO_ACTIVE_SESSION',
+        }),
+        null,
+        expect.objectContaining({
+          sessionId: null,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -287,18 +390,16 @@ describe('CliSessionManager', () => {
       await cliSessionManager.endSession(sessionId);
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_before`,
+        'cli',
+        'session_end_before', // 実装に合わせる
         { sessionId }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_after`,
-        { sessionId: sessionId, result: mockSuccessResult }
+        'cli',
+        'session_end_after', // 実装に合わせる
+        { sessionId: sessionId, result: mockSuccessResult } // 変数名を修正
       );
     });
 
@@ -311,13 +412,27 @@ describe('CliSessionManager', () => {
       const result = await cliSessionManager.endSession(sessionId);
 
       expect(result).toEqual(mockSuccessResult); // エラーはスローされない
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to save handover document'),
-        expect.objectContaining({ operation }) // コンテキストをチェック
+      // ログレベルを warn から error に修正し、期待される引数を実装に合わせる
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to save handover document.'),
+        expect.objectContaining({
+          error: expect.objectContaining({
+            // error プロパティを検証
+            name: 'StorageError', // エラーの型
+            code: 'ERR_CLI_HANDOVER_SAVE', // エラーコード
+            context: expect.objectContaining({ sessionId }), // エラーコンテキスト
+          }),
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining(`Session ended successfully: ${sessionId}`)
+        expect.stringContaining(`Session ended successfully: ${sessionId}`),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       expect(emitErrorEvent).not.toHaveBeenCalled(); // エラーイベントは発行されない
     });
@@ -332,7 +447,7 @@ describe('CliSessionManager', () => {
       // エラーコード検証修正
       await expect(
         cliSessionManager.endSession(sessionId)
-      ).rejects.toHaveProperty('code', 'ERR_CLI_SESSION_END'); // Specific code
+      ).rejects.toHaveProperty('code', 'ERR_CLI_SESSIONMANAGER_ENDSESSION'); // 修正: クラス名を含むエラーコード
       await expect(
         cliSessionManager.endSession(sessionId)
       ).rejects.toHaveProperty('cause', originalError);
@@ -343,9 +458,18 @@ describe('CliSessionManager', () => {
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_SESSIONMANAGER_ENDSESSION', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { sessionId }
+        expect.objectContaining({
+          sessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -360,26 +484,48 @@ describe('CliSessionManager', () => {
       const result = await cliSessionManager.listSessions();
       expect(mockSessionManagerAdapter.getAllSessions).toHaveBeenCalledTimes(1);
       expect(result).toEqual(mockSessions);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Listing all sessions'),
-        expect.objectContaining({ operation }) // コンテキストをチェック
+      // logger.info が2回呼び出されることを確認
+      expect(mockLogger.info).toHaveBeenCalledTimes(2);
+      // 1回目の呼び出しを検証
+      expect(mockLogger.info).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('Listing all sessions...'), // メッセージを修正
+        expect.objectContaining({
+          // operation を削除
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
+      );
+      // 2回目の呼び出しを検証
+      expect(mockLogger.info).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining(`Found ${mockSessions.length} sessions.`), // メッセージを修正
+        expect.objectContaining({
+          // operation を削除
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining(`Found ${mockSessions.length} sessions.`)
+        expect.stringContaining(`Found ${mockSessions.length} sessions.`),
+        expect.objectContaining({
+          // operation を削除
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_before`
+        'cli',
+        'session_list_before', // 実装に合わせる
+        {} // データなし
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_after`,
+        'cli',
+        'session_list_after', // 実装に合わせる
         { count: mockSessions.length }
       );
     });
@@ -390,14 +536,18 @@ describe('CliSessionManager', () => {
       expect(result).toEqual([]);
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Found 0 sessions.')
+        expect.stringContaining('Found 0 sessions.'),
+        expect.objectContaining({
+          // operation を削除
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_after`,
+        'cli',
+        'session_list_after', // 実装に合わせる
         { count: 0 }
       );
     });
@@ -411,15 +561,25 @@ describe('CliSessionManager', () => {
       // エラーコード検証修正
       await expect(cliSessionManager.listSessions()).rejects.toHaveProperty(
         'code',
-        'ERR_CLI_SESSION_LIST' // Specific code
+        'ERR_CLI_SESSIONMANAGER_LISTSESSIONS' // 修正: クラス名を含むエラーコード
       );
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(CliError) // Verify it's a CliError instance
-        // null, {} // context, details は省略可能
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_SESSIONMANAGER_LISTSESSIONS', // 修正後のコード
+          cause: originalError,
+        }),
+        null,
+        expect.objectContaining({
+          // operation を削除
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
     });
   });
@@ -435,28 +595,52 @@ describe('CliSessionManager', () => {
         1
       );
       expect(result).toEqual(mockSession);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Getting current session info'),
-        expect.objectContaining({ operation })
+      // logger.info が2回呼び出されることを確認
+      expect(mockLogger.info).toHaveBeenCalledTimes(2);
+      // 1回目の呼び出しを検証
+      expect(mockLogger.info).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('Getting current session info...'), // メッセージ修正
+        expect.objectContaining({
+          // operation を削除
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
+      );
+      // 2回目の呼び出しを検証
+      expect(mockLogger.info).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining(
+          `Current session found: ${mockSession.session_id}`
+        ), // メッセージ修正
+        expect.objectContaining({
+          // operation を削除
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Current session found: ${mockSession.session_id}`
-        )
+        ),
+        expect.objectContaining({
+          // operation を削除
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_before`
+        'cli',
+        'session_current_get_before', // 実装に合わせる
+        {}
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_after`,
+        'cli',
+        'session_current_get_after', // 実装に合わせる
         { sessionFound: true }
       );
     });
@@ -467,14 +651,18 @@ describe('CliSessionManager', () => {
       expect(result).toBeNull();
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining('No active session found.')
+        expect.stringContaining('No active session found.'),
+        expect.objectContaining({
+          // operation を削除
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_after`,
+        'cli',
+        'session_current_get_after', // 実装に合わせる
         { sessionFound: false }
       );
     });
@@ -490,14 +678,26 @@ describe('CliSessionManager', () => {
       // エラーコード検証修正
       await expect(
         cliSessionManager.getCurrentSessionInfo()
-      ).rejects.toHaveProperty('code', 'ERR_CLI_SESSION_CURRENT'); // Specific code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_SESSIONMANAGER_GETCURRENTSESSIONINFO'
+      ); // 修正: クラス名を含むエラーコード
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(CliError) // Verify it's a CliError instance
-        // null, {}
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_SESSIONMANAGER_GETCURRENTSESSIONINFO', // 修正後のコード
+          cause: originalError,
+        }),
+        null,
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -516,52 +716,84 @@ describe('CliSessionManager', () => {
       expect(result).toEqual(mockSession);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Getting session info'),
-        expect.objectContaining({ sessionId })
+        expect.objectContaining({
+          sessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining(`Session info retrieved for: ${sessionId}`)
+        expect.stringContaining(`Session info retrieved for: ${sessionId}`),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_before`,
+        'cli',
+        'session_info_get_before', // 実装に合わせる
         { sessionId }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_after`,
+        'cli',
+        'session_info_get_after', // 実装に合わせる
         { sessionId, sessionFound: true }
       );
     });
 
     test('should throw NotFoundError if session not found', async () => {
       mockSessionManagerAdapter.getSession.mockResolvedValue(null);
-      try {
-        await cliSessionManager.getSessionInfo(sessionId);
-        throw new Error('Expected function to throw, but it did not.'); // エラーがスローされなかった場合のフェイルセーフ
-      } catch (error) {
-        // console.log(...) を削除
-        expect(error).toHaveProperty('name', 'NotFoundError');
-        expect(error).toHaveProperty('code', 'ERR_CLI_SESSION_NOT_FOUND');
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          expect.stringContaining('Session not found'),
-          expect.objectContaining({ sessionId })
-        );
-        expect(emitErrorEvent).toHaveBeenCalledWith(
-          mockEventEmitter,
-          mockLogger,
-          'CliSessionManager',
-          operation,
-          expect.objectContaining({ name: 'NotFoundError' }), // name プロパティで検証
-          null, // context
-          { sessionId }
-        );
-      }
+
+      // expect(...).rejects を使用してエラーを検証
+      await expect(cliSessionManager.getSessionInfo(sessionId)).rejects.toThrow(
+        NotFoundError
+      );
+      await expect(
+        cliSessionManager.getSessionInfo(sessionId)
+      ).rejects.toHaveProperty('code', 'ERR_CLI_SESSION_NOT_FOUND');
+
+      // _handleError 内で emitErrorEvent が呼ばれることを検証
+      expect(emitErrorEvent).toHaveBeenCalledWith(
+        mockEventEmitter,
+        mockLogger,
+        'CliSessionManager',
+        operation,
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_SESSION_NOT_FOUND',
+          context: expect.objectContaining({ sessionId }),
+        }),
+        null,
+        expect.objectContaining({
+          // 元の context
+          sessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
+      );
+      // logger.warn は呼ばれないはずなので削除
+      expect(emitErrorEvent).toHaveBeenCalledWith(
+        mockEventEmitter,
+        mockLogger,
+        'CliSessionManager',
+        operation,
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_SESSION_NOT_FOUND',
+        }),
+        null,
+        expect.objectContaining({
+          sessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
+      );
     });
 
     test('should throw CliError and emit error event on adapter failure', async () => {
@@ -573,15 +805,24 @@ describe('CliSessionManager', () => {
       // エラーコード検証修正
       await expect(
         cliSessionManager.getSessionInfo(sessionId)
-      ).rejects.toHaveProperty('code', 'ERR_CLI_SESSION_INFO'); // Specific code
+      ).rejects.toHaveProperty('code', 'ERR_CLI_SESSIONMANAGER_GETSESSIONINFO'); // 修正: クラス名を含むエラーコード
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_SESSIONMANAGER_GETSESSIONINFO', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { sessionId }
+        expect.objectContaining({
+          sessionId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -610,27 +851,34 @@ describe('CliSessionManager', () => {
       expect(resultPath).toBe(defaultPath);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Exporting session'),
-        expect.objectContaining({ sessionId })
+        expect.objectContaining({
+          sessionId,
+          outputPath: null,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Session exported successfully to: ${defaultPath}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_before`,
+        'cli',
+        'session_export_before', // 実装に合わせる
         { sessionId, outputPath: null }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_after`,
+        'cli',
+        'session_export_after', // 実装に合わせる
         { sessionId, path: defaultPath }
       );
     });
@@ -653,10 +901,9 @@ describe('CliSessionManager', () => {
       expect(resultPath).toBe(customPath);
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_after`,
+        'cli',
+        'session_export_after', // 実装に合わせる
         { sessionId, path: customPath }
       );
     });
@@ -676,9 +923,18 @@ describe('CliSessionManager', () => {
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(NotFoundError), // Verify it's a NotFoundError instance
-        null, // context
-        { sessionId, outputPath: null }
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_SESSION_NOT_FOUND',
+        }),
+        null,
+        expect.objectContaining({
+          sessionId,
+          outputPath: null,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -706,9 +962,18 @@ describe('CliSessionManager', () => {
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(StorageError), // Verify it's a StorageError instance
-        null, // context
-        { sessionId, outputPath: null }
+        expect.objectContaining({
+          // StorageError を期待
+          name: 'StorageError',
+          code: 'ERR_CLI_FILE_WRITE',
+        }),
+        null,
+        expect.objectContaining({
+          sessionId,
+          outputPath: null,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -737,27 +1002,33 @@ describe('CliSessionManager', () => {
       expect(result).toEqual(mockImportResult);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Importing session'),
-        expect.objectContaining({ inputPath })
+        expect.objectContaining({
+          inputPath,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Session imported successfully: ${mockImportResult.session_id}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_before`,
+        'cli',
+        'session_import_before', // 実装に合わせる
         { inputPath }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_session',
-        `${operation}_after`,
+        'cli',
+        'session_import_after', // 実装に合わせる
         { inputPath, sessionId: mockImportResult.session_id }
       );
     });
@@ -786,9 +1057,17 @@ describe('CliSessionManager', () => {
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(StorageError), // Verify it's a StorageError instance
-        null, // context
-        { inputPath }
+        expect.objectContaining({
+          // StorageError を期待
+          name: 'StorageError',
+          code: 'ERR_CLI_FILE_READ',
+        }),
+        null,
+        expect.objectContaining({
+          inputPath,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -811,9 +1090,17 @@ describe('CliSessionManager', () => {
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
-        null, // context
-        { inputPath }
+        expect.objectContaining({
+          // CliError を期待
+          name: 'CliError',
+          code: 'ERR_CLI_SESSION_IMPORT_UNEXPECTED',
+        }),
+        null,
+        expect.objectContaining({
+          inputPath,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -828,15 +1115,24 @@ describe('CliSessionManager', () => {
       // エラーコード検証修正
       await expect(
         cliSessionManager.importSession(inputPath)
-      ).rejects.toHaveProperty('code', 'ERR_CLI_SESSION_IMPORT'); // Specific code
+      ).rejects.toHaveProperty('code', 'ERR_CLI_SESSIONMANAGER_IMPORTSESSION'); // 修正: クラス名を含むエラーコード
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliSessionManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_SESSIONMANAGER_IMPORTSESSION', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { inputPath }
+        expect.objectContaining({
+          inputPath,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });

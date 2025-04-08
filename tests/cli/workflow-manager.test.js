@@ -1,9 +1,6 @@
 const CliWorkflowManager = require('../../src/cli/workflow-manager');
 const { ApplicationError, CliError } = require('../../src/lib/utils/errors'); // CliError をインポート
-const {
-  createMockLogger,
-  createMockEventEmitter,
-} = require('../helpers/mock-factory');
+const { createMockDependencies } = require('../helpers/mock-factory'); // createMockDependencies をインポート
 // expectStandardizedEventEmittedAsync をインポート
 const {
   expectStandardizedEventEmittedAsync,
@@ -11,7 +8,7 @@ const {
 // emitErrorEvent もモック化
 jest.mock('../../src/lib/utils/error-helpers', () => ({
   emitErrorEvent: jest.fn(),
-}));
+})); // jest.mock の閉じ括弧
 const { emitErrorEvent } = require('../../src/lib/utils/error-helpers');
 
 describe('CliWorkflowManager', () => {
@@ -22,26 +19,27 @@ describe('CliWorkflowManager', () => {
   let mockErrorHandler;
   let cliWorkflowManager;
 
-  beforeEach(() => {
-    mockLogger = createMockLogger();
-    mockEventEmitter = createMockEventEmitter();
-    mockIntegrationManagerAdapter = {
-      initializeWorkflow: jest.fn(),
-    };
-    mockStateManagerAdapter = {
-      // 必要に応じて stateManager のメソッドをモック
-    };
-    mockErrorHandler = {
-      handle: jest.fn(),
-    };
+  let mockDependencies; // モック依存関係を保持する変数
 
+  beforeEach(() => {
+    mockDependencies = createMockDependencies(); // 共通モックを生成
+    mockLogger = mockDependencies.logger; // 個別変数にも代入 (既存コードのため)
+    mockEventEmitter = mockDependencies.eventEmitter; // 個別変数にも代入
+    mockIntegrationManagerAdapter = mockDependencies.integrationManagerAdapter; // 共通モックから取得
+    mockStateManagerAdapter = mockDependencies.stateManagerAdapter; // 共通モックから取得
+    mockErrorHandler = mockDependencies.errorHandler; // 共通モックから取得
+
+    // モックメソッドを再設定 (必要に応じて)
+    mockIntegrationManagerAdapter.initializeWorkflow = jest.fn();
     // テスト対象インスタンスを作成 (errorHandler はオプション)
     cliWorkflowManager = new CliWorkflowManager({
       logger: mockLogger,
       eventEmitter: mockEventEmitter,
       integrationManagerAdapter: mockIntegrationManagerAdapter,
       stateManagerAdapter: mockStateManagerAdapter,
-      // errorHandler: mockErrorHandler, // エラーハンドラーテスト時に有効化
+      traceIdGenerator: mockDependencies.traceIdGenerator, // 注入済み
+      requestIdGenerator: mockDependencies.requestIdGenerator, // 注入済み
+      // errorHandler: mockErrorHandler, // コメントアウトのまま
     });
 
     emitErrorEvent.mockClear();
@@ -61,6 +59,18 @@ describe('CliWorkflowManager', () => {
             eventEmitter: mockEventEmitter,
             // integrationManagerAdapter: mockIntegrationManagerAdapter, // ← これがないとエラー
             stateManagerAdapter: mockStateManagerAdapter,
+            // traceIdGenerator と requestIdGenerator も必須になった
+          })
+      ).toThrow(ApplicationError);
+      expect(
+        () =>
+          new CliWorkflowManager({
+            logger: mockLogger,
+            eventEmitter: mockEventEmitter,
+            integrationManagerAdapter: mockIntegrationManagerAdapter,
+            stateManagerAdapter: mockStateManagerAdapter,
+            traceIdGenerator: mockDependencies.traceIdGenerator,
+            // requestIdGenerator がない
           })
       ).toThrow(ApplicationError);
     });
@@ -107,13 +117,22 @@ describe('CliWorkflowManager', () => {
       expect(result).toEqual(mockSuccessResult);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Initializing workflow'),
-        expect.objectContaining({ operation }) // コンテキストを修正
+        expect.objectContaining({
+          projectId,
+          request,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Workflow initialized successfully for project: ${projectId}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -127,15 +146,15 @@ describe('CliWorkflowManager', () => {
       // expectStandardizedEventEmittedAsync に変更
       expectStandardizedEventEmittedAsync(
         mockEventEmitter,
-        'cli_workflow',
-        `${operation}_before`,
-        { projectId, request }
+        'cli',
+        'workflow_init_before', // イベント名を修正
+        { projectId, request } // データ修正
       );
       expectStandardizedEventEmittedAsync(
         mockEventEmitter,
-        'cli_workflow',
-        `${operation}_after`,
-        { projectId, request, result: mockSuccessResult }
+        'cli',
+        'workflow_init_after', // イベント名を修正
+        { projectId, request, result: mockSuccessResult } // データ修正
       );
     });
 
@@ -145,13 +164,18 @@ describe('CliWorkflowManager', () => {
         errorResult
       );
 
+      // エラーのスローとプロパティ検証を1つにまとめる
       await expect(
         cliWorkflowManager.initializeWorkflow(projectId, request)
-      ).rejects.toThrow(ApplicationError);
-      // エラーコード検証修正
-      await expect(
-        cliWorkflowManager.initializeWorkflow(projectId, request)
-      ).rejects.toHaveProperty('code', 'ERR_WORKFLOW_INIT');
+      ).rejects.toThrow(
+        expect.objectContaining({
+          name: 'ApplicationError',
+          code: 'ERR_WORKFLOW_INIT',
+          context: expect.objectContaining({
+            errorDetail: 'Initialization failed internally',
+          }),
+        })
+      );
 
       // エラーイベントが発行されることを確認
       expect(emitErrorEvent).toHaveBeenCalledWith(
@@ -159,9 +183,21 @@ describe('CliWorkflowManager', () => {
         mockLogger,
         'CliWorkflowManager',
         operation,
-        expect.objectContaining({ code: 'ERR_WORKFLOW_INIT' }),
+        // エラーオブジェクトの name と code を直接検証
+        expect.objectContaining({
+          name: 'ApplicationError',
+          code: 'ERR_WORKFLOW_INIT',
+          context: expect.objectContaining({
+            errorDetail: 'Initialization failed internally',
+          }),
+        }),
         null,
-        { projectId, request }
+        expect.objectContaining({
+          projectId,
+          request,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
     });
 
@@ -171,22 +207,37 @@ describe('CliWorkflowManager', () => {
         unexpectedResult
       );
 
+      // エラーのスローとプロパティ検証を1つにまとめる
       await expect(
         cliWorkflowManager.initializeWorkflow(projectId, request)
-      ).rejects.toThrow(ApplicationError);
-      // エラーコード検証修正
-      await expect(
-        cliWorkflowManager.initializeWorkflow(projectId, request)
-      ).rejects.toHaveProperty('code', 'ERR_WORKFLOW_INIT_UNEXPECTED');
+      ).rejects.toThrow(
+        expect.objectContaining({
+          name: 'ApplicationError',
+          code: 'ERR_WORKFLOW_INIT_UNEXPECTED',
+          context: expect.objectContaining({ result: unexpectedResult }),
+        })
+      );
 
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliWorkflowManager',
         operation,
-        expect.objectContaining({ code: 'ERR_WORKFLOW_INIT_UNEXPECTED' }),
+        // エラーオブジェクトの name と code を直接検証
+        expect.objectContaining({
+          name: 'ApplicationError',
+          code: 'ERR_WORKFLOW_INIT_UNEXPECTED',
+          context: expect.objectContaining({
+            result: unexpectedResult,
+          }),
+        }),
         null,
-        { projectId, request }
+        expect.objectContaining({
+          projectId,
+          request,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
     });
 
@@ -209,7 +260,10 @@ describe('CliWorkflowManager', () => {
       // エラーがスローされたことを確認し、CliError であることを検証
       expect(caughtError).toBeInstanceOf(CliError);
       // エラーオブジェクトの code と cause を検証
-      expect(caughtError).toHaveProperty('code', 'ERR_CLI_WORKFLOW_INIT'); // コードは CliError で指定したもの
+      expect(caughtError).toHaveProperty(
+        'code',
+        'ERR_CLI_WORKFLOWMANAGER_INITIALIZEWORKFLOW' // 修正: クラス名を含むエラーコード
+      ); // _handleError が生成するコードに修正
       expect(caughtError).toHaveProperty('cause', originalError);
 
       // エラーイベントが発行されることを確認
@@ -219,9 +273,19 @@ describe('CliWorkflowManager', () => {
         mockLogger,
         'CliWorkflowManager',
         operation,
-        caughtError, // 捕捉したエラーオブジェクトを期待値とする
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_WORKFLOWMANAGER_INITIALIZEWORKFLOW', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { projectId, request }
+        expect.objectContaining({
+          projectId,
+          request,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -233,6 +297,8 @@ describe('CliWorkflowManager', () => {
         integrationManagerAdapter: mockIntegrationManagerAdapter,
         stateManagerAdapter: mockStateManagerAdapter,
         errorHandler: mockErrorHandler,
+        traceIdGenerator: mockDependencies.traceIdGenerator, // 注入
+        requestIdGenerator: mockDependencies.requestIdGenerator, // 注入
       });
 
       const originalError = new Error('Network error');
@@ -251,14 +317,19 @@ describe('CliWorkflowManager', () => {
       // errorHandler.handle に CliError インスタンスが渡されることを検証
       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
         expect.objectContaining({
-          // CliError インスタンスであることを期待
+          // CliError でラップされていることを確認
           name: 'CliError',
-          code: 'ERR_CLI_WORKFLOW_INIT',
+          code: 'ERR_CLI_WORKFLOWMANAGER_INITIALIZEWORKFLOW', // 修正: クラス名を含むエラーコード
           cause: originalError,
         }),
         'CliWorkflowManager',
         operation,
-        { projectId, request }
+        expect.objectContaining({
+          projectId,
+          request,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       expect(result).toEqual(errorHandlerResult); // errorHandler の戻り値が返される
       expect(emitErrorEvent).toHaveBeenCalledTimes(1); // errorHandler があってもエラーイベントは発行される
@@ -267,4 +338,4 @@ describe('CliWorkflowManager', () => {
 
   // 他のメソッド (getWorkflowStatus など) のテストをここに追加
   // getWorkflowStatus は CliStatusViewer に移譲されるため、ここでは不要かもしれない
-});
+}); // describe('CliWorkflowManager', ...) の閉じ括弧

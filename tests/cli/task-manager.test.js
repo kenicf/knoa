@@ -6,17 +6,12 @@ const {
   NotFoundError,
   StorageError, // FileReadError, FileWriteError を StorageError に変更
 } = require('../../src/lib/utils/errors');
-const {
-  createMockLogger,
-  createMockEventEmitter,
-  createMockStorageService,
-  createMockValidator,
-} = require('../helpers/mock-factory');
+const { createMockDependencies } = require('../helpers/mock-factory'); // createMockDependencies をインポート済み
 // expectStandardizedEventEmittedAsync をインポート
 const {
   expectStandardizedEventEmittedAsync,
 } = require('../helpers/test-helpers');
-// emitErrorEvent もモック化
+// emitErrorEvent もモック化済み
 jest.mock('../../src/lib/utils/error-helpers', () => ({
   emitErrorEvent: jest.fn(),
 }));
@@ -33,27 +28,32 @@ describe('CliTaskManager', () => {
   let mockErrorHandler;
   let cliTaskManager;
 
-  beforeEach(() => {
-    mockLogger = createMockLogger();
-    mockEventEmitter = createMockEventEmitter();
-    mockIntegrationManagerAdapter = {
-      createTask: jest.fn(),
-      updateTaskStatus: jest.fn(),
-    };
-    mockTaskManagerAdapter = {
-      getAllTasks: jest.fn(),
-      getTaskById: jest.fn(),
-      updateTaskProgress: jest.fn(),
-      deleteTask: jest.fn(),
-      addGitCommitToTask: jest.fn(),
-      importTask: jest.fn(),
-    };
-    mockStorageService = createMockStorageService();
-    mockValidator = createMockValidator();
-    mockErrorHandler = {
-      handle: jest.fn(),
-    };
+  let mockDependencies; // モック依存関係を保持する変数
 
+  beforeEach(() => {
+    mockDependencies = createMockDependencies(); // 共通モックを生成
+    mockLogger = mockDependencies.logger; // 個別変数にも代入
+    mockEventEmitter = mockDependencies.eventEmitter; // 個別変数にも代入
+    mockIntegrationManagerAdapter = mockDependencies.integrationManagerAdapter; // 共通モックから取得
+    mockTaskManagerAdapter = mockDependencies.taskManagerAdapter; // 共通モックから取得
+    mockStorageService = mockDependencies.storageService; // 共通モックから取得
+    mockValidator = mockDependencies.validator; // 共通モックから取得
+    mockErrorHandler = mockDependencies.errorHandler; // 共通モックから取得
+
+    // モックメソッドを再設定 (必要に応じて)
+    mockIntegrationManagerAdapter.createTask = jest.fn();
+    mockIntegrationManagerAdapter.updateTaskStatus = jest.fn();
+    mockTaskManagerAdapter.getAllTasks = jest.fn();
+    mockTaskManagerAdapter.getTaskById = jest.fn();
+    mockTaskManagerAdapter.updateTaskProgress = jest.fn();
+    mockTaskManagerAdapter.deleteTask = jest.fn();
+    mockTaskManagerAdapter.addGitCommitToTask = jest.fn();
+    mockTaskManagerAdapter.importTask = jest.fn();
+    mockStorageService.writeJSON = jest.fn();
+    mockStorageService.readJSON = jest.fn();
+    mockValidator.validateTaskInput = jest
+      .fn()
+      .mockReturnValue({ isValid: true, errors: [] }); // デフォルトで成功
     // テスト対象インスタンスを作成
     cliTaskManager = new CliTaskManager({
       logger: mockLogger,
@@ -62,7 +62,9 @@ describe('CliTaskManager', () => {
       taskManagerAdapter: mockTaskManagerAdapter,
       storageService: mockStorageService,
       validator: mockValidator,
-      // errorHandler: mockErrorHandler,
+      traceIdGenerator: mockDependencies.traceIdGenerator, // 注入済み
+      requestIdGenerator: mockDependencies.requestIdGenerator, // 注入済み
+      // errorHandler: mockErrorHandler, // コメントアウトのまま
     });
 
     emitErrorEvent.mockClear();
@@ -118,13 +120,21 @@ describe('CliTaskManager', () => {
       expect(result).toEqual(mockSuccessResult);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Creating new task'),
-        expect.objectContaining({ title }) // コンテキストをチェック
+        expect.objectContaining({
+          title,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Task created successfully: ${mockSuccessResult.id}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -139,17 +149,15 @@ describe('CliTaskManager', () => {
       await cliTaskManager.createTask(title, description, taskOptions);
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_before`,
+        'cli',
+        'task_create_before',
         { title, description, taskOptions }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_after`,
+        'cli',
+        'task_create_after',
         { result: mockSuccessResult }
       );
     });
@@ -176,7 +184,13 @@ describe('CliTaskManager', () => {
         operation,
         expect.any(ValidationError),
         null,
-        { title, description, taskOptions }
+        expect.objectContaining({
+          title,
+          description,
+          taskOptions,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -194,7 +208,7 @@ describe('CliTaskManager', () => {
       // エラーコード検証修正
       await expect(
         cliTaskManager.createTask(title, description, taskOptions)
-      ).rejects.toHaveProperty('code', 'ERR_CLI_TASK_CREATE'); // Specific code
+      ).rejects.toHaveProperty('code', 'ERR_CLI_TASKMANAGER_CREATETASK'); // 修正: クラス名を含むエラーコード
       await expect(
         cliTaskManager.createTask(title, description, taskOptions)
       ).rejects.toHaveProperty('cause', originalError);
@@ -204,12 +218,71 @@ describe('CliTaskManager', () => {
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_TASKMANAGER_CREATETASK', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { title, description, taskOptions }
+        expect.objectContaining({
+          title,
+          description,
+          taskOptions,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
+    }); // ネストされていたテストを外に出すため、このテストケースの閉じ括弧を修正
+
+    // ネストされていたテストケースをここに移動
+    test('should call errorHandler.handle if provided on adapter failure', async () => {
+      // Arrange
+      // errorHandler を設定してインスタンス再作成
+      cliTaskManager = new CliTaskManager({
+        logger: mockLogger,
+        eventEmitter: mockEventEmitter,
+        integrationManagerAdapter: mockIntegrationManagerAdapter,
+        taskManagerAdapter: mockTaskManagerAdapter,
+        storageService: mockStorageService,
+        validator: mockValidator,
+        errorHandler: mockErrorHandler, // errorHandler を提供
+        traceIdGenerator: mockDependencies.traceIdGenerator,
+        requestIdGenerator: mockDependencies.requestIdGenerator,
+      });
+      mockValidator.validateTaskInput.mockReturnValue({
+        isValid: true,
+        errors: [],
+      });
+      const originalError = new Error('API error');
+      mockIntegrationManagerAdapter.createTask.mockRejectedValue(originalError);
+      const errorHandlerResult = { handled: true, fallbackTask: null };
+      mockErrorHandler.handle.mockReturnValue(errorHandlerResult);
+
+      // Act
+      const result = await cliTaskManager.createTask(
+        title,
+        description,
+        taskOptions
+      );
+
+      // Assert
+      expect(mockErrorHandler.handle).toHaveBeenCalledTimes(1);
+      expect(mockErrorHandler.handle).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // CliError を期待
+          name: 'CliError',
+          code: 'ERR_CLI_TASKMANAGER_CREATETASK', // 修正後のコード
+          cause: originalError,
+        }),
+        'CliTaskManager',
+        operation,
+        expect.objectContaining({ title, description, taskOptions })
+      );
+      expect(result).toEqual(errorHandlerResult); // errorHandler の戻り値が返る
+      expect(emitErrorEvent).toHaveBeenCalledTimes(1); // エラーイベントは発行される
     });
-  });
+  }); // describe('createTask', ...) の閉じ括弧を追加
 
   describe('updateTask', () => {
     const taskId = 'T001';
@@ -235,11 +308,19 @@ describe('CliTaskManager', () => {
       expect(result).toEqual(mockSuccessResult);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Updating task'),
-        expect.objectContaining({ taskId })
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining(`Task updated successfully: ${taskId}`)
+        expect.stringContaining(`Task updated successfully: ${taskId}`),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -250,17 +331,15 @@ describe('CliTaskManager', () => {
       await cliTaskManager.updateTask(taskId, status, progress);
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_before`,
+        'cli',
+        'task_update_before',
         { taskId, status, progress }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_after`,
+        'cli',
+        'task_update_after',
         { taskId, status, progress, result: mockSuccessResult }
       );
     });
@@ -301,16 +380,27 @@ describe('CliTaskManager', () => {
       // エラーコード検証修正
       await expect(
         cliTaskManager.updateTask(taskId, status, progress)
-      ).rejects.toHaveProperty('code', 'ERR_CLI_TASK_UPDATE'); // Specific code
+      ).rejects.toHaveProperty('code', 'ERR_CLI_TASKMANAGER_UPDATETASK'); // 修正: クラス名を含むエラーコード
 
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_TASKMANAGER_UPDATETASK', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { taskId, status, progress }
+        expect.objectContaining({
+          taskId,
+          status,
+          progress,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -324,28 +414,51 @@ describe('CliTaskManager', () => {
       const result = await cliTaskManager.listTasks();
       expect(mockTaskManagerAdapter.getAllTasks).toHaveBeenCalledTimes(1);
       expect(result).toEqual(mockTasksResult);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Listing all tasks'),
-        expect.objectContaining({ operation }) // コンテキストをチェック
+      // logger.info が2回呼び出されることを確認
+      expect(mockLogger.info).toHaveBeenCalledTimes(2);
+      // 1回目の呼び出しを検証
+      expect(mockLogger.info).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('Listing all tasks...'), // メッセージ修正
+        expect.objectContaining({
+          // operation を削除
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
+      );
+      // 2回目の呼び出しを検証
+      expect(mockLogger.info).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining(
+          `Found ${mockTasksResult.decomposed_tasks.length} tasks.`
+        ), // メッセージ修正
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Found ${mockTasksResult.decomposed_tasks.length} tasks.`
-        )
+        ),
+        expect.objectContaining({
+          // operation を削除
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_before`
+        'cli',
+        'task_list_before',
+        {}
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_after`,
+        'cli',
+        'task_list_after',
         { count: mockTasksResult.decomposed_tasks.length }
       );
     });
@@ -356,14 +469,17 @@ describe('CliTaskManager', () => {
       expect(result).toEqual({ decomposed_tasks: [] });
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Found 0 tasks.')
+        expect.stringContaining('Found 0 tasks.'),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_after`,
+        'cli',
+        'task_list_after',
         { count: 0 }
       );
     });
@@ -377,14 +493,24 @@ describe('CliTaskManager', () => {
       // エラーコード検証修正
       await expect(cliTaskManager.listTasks()).rejects.toHaveProperty(
         'code',
-        'ERR_CLI_TASK_LIST' // Specific code
+        'ERR_CLI_TASKMANAGER_LISTTASKS' // 修正: クラス名を含むエラーコード
       );
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(CliError) // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_TASKMANAGER_LISTTASKS', // 修正後のコード
+          cause: originalError,
+        }),
+        null,
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -401,25 +527,31 @@ describe('CliTaskManager', () => {
       expect(result).toEqual(mockTask);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Getting task info'),
-        expect.objectContaining({ taskId })
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining(`Task info retrieved for: ${taskId}`)
+        expect.stringContaining(`Task info retrieved for: ${taskId}`),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_before`,
+        'cli',
+        'task_info_get_before',
         { taskId }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_after`,
+        'cli',
+        'task_info_get_after',
         { taskId, taskFound: true }
       );
     });
@@ -434,18 +566,43 @@ describe('CliTaskManager', () => {
         'code',
         'ERR_CLI_TASK_NOT_FOUND' // Specific code
       );
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Task not found'),
-        expect.objectContaining({ taskId })
-      );
+      // _handleError 内で emitErrorEvent が呼ばれることを検証
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(NotFoundError), // Verify it's a NotFoundError instance
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_TASK_NOT_FOUND',
+          context: expect.objectContaining({ taskId }),
+        }),
         null,
-        { taskId }
+        expect.objectContaining({
+          // 元の context
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
+      );
+      // logger.warn は呼ばれないはずなので削除
+      expect(emitErrorEvent).toHaveBeenCalledWith(
+        mockEventEmitter,
+        mockLogger,
+        'CliTaskManager',
+        operation,
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_TASK_NOT_FOUND',
+        }),
+        null,
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -458,16 +615,25 @@ describe('CliTaskManager', () => {
       // エラーコード検証修正
       await expect(cliTaskManager.getTaskInfo(taskId)).rejects.toHaveProperty(
         'code',
-        'ERR_CLI_TASK_INFO' // Specific code
+        'ERR_CLI_TASKMANAGER_GETTASKINFO' // 修正: クラス名を含むエラーコード
       );
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_TASKMANAGER_GETTASKINFO', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { taskId }
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -491,27 +657,34 @@ describe('CliTaskManager', () => {
       expect(result).toEqual(mockSuccessResult);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Updating task progress'),
-        expect.objectContaining({ taskId, progress })
+        expect.objectContaining({
+          taskId,
+          progress,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Task progress updated successfully for: ${taskId}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_before`,
+        'cli',
+        'task_progress_update_before',
         { taskId, progress }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_after`,
+        'cli',
+        'task_progress_update_after',
         { taskId, progress, result: mockSuccessResult }
       );
     });
@@ -540,15 +713,28 @@ describe('CliTaskManager', () => {
       // エラーコード検証修正
       await expect(
         cliTaskManager.updateTaskProgress(taskId, progress)
-      ).rejects.toHaveProperty('code', 'ERR_CLI_TASK_PROGRESS'); // Specific code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_TASKMANAGER_UPDATETASKPROGRESS'
+      ); // 修正: クラス名を含むエラーコード
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_TASKMANAGER_UPDATETASKPROGRESS', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { taskId, progress }
+        expect.objectContaining({
+          taskId,
+          progress,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -564,25 +750,31 @@ describe('CliTaskManager', () => {
       expect(result).toBe(true);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Deleting task'),
-        expect.objectContaining({ taskId })
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining(`Task deleted successfully: ${taskId}`)
+        expect.stringContaining(`Task deleted successfully: ${taskId}`),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_before`,
+        'cli',
+        'task_delete_before',
         { taskId }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_after`,
+        'cli',
+        'task_delete_after',
         { taskId, success: true }
       );
     });
@@ -603,9 +795,17 @@ describe('CliTaskManager', () => {
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError を期待
+          name: 'CliError',
+          code: 'ERR_CLI_TASK_DELETE_FAILED',
+        }),
         null,
-        { taskId }
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -618,16 +818,25 @@ describe('CliTaskManager', () => {
       // エラーコード検証修正
       await expect(cliTaskManager.deleteTask(taskId)).rejects.toHaveProperty(
         'code',
-        'ERR_CLI_TASK_DELETE' // Specific code
+        'ERR_CLI_TASKMANAGER_DELETETASK' // 修正: クラス名を含むエラーコード
       );
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_TASKMANAGER_DELETETASK', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { taskId }
+        expect.objectContaining({
+          taskId,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -648,27 +857,34 @@ describe('CliTaskManager', () => {
       expect(result).toEqual(mockTask);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Linking commit'),
-        expect.objectContaining({ taskId, commitHash })
+        expect.objectContaining({
+          taskId,
+          commitHash,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Commit ${commitHash} linked to task ${taskId} successfully.`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_before`,
+        'cli',
+        'task_link_commit_before',
         { taskId, commitHash }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_after`,
+        'cli',
+        'task_link_commit_after',
         { taskId, commitHash, task: mockTask }
       );
     });
@@ -684,15 +900,28 @@ describe('CliTaskManager', () => {
       // エラーコード検証修正
       await expect(
         cliTaskManager.linkTaskToCommit(taskId, commitHash)
-      ).rejects.toHaveProperty('code', 'ERR_CLI_TASK_LINK_COMMIT'); // Specific code
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_TASKMANAGER_LINKTASKTOCOMMIT' // 修正: クラス名を含むエラーコード
+      );
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_TASKMANAGER_LINKTASKTOCOMMIT', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { taskId, commitHash }
+        expect.objectContaining({
+          taskId,
+          commitHash,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -718,25 +947,34 @@ describe('CliTaskManager', () => {
       expect(resultPath).toBe(defaultPath);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Exporting task'),
-        expect.objectContaining({ taskId })
+        expect.objectContaining({
+          taskId,
+          outputPath: null,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining(`Task exported successfully to: ${defaultPath}`)
+        expect.stringContaining(
+          `Task exported successfully to: ${defaultPath}`
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_before`,
+        'cli',
+        'task_export_before',
         { taskId, outputPath: null }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_after`,
+        'cli',
+        'task_export_after',
         { taskId, path: defaultPath }
       );
     });
@@ -769,9 +1007,18 @@ describe('CliTaskManager', () => {
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(NotFoundError), // Verify it's a NotFoundError instance
+        expect.objectContaining({
+          // NotFoundError を期待
+          name: 'NotFoundError',
+          code: 'ERR_CLI_TASK_NOT_FOUND',
+        }),
         null,
-        { taskId, outputPath: null }
+        expect.objectContaining({
+          taskId,
+          outputPath: null,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -792,9 +1039,18 @@ describe('CliTaskManager', () => {
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(StorageError), // Verify it's a StorageError instance
+        expect.objectContaining({
+          // StorageError を期待
+          name: 'StorageError',
+          code: 'ERR_CLI_FILE_WRITE',
+        }),
         null,
-        { taskId, outputPath: null }
+        expect.objectContaining({
+          taskId,
+          outputPath: null,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
@@ -818,27 +1074,33 @@ describe('CliTaskManager', () => {
       expect(result).toEqual(mockImportResult);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Importing task'),
-        expect.objectContaining({ inputPath })
+        expect.objectContaining({
+          inputPath,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining(
           `Task imported successfully: ${mockImportResult.id}`
-        )
+        ),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_before`,
+        'cli',
+        'task_import_before',
         { inputPath }
       );
       await expectStandardizedEventEmittedAsync(
-        // await を追加
         mockEventEmitter,
-        'cli_task',
-        `${operation}_after`,
+        'cli',
+        'task_import_after',
         { inputPath, taskId: mockImportResult.id }
       );
     });
@@ -860,9 +1122,17 @@ describe('CliTaskManager', () => {
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(StorageError), // Verify it's a StorageError instance
+        expect.objectContaining({
+          // StorageError を期待
+          name: 'StorageError',
+          code: 'ERR_CLI_FILE_READ',
+        }),
         null,
-        { inputPath }
+        expect.objectContaining({
+          inputPath,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -885,9 +1155,17 @@ describe('CliTaskManager', () => {
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError を期待
+          name: 'CliError',
+          code: 'ERR_CLI_TASK_IMPORT_UNEXPECTED',
+        }),
         null,
-        { inputPath }
+        expect.objectContaining({
+          inputPath,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -901,17 +1179,26 @@ describe('CliTaskManager', () => {
       // エラーコード検証修正
       await expect(cliTaskManager.importTask(inputPath)).rejects.toHaveProperty(
         'code',
-        'ERR_CLI_TASK_IMPORT' // Specific code
+        'ERR_CLI_TASKMANAGER_IMPORTTASK' // 修正: クラス名を含むエラーコード
       );
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliTaskManager',
         operation,
-        expect.any(CliError), // Verify it's a CliError instance
+        expect.objectContaining({
+          // CliError でラップされていることを確認
+          name: 'CliError',
+          code: 'ERR_CLI_TASKMANAGER_IMPORTTASK', // 修正後のコード
+          cause: originalError,
+        }),
         null,
-        { inputPath }
+        expect.objectContaining({
+          inputPath,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
   });
-});
+}); // トップレベルの describe('CliTaskManager', ...) を閉じる

@@ -107,6 +107,7 @@
       return data;
     } catch (error) {
       // エラーをラップして errorHandler に渡すか、再スロー
+      // 多くのクラスでは、エラー処理を _handleError 内部ヘルパーに集約しています。
       return this._handleError(
         `JSONファイルの読み込みに失敗しました: ${nativeFilePath}`,
         error, // cause として元のエラーを渡す
@@ -115,6 +116,7 @@
       // または throw new StorageError(...)
     }
     ```
+    *   **CLIクラスにおけるエラーコード:** CLI関連クラス (`src/cli/*`) で発生した固有のエラーには、`ERR_CLI_<CLASSNAME>_<OPERATION>` という形式のエラーコードを使用することを推奨します (例: `ERR_CLI_TASKMANAGER_CREATETASK`)。これにより、エラーの発生源を特定しやすくなります。
 *   **Don't:**
     *   エラーを無視する (`catch` ブロックを空にする）。
     *   具体的な情報なしに一般的な `Error` をスローする。
@@ -180,7 +182,7 @@
     *   コンポーネント間で直接メソッドを呼び出して密結合にする（イベントで代替できる場合）。
     *   標準化されていない形式でイベントを発行する (`emit` を直接使用するなど）。
     *   イベント名に一貫性がない。
-    *   ユーティリティクラス内で `emitStandardized` を直接呼び出す代わりに、`_emitEvent` ヘルパーパターンを使用する。
+    *   ユーティリティクラスやCLIクラス内で `emitStandardized` を直接呼び出す代わりに、`_emitEvent` ヘルパーパターンを使用する。CLIクラスでは、コンポーネント名を `'cli'`、アクション名を `<component>_<action>_<timing>` (例: `task_create_before`, `session_end_after`) とすることが多いです。
 
 ## 5. 非同期処理
 

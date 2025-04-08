@@ -1,7 +1,11 @@
-const { ApplicationError } = require('../lib/core/error-framework');
+const { ApplicationError, CliError } = require('../lib/core/error-framework'); // CliError も core から？ utils かもしれないので要確認 -> utils でした
+// const { CliError } = require('../lib/utils/errors'); // CliError は utils から
 const { emitErrorEvent } = require('../lib/utils/error-helpers');
 const readline = require('readline');
-const colors = require('colors/safe'); // 色付けのため
+const colors = require('colors/safe');
+const { formatResult } = require('./display'); // 整形関数をインポート
+// ID生成関数をインポート (EventEmitter から取得するため不要)
+// const { generateTraceId, generateRequestId } = require('../lib/utils/id-generators');
 
 /**
  * CLIのインタラクティブモードを管理するクラス
@@ -12,39 +16,149 @@ class CliInteractiveMode {
    * @param {object} options.logger - Loggerインスタンス (必須)
    * @param {object} options.eventEmitter - EventEmitterインスタンス (必須)
    * @param {object} options.cliFacade - CliFacadeインスタンス (必須、コマンド実行用)
-   * @param {object} options.errorHandler - エラーハンドラー (オプション)
+   * @param {object} [options.errorHandler] - エラーハンドラー (オプション)
+   * @param {Function} options.traceIdGenerator - トレースID生成関数 (必須)
+   * @param {Function} options.requestIdGenerator - リクエストID生成関数 (必須)
    */
   constructor(options = {}) {
-    // 必須依存関係のチェック
-    const requiredDependencies = ['logger', 'eventEmitter', 'cliFacade'];
-    for (const dep of requiredDependencies) {
-      if (!options[dep]) {
-        throw new ApplicationError(
-          `CliInteractiveMode requires ${dep} instance.`
-        );
-      }
-    }
+    // 分割代入で依存関係を取得
+    const {
+      logger,
+      eventEmitter,
+      cliFacade,
+      errorHandler, // 任意
+      traceIdGenerator,
+      requestIdGenerator,
+    } = options;
 
-    this.logger = options.logger;
-    this.eventEmitter = options.eventEmitter;
-    this.facade = options.cliFacade; // コマンド実行のために Facade を保持
-    this.errorHandler = options.errorHandler;
-    this.rl = null; // readline インターフェース
+    // 必須依存関係のチェック
+    if (!logger)
+      throw new ApplicationError(
+        'CliInteractiveMode requires logger instance.'
+      );
+    if (!eventEmitter)
+      throw new ApplicationError(
+        'CliInteractiveMode requires eventEmitter instance.'
+      );
+    if (!cliFacade)
+      throw new ApplicationError(
+        'CliInteractiveMode requires cliFacade instance.'
+      );
+    if (!traceIdGenerator)
+      throw new ApplicationError(
+        'CliInteractiveMode requires traceIdGenerator function.'
+      );
+    if (!requestIdGenerator)
+      throw new ApplicationError(
+        'CliInteractiveMode requires requestIdGenerator function.'
+      );
+
+    this.logger = logger;
+    this.eventEmitter = eventEmitter;
+    this.facade = cliFacade;
+    this.errorHandler = errorHandler; // 任意なのでチェック不要
+    this.rl = null; // readline インスタンスは start() で初期化
+    this._traceIdGenerator = traceIdGenerator;
+    this._requestIdGenerator = requestIdGenerator;
 
     this.logger.debug('CliInteractiveMode initialized');
   }
 
   /**
+   * 標準化されたイベントを発行する内部ヘルパー
+   * @param {string} action - アクション名 (例: 'start_before')
+   * @param {object} [data={}] - イベントデータ
+   * @param {string} [traceId] - トレースID (指定されなければ生成)
+   * @param {string} [requestId] - リクエストID (指定されなければ生成)
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _emitEvent(action, data = {}, traceId, requestId) {
+    if (
+      !this.eventEmitter ||
+      typeof this.eventEmitter.emitStandardizedAsync !== 'function'
+    ) {
+      this.logger.warn(
+        `Cannot emit event interactive_${action}: eventEmitter or emitStandardizedAsync is missing.`
+      );
+      return;
+    }
+    const finalTraceId = traceId || this._traceIdGenerator();
+    const finalRequestId = requestId || this._requestIdGenerator();
+    const eventData = {
+      ...data,
+      traceId: finalTraceId,
+      requestId: finalRequestId,
+    };
+    try {
+      // コンポーネント名を 'cli'、アクション名を 'interactive_action' 形式に統一
+      await this.eventEmitter.emitStandardizedAsync(
+        'cli',
+        `interactive_${action}`,
+        eventData
+      );
+    } catch (error) {
+      this.logger.warn(`イベント発行中にエラー: cli:interactive_${action}`, {
+        error,
+      });
+    }
+  }
+
+  /**
+   * エラー処理を行う内部ヘルパー (主に readline のエラー用)
+   * @param {Error} error - 発生したエラー
+   * @param {string} operation - 操作名
+   * @param {object} [context={}] - エラーコンテキスト
+   * @returns {*} エラーハンドラーの戻り値、またはエラーを再スロー
+   * @throws {CliError|ApplicationError} エラーハンドラーがない場合、またはエラーハンドラーがエラーをスローした場合
+   * @private
+   */
+  _handleError(error, operation, context = {}) {
+    // readline エラーは ApplicationError でラップ
+    const processedError = new ApplicationError(`Error during ${operation}`, {
+      cause: error,
+      code: 'ERR_CLI_READLINE', // readline 固有のエラーコード
+      ...context,
+    });
+
+    emitErrorEvent(
+      this.eventEmitter,
+      this.logger,
+      'CliInteractiveMode',
+      operation,
+      processedError,
+      null,
+      context
+    );
+
+    console.error(colors.red('インタフェースエラー:'), error); // コンソールにも出力
+
+    if (this.errorHandler) {
+      return this.errorHandler.handle(
+        processedError,
+        'CliInteractiveMode',
+        operation,
+        context
+      );
+    } else {
+      // エラーハンドラがない場合は、reject するためにエラーをスロー
+      throw processedError;
+    }
+  }
+
+  /**
    * インタラクティブモードを開始する
    * @returns {Promise<void>} モード終了時に解決される Promise
+   * @throws {ApplicationError} readline インターフェースのエラー発生時
    */
   async start() {
     const operation = 'startInteractiveMode';
-    this.logger.info('Starting interactive mode...', { operation });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_interactive',
-      `${operation}_before`
-    );
+    const traceId = this._traceIdGenerator(); // この操作のトレースID
+    const requestId = this._requestIdGenerator(); // この操作のリクエストID
+    const opContext = { traceId, requestId }; // ログ用コンテキスト
+
+    await this._emitEvent('start_before', {}, traceId, requestId);
+    this.logger.info('Starting interactive mode...', opContext);
 
     console.log(colors.cyan('インタラクティブモードを開始します...'));
     console.log(
@@ -65,6 +179,9 @@ class CliInteractiveMode {
     return new Promise((resolve, reject) => {
       this.rl.on('line', async (line) => {
         const input = line.trim();
+        const lineTraceId = this._traceIdGenerator(); // 各行処理のトレースID
+        const lineRequestId = this._requestIdGenerator(); // 各行処理のリクエストID
+        const lineContext = { traceId: lineTraceId, requestId: lineRequestId };
 
         if (input === 'exit' || input === 'quit') {
           this.rl.close();
@@ -78,16 +195,13 @@ class CliInteractiveMode {
         }
 
         if (!input) {
-          // 空行の場合はプロンプト再表示
           this.rl.prompt();
           return;
         }
 
-        // 入力をコマンドと引数に分割 (簡易的なパース)
-        // TODO: yargs のようなより堅牢なパーサーを使うか検討
         const argsArray = input.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
-        const command = argsArray.shift()?.replace(/"/g, ''); // ダブルクォート除去
-        const parsedArgs = this._parseArgs(argsArray); // 簡易的な引数オブジェクト生成
+        const command = argsArray.shift()?.replace(/"/g, '');
+        const parsedArgs = this._parseArgs(argsArray);
 
         if (!command) {
           this.rl.prompt();
@@ -95,56 +209,60 @@ class CliInteractiveMode {
         }
 
         try {
-          // CliFacade を通じてコマンドを実行
+          this.logger.info(`Executing interactive command: ${command}`, {
+            ...lineContext,
+            args: parsedArgs,
+          });
+          // Facade 実行時にトレースIDなどを引き継ぐか検討 (現状は Facade 内で生成)
           const result = await this.facade.execute(command, parsedArgs);
-          // 結果を整形して表示 (コマンドごとに調整が必要)
-          this._displayResult(command, result);
+          this._displayResult(command, result); // display.js の formatResult を使うように変更
         } catch (error) {
-          // Facade で捕捉されたエラーを表示
+          // Facade からスローされたエラーを表示 (CliError を想定)
+          this.logger.error(`Interactive command failed: ${command}`, {
+            ...lineContext,
+            error,
+          });
           console.error(colors.red('エラー:'), error.message || error);
-          // 必要であればエラーの詳細も表示
           if (error.context) {
             console.error(
               colors.red('詳細:'),
               JSON.stringify(error.context, null, 2)
             );
           }
-          // エラーイベントは Facade 内で発行済み
+          if (error.cause) {
+            console.error(
+              colors.red('原因:'),
+              error.cause.message || error.cause
+            );
+          }
+          // ここでは _handleError は呼ばない (Facade で処理済みのため)
         } finally {
           this.rl.prompt();
         }
       });
 
       this.rl.on('close', async () => {
-        this.logger.info('Interactive mode ended.', { operation });
-        await this.eventEmitter.emitStandardizedAsync(
-          'cli_interactive',
-          `${operation}_after`
-        );
+        await this._emitEvent('end_after', {}, traceId, requestId); // イベント名を修正
+        this.logger.info('Interactive mode ended.', opContext);
         console.log(colors.cyan('\nインタラクティブモードを終了します'));
-        resolve(); // モード終了時に Promise を解決
+        resolve();
       });
 
-      // エラーハンドリング (readline 自体のエラーなど)
       this.rl.on('error', (error) => {
-        // ApplicationError のコンストラクタシグネチャ (message, options) に合わせる
-        const cliError = new ApplicationError('Readline interface error', {
-          // options オブジェクト
-          cause: error, // 元のエラーを cause に設定
-          code: 'ERR_CLI_READLINE',
-        });
-        emitErrorEvent(
-          this.eventEmitter,
-          this.logger,
-          'CliInteractiveMode',
-          operation,
-          cliError
-        );
-        console.error(colors.red('インタフェースエラー:'), error);
-        if (this.errorHandler) {
-          this.errorHandler.handle(cliError, 'CliInteractiveMode', operation);
+        try {
+          // エラーハンドリングをヘルパーに委譲
+          this._handleError(error, operation, opContext);
+          // エラーハンドラがエラーをスローしない場合も考慮し、reject を呼ぶ
+          reject(
+            new ApplicationError('Readline interface error', {
+              cause: error,
+              code: 'ERR_CLI_READLINE',
+            })
+          );
+        } catch (processedError) {
+          // _handleError がエラーをスローした場合 (errorHandlerがない場合など)
+          reject(processedError);
         }
-        reject(cliError); // モード終了時に Promise を拒否
       });
     });
   }
@@ -154,9 +272,8 @@ class CliInteractiveMode {
    * @private
    */
   _displayHelp() {
+    // 実装は変更なし (TODO は残る)
     console.log(colors.cyan('\n利用可能なコマンド:'));
-    // TODO: CliFacade が持つコマンドリストから動的に生成する方が望ましい
-    // 現状は integration.js の yargs 定義と同期させる必要がある
     console.log(colors.yellow('  Workflow:'));
     console.log('    init <project-id> <request> - ワークフローの初期化');
     console.log('    status - ワークフロー状態の取得');
@@ -227,202 +344,24 @@ class CliInteractiveMode {
   }
 
   /**
-   * コマンド実行結果を表示する内部ヘルパー (要改善)
+   * コマンド実行結果を表示する内部ヘルパー
    * @param {string} command - 実行されたコマンド
    * @param {*} result - コマンドの実行結果
    * @private
    */
   _displayResult(command, result) {
-    if (result === undefined || result === null) {
-      console.log(colors.green(`${command} コマンドが正常に完了しました。`));
-      return;
+    // display.formatResult を使用して整形された文字列を取得
+    const formattedOutput = formatResult(command, result);
+    if (formattedOutput !== null) {
+      console.log(formattedOutput); // 整形結果を出力
     }
-
-    // 特定コマンドの結果を整形して表示
-    if (command === 'status') {
-      this._displayStatusResult(result);
-    } else if (command === 'list-sessions') {
-      this._displaySessionListResult(result);
-    } else if (command === 'list-tasks') {
-      this._displayTaskListResult(result);
-    } else if (command === 'current-session' || command === 'session-info') {
-      this._displaySessionInfoResult(result);
-    } else if (command === 'task-info') {
-      this._displayTaskInfoResult(result);
-    } else if (command === 'feedback-status') {
-      this._displayFeedbackStatusResult(result);
-    } else if (typeof result === 'object') {
-      // その他のオブジェクト結果は JSON で表示
-      console.log(colors.yellow('結果:'), JSON.stringify(result, null, 2));
-    } else {
-      // 文字列などの結果はそのまま表示
-      console.log(colors.yellow('結果:'), result);
-    }
+    // 以前の _display*Result ヘルパーは不要になったため削除
   }
 
-  // --- 結果表示ヘルパー (integration.js から移植・調整) ---
-
-  _displayStatusResult(statusInfo) {
-    console.log(colors.yellow('現在の状態:'), statusInfo.currentState);
-    console.log(colors.yellow('\nタスク状態:'));
-    console.log(`  タスク数: ${statusInfo.tasks.count}`);
-    console.log(colors.yellow('  状態別カウント:'));
-    console.log(`    完了: ${statusInfo.tasks.statusCounts.completed || 0}`);
-    console.log(
-      `    進行中: ${statusInfo.tasks.statusCounts.in_progress || 0}`
-    );
-    console.log(`    保留中: ${statusInfo.tasks.statusCounts.pending || 0}`);
-    console.log(
-      `    ブロック中: ${statusInfo.tasks.statusCounts.blocked || 0}`
-    );
-    if (statusInfo.tasks.currentFocus) {
-      const focus = statusInfo.tasks.currentFocus;
-      console.log(colors.yellow('\n  現在のフォーカス:'));
-      console.log(`    - ${focus.id}: ${focus.title}`);
-      console.log(`      状態: ${focus.status}, 進捗率: ${focus.progress}%`);
-    }
-    if (statusInfo.session) {
-      console.log(colors.yellow('\nセッション状態:'));
-      console.log(`  セッションID: ${statusInfo.session.id}`);
-      console.log(`  タイムスタンプ: ${statusInfo.session.timestamp}`);
-      if (statusInfo.session.previousSessionId) {
-        console.log(
-          `  前回のセッションID: ${statusInfo.session.previousSessionId}`
-        );
-      }
-    } else {
-      console.log(colors.yellow('\nアクティブなセッションはありません'));
-    }
-  }
-
-  _displaySessionListResult(sessions) {
-    if (!sessions || sessions.length === 0) {
-      console.log(colors.yellow('セッションが見つかりません'));
-      return;
-    }
-    console.log(colors.green(`\n${sessions.length}件のセッション:`));
-    sessions.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    sessions.forEach((session, index) => {
-      const status = session.ended_at
-        ? colors.red('終了')
-        : colors.green('アクティブ');
-      console.log(
-        `${index + 1}. ${colors.yellow(session.session_id)} [${status}]`
-      );
-      console.log(`   作成: ${session.created_at}`);
-      if (session.ended_at) console.log(`   終了: ${session.ended_at}`);
-    });
-  }
-
-  _displayTaskListResult(tasksResult) {
-    const tasks = tasksResult?.decomposed_tasks || [];
-    if (tasks.length === 0) {
-      console.log(colors.yellow('タスクが見つかりません'));
-      return;
-    }
-    console.log(colors.green(`\n${tasks.length}件のタスク:`));
-    const groupedTasks = tasks.reduce((groups, task) => {
-      (groups[task.status] = groups[task.status] || []).push(task);
-      return groups;
-    }, {});
-
-    const displayGroup = (title, group, colorFunc = colors.white) => {
-      if (group && group.length > 0) {
-        console.log(colorFunc(`\n${title}:`));
-        group.forEach((task, index) => {
-          let line = `${index + 1}. ${colors.yellow(task.id)}: ${task.title}`;
-          if (task.status === 'in_progress') {
-            line += ` (${task.progress_percentage || 0}%)`;
-          }
-          console.log(line);
-        });
-      }
-    };
-
-    displayGroup('進行中のタスク', groupedTasks.in_progress, colors.green);
-    displayGroup('保留中のタスク', groupedTasks.pending, colors.yellow);
-    displayGroup('完了したタスク', groupedTasks.completed, colors.blue);
-    displayGroup('ブロックされたタスク', groupedTasks.blocked, colors.red);
-  }
-
-  _displaySessionInfoResult(session) {
-    if (!session) {
-      console.log(colors.yellow('セッション情報が見つかりません。'));
-      return;
-    }
-    console.log(colors.yellow(`\nセッション情報 (${session.session_id}):`));
-    console.log(`  作成日時: ${session.created_at}`);
-    console.log(`  終了日時: ${session.ended_at || '未終了'}`);
-    if (session.previous_session_id) {
-      console.log(`  前回のセッションID: ${session.previous_session_id}`);
-    }
-    // 必要に応じて session_handover の内容も表示
-    if (session.session_handover) {
-      console.log(colors.yellow('  引継ぎ情報:'));
-      console.log(`    プロジェクトID: ${session.session_handover.project_id}`);
-      console.log(
-        `    タイムスタンプ: ${session.session_handover.session_timestamp}`
-      );
-      // サマリーなども表示可能
-    }
-  }
-
-  _displayTaskInfoResult(task) {
-    if (!task) {
-      console.log(colors.yellow('タスク情報が見つかりません。'));
-      return;
-    }
-    console.log(colors.yellow(`\nタスク情報 (${task.id}):`));
-    console.log(`  タイトル: ${task.title}`);
-    console.log(`  説明: ${task.description}`);
-    console.log(`  状態: ${task.status}`);
-    console.log(`  優先度: ${task.priority}`);
-    console.log(`  進捗率: ${task.progress_percentage || 0}%`);
-    if (task.estimated_hours) {
-      console.log(`  見積もり時間: ${task.estimated_hours} 時間`);
-    }
-    if (task.dependencies && task.dependencies.length > 0) {
-      console.log(
-        `  依存関係: ${task.dependencies.map((d) => d.task_id).join(', ')}`
-      );
-    }
-    if (task.git_commits && task.git_commits.length > 0) {
-      console.log(`  関連コミット: ${task.git_commits.join(', ')}`);
-    }
-    console.log(`  作成日時: ${task.created_at}`);
-    console.log(`  更新日時: ${task.updated_at}`);
-  }
-
-  _displayFeedbackStatusResult(feedback) {
-    if (!feedback || !feedback.feedback_loop) {
-      console.log(colors.yellow('フィードバック情報が見つかりません。'));
-      return;
-    }
-    const loop = feedback.feedback_loop;
-    console.log(
-      colors.yellow(`\nフィードバック状態 (タスク: ${loop.task_id}):`)
-    );
-    console.log(`  状態: ${loop.feedback_status || 'N/A'}`);
-    console.log(
-      `  テスト結果: ${loop.verification_results?.passes_tests ? colors.green('成功') : colors.red('失敗')}`
-    );
-    if (loop.verification_results?.details) {
-      console.log(`  詳細: ${loop.verification_results.details}`);
-    }
-    if (loop.analysis_results?.summary) {
-      console.log(`  分析サマリー: ${loop.analysis_results.summary}`);
-    }
-    if (loop.related_commits && loop.related_commits.length > 0) {
-      console.log(`  関連コミット: ${loop.related_commits.join(', ')}`);
-    }
-    if (loop.related_sessions && loop.related_sessions.length > 0) {
-      console.log(`  関連セッション: ${loop.related_sessions.join(', ')}`);
-    }
-    console.log(`  最終更新: ${loop.updated_at}`);
-  }
+  // _displayStatusResult, _displaySessionListResult などは削除
 
   /**
-   * 簡易的な引数パーサー (yargs の代替)
+   * 簡易的な引数パーサー (変更なし)
    * @param {Array<string>} argsArray - コマンドラインから分割された引数の配列
    * @returns {object} パースされた引数オブジェクト
    * @private
@@ -430,11 +369,11 @@ class CliInteractiveMode {
   _parseArgs(argsArray) {
     const args = { _: [] };
     let currentOption = null;
-    let expectingValue = false; // オプションの値を期待しているか
+    let expectingValue = false;
 
     for (let i = 0; i < argsArray.length; i++) {
       const arg = argsArray[i];
-      const cleanArg = arg.replace(/^"|"$/g, ''); // 前後のダブルクォートを除去
+      const cleanArg = arg.replace(/^"|"$/g, '');
 
       if (arg.startsWith('--')) {
         const parts = arg.substring(2).split('=');
@@ -444,42 +383,35 @@ class CliInteractiveMode {
         );
 
         if (parts.length > 1) {
-          // --option=value 形式
+          // eslint-disable-next-line security/detect-object-injection
           args[camelCaseName] = parts[1].replace(/^"|"$/g, '');
           expectingValue = false;
           currentOption = null;
         } else {
-          // --option 形式 (フラグまたは値が続く)
-          args[camelCaseName] = true; // デフォルトはフラグ
-          expectingValue = true; // 次が値の可能性
+          // eslint-disable-next-line security/detect-object-injection
+          args[camelCaseName] = true;
+          expectingValue = true;
           currentOption = camelCaseName;
         }
       } else if (arg.startsWith('-')) {
-        // 短いオプション (例: -v) - 簡単なフラグとしてのみ扱う
         const flags = arg.substring(1);
         for (const flag of flags) {
-          // ここでは長いオプション名へのマッピングは行わない
-          // 必要であれば yargs のようなライブラリを使う
+          // eslint-disable-next-line security/detect-object-injection
           args[flag] = true;
         }
         expectingValue = false;
         currentOption = null;
       } else if (expectingValue && currentOption) {
-        // 前の引数が --option 形式で、これがその値
+        // eslint-disable-next-line security/detect-object-injection
         args[currentOption] = cleanArg;
         expectingValue = false;
         currentOption = null;
       } else {
-        // 位置引数
         args._.push(cleanArg);
-        expectingValue = false; // 位置引数の後はオプション値を期待しない
+        expectingValue = false;
         currentOption = null;
       }
     }
-
-    // 位置引数の意味付けは削除し、CliFacade 側で行う
-    // 例: args._[0] が taskId か title かはコマンドによって異なる
-
     return args;
   }
 }

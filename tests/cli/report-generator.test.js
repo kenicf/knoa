@@ -4,11 +4,7 @@ const {
   CliError,
   StorageError, // FileWriteError を StorageError に変更
 } = require('../../src/lib/utils/errors');
-const {
-  createMockLogger,
-  createMockEventEmitter,
-  createMockStorageService,
-} = require('../helpers/mock-factory');
+const { createMockDependencies } = require('../helpers/mock-factory'); // createMockDependencies をインポート
 // expectStandardizedEventEmittedAsync をインポート
 const {
   expectStandardizedEventEmittedAsync,
@@ -28,16 +24,20 @@ describe('CliReportGenerator', () => {
   let mockErrorHandler;
   let cliReportGenerator;
 
+  let mockDependencies; // モック依存関係を保持する変数
+
   beforeEach(() => {
-    mockLogger = createMockLogger();
-    mockEventEmitter = createMockEventEmitter();
-    mockIntegrationManagerAdapter = {
-      generateReport: jest.fn(),
-    };
-    mockStorageService = createMockStorageService();
-    mockErrorHandler = {
-      handle: jest.fn(),
-    };
+    mockDependencies = createMockDependencies(); // 共通モックを生成
+    mockLogger = mockDependencies.logger; // 個別変数にも代入
+    mockEventEmitter = mockDependencies.eventEmitter; // 個別変数にも代入
+    mockIntegrationManagerAdapter = mockDependencies.integrationManagerAdapter; // 共通モックから取得
+    mockStorageService = mockDependencies.storageService; // 共通モックから取得
+    mockErrorHandler = mockDependencies.errorHandler; // 共通モックから取得
+
+    // モックメソッドを再設定 (必要に応じて)
+    mockIntegrationManagerAdapter.generateReport = jest.fn();
+    mockStorageService.writeText = jest.fn(); // writeText もモック化
+    mockErrorHandler.handle = jest.fn();
 
     // テスト対象インスタンスを作成
     cliReportGenerator = new CliReportGenerator({
@@ -45,6 +45,8 @@ describe('CliReportGenerator', () => {
       eventEmitter: mockEventEmitter,
       integrationManagerAdapter: mockIntegrationManagerAdapter,
       storageService: mockStorageService,
+      traceIdGenerator: mockDependencies.traceIdGenerator, // 注入
+      requestIdGenerator: mockDependencies.requestIdGenerator, // 注入
       // errorHandler: mockErrorHandler,
     });
 
@@ -97,29 +99,38 @@ describe('CliReportGenerator', () => {
       expect(result).toBe(outputPath);
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Generating report'),
-        expect.objectContaining({ reportType })
+        expect.objectContaining({
+          reportType,
+          outputPath,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining(`Report saved successfully to: ${outputPath}`)
+        expect.stringContaining(`Report saved successfully to: ${outputPath}`),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       expectStandardizedEventEmittedAsync(
         mockEventEmitter,
-        'cli_report',
-        `${operation}_before`,
-        { reportType, format: 'markdown', outputPath, noCache: true }
+        'cli',
+        'report_generate_before', // イベント名を修正
+        { reportType, format: 'markdown', outputPath, noCache: true } // データ修正
       );
       expectStandardizedEventEmittedAsync(
         mockEventEmitter,
-        'cli_report',
-        `${operation}_after`,
+        'cli',
+        'report_generate_after', // イベント名を修正
         {
           reportType,
           format: 'markdown',
           outputPath,
           reportLength: mockReportContent.length,
-        }
+        } // データ修正
       );
     });
 
@@ -141,19 +152,23 @@ describe('CliReportGenerator', () => {
       expect(result).toBe(mockReportContent);
       // ロガー検証修正
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining(`Report generated successfully: ${reportType}`)
+        expect.stringContaining(`Report generated successfully: ${reportType}`),
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       // expectStandardizedEventEmittedAsync に変更
       expectStandardizedEventEmittedAsync(
         mockEventEmitter,
-        'cli_report',
-        `${operation}_after`,
+        'cli',
+        'report_generate_after', // イベント名を修正
         {
           reportType,
           format: 'markdown',
           outputPath: null,
           reportLength: mockReportContent.length,
-        }
+        } // データ修正
       );
     });
 
@@ -180,14 +195,35 @@ describe('CliReportGenerator', () => {
       await expect(
         cliReportGenerator.generateReport(reportType, reportOptions)
       ).rejects.toHaveProperty('code', 'ERR_REPORT_GENERATE');
+      // emitErrorEvent の期待値を修正
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliReportGenerator',
         operation,
-        expect.objectContaining({ code: 'ERR_REPORT_GENERATE' }),
-        null,
-        { reportType, format: 'markdown', outputPath: undefined, noCache: true }
+        expect.objectContaining({
+          // processedError (ApplicationError)
+          name: 'ApplicationError',
+          code: 'ERR_REPORT_GENERATE', // ApplicationError に設定されるコード
+          // cause は null
+          context: expect.objectContaining({
+            // エラーの context
+            reportType,
+            format: 'markdown',
+            noCache: true,
+            errorDetail: 'Internal report error',
+          }),
+        }),
+        null, // OperationContext (ここでは未使用)
+        expect.objectContaining({
+          // details (元の context)
+          reportType,
+          format: 'markdown',
+          outputPath: undefined, // outputPath は元の context に含まれる
+          noCache: true,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
     });
 
@@ -203,14 +239,35 @@ describe('CliReportGenerator', () => {
       await expect(
         cliReportGenerator.generateReport(reportType, reportOptions)
       ).rejects.toHaveProperty('code', 'ERR_REPORT_GENERATE_UNEXPECTED');
+      // emitErrorEvent の期待値を修正
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliReportGenerator',
         operation,
-        expect.objectContaining({ code: 'ERR_REPORT_GENERATE_UNEXPECTED' }),
-        null,
-        { reportType, format: 'markdown', outputPath: undefined, noCache: true }
+        expect.objectContaining({
+          // processedError (ApplicationError)
+          name: 'ApplicationError',
+          code: 'ERR_REPORT_GENERATE_UNEXPECTED', // ApplicationError に設定されるコード
+          // cause は null
+          context: expect.objectContaining({
+            // エラーの context
+            reportType,
+            format: 'markdown',
+            noCache: true,
+            result: unexpectedResult,
+          }),
+        }),
+        null, // OperationContext (ここでは未使用)
+        expect.objectContaining({
+          // details (元の context)
+          reportType,
+          format: 'markdown',
+          outputPath: undefined, // outputPath は元の context に含まれる
+          noCache: true,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
     });
 
@@ -235,7 +292,7 @@ describe('CliReportGenerator', () => {
       // エラーの name を検証
       expect(caughtError).toHaveProperty('name', 'StorageError');
       // エラーコードを検証 (StorageError のデフォルトコード)
-      expect(caughtError).toHaveProperty('code', 'ERR_STORAGE');
+      expect(caughtError).toHaveProperty('code', 'ERR_CLI_FILE_WRITE'); // StorageService が返すコードに修正
 
       // emitErrorEvent が1回だけ呼び出されたことを確認
       expect(emitErrorEvent).toHaveBeenCalledTimes(1);
@@ -244,9 +301,20 @@ describe('CliReportGenerator', () => {
         mockLogger,
         'CliReportGenerator',
         operation,
-        expect.objectContaining({ code: 'ERR_STORAGE' }), // StorageError を期待
+        expect.objectContaining({
+          // StorageError を期待
+          name: 'StorageError',
+          code: 'ERR_CLI_FILE_WRITE',
+        }),
         null,
-        { reportType, format: 'markdown', outputPath, noCache: true }
+        expect.objectContaining({
+          reportType,
+          format: 'markdown',
+          outputPath,
+          noCache: true,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -261,20 +329,30 @@ describe('CliReportGenerator', () => {
       // エラーコード検証
       await expect(
         cliReportGenerator.generateReport(reportType, reportOptions)
-      ).rejects.toHaveProperty('code', 'ERR_CLI_REPORT_GENERATE');
+      ).rejects.toHaveProperty(
+        'code',
+        'ERR_CLI_REPORTGENERATOR_GENERATEREPORT'
+      ); // 修正: クラス名を含むエラーコード
       expect(emitErrorEvent).toHaveBeenCalledWith(
         mockEventEmitter,
         mockLogger,
         'CliReportGenerator',
         operation,
         expect.objectContaining({
-          // CliError インスタンスであることを期待
+          // CliError でラップされていることを確認
           name: 'CliError',
-          code: 'ERR_CLI_REPORT_GENERATE',
+          code: 'ERR_CLI_REPORTGENERATOR_GENERATEREPORT', // 修正後のコード
           cause: originalError,
         }),
         null,
-        { reportType, format: 'markdown', outputPath: undefined, noCache: true }
+        expect.objectContaining({
+          reportType,
+          format: 'markdown',
+          outputPath: undefined,
+          noCache: true,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -286,6 +364,8 @@ describe('CliReportGenerator', () => {
         integrationManagerAdapter: mockIntegrationManagerAdapter,
         storageService: mockStorageService,
         errorHandler: mockErrorHandler,
+        traceIdGenerator: mockDependencies.traceIdGenerator, // 注入
+        requestIdGenerator: mockDependencies.requestIdGenerator, // 注入
       });
       const originalError = new Error('Generate API error');
       mockIntegrationManagerAdapter.generateReport.mockRejectedValue(
@@ -303,14 +383,21 @@ describe('CliReportGenerator', () => {
       // errorHandler.handle に CliError インスタンスが渡されることを検証
       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
         expect.objectContaining({
-          // CliError インスタンスであることを期待
+          // CliError でラップされていることを確認
           name: 'CliError',
-          code: 'ERR_CLI_REPORT_GENERATE',
+          code: 'ERR_CLI_REPORTGENERATOR_GENERATEREPORT', // 修正: クラス名を含むエラーコード
           cause: originalError,
         }),
         'CliReportGenerator',
         operation,
-        { reportType, format: 'markdown', outputPath: undefined, noCache: true }
+        expect.objectContaining({
+          reportType,
+          format: 'markdown',
+          outputPath: undefined,
+          noCache: true,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       expect(result).toBe(errorHandlerResult);
       expect(emitErrorEvent).toHaveBeenCalledTimes(1); // エラーイベントは発行される

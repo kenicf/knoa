@@ -31,8 +31,48 @@ function createMockEventEmitter() {
 
   return {
     emit: jest.fn(),
-    emitStandardized: jest.fn(), // ★単純な jest.fn() に戻す
-    emitStandardizedAsync: jest.fn().mockResolvedValue(true), // 非同期版も単純なモックで良い場合が多い
+    emitStandardized: jest.fn().mockImplementation(function (
+      component,
+      action,
+      data = {}
+    ) {
+      // 実際の EventEmitter のように ID を付与する処理を模倣
+      const traceId = this._traceIdGenerator();
+      const requestId = this._requestIdGenerator();
+      const standardizedData = {
+        ...data,
+        timestamp: new Date().toISOString(), // timestamp も付与
+        component,
+        action,
+        traceId,
+        requestId,
+      };
+      // 実際の emit 処理は行わないが、呼び出しは記録される
+      // 必要であれば、内部で別の jest.fn() を呼び出して記録しても良い
+      // console.log('Mock emitStandardized called:', component, action, standardizedData); // デバッグ用
+      return true; // 実際の emitStandardized の戻り値に合わせる (リスナーがいれば true)
+    }),
+    emitStandardizedAsync: jest.fn().mockImplementation(async function (
+      component,
+      action,
+      data = {}
+    ) {
+      // 実際の EventEmitter のように ID を付与する処理を模倣
+      const traceId = this._traceIdGenerator();
+      const requestId = this._requestIdGenerator();
+      const standardizedData = {
+        ...data,
+        timestamp: new Date().toISOString(), // timestamp も付与
+        component,
+        action,
+        traceId,
+        requestId,
+      };
+      // console.log('Mock emitStandardizedAsync called:', component, action, standardizedData); // デバッグ用
+      // 非同期処理を模倣 (即時解決)
+      await Promise.resolve();
+      return true; // 実際の emitStandardizedAsync の戻り値に合わせる
+    }),
     on: jest.fn(),
     once: jest.fn(),
     removeListener: jest.fn(),
@@ -201,7 +241,7 @@ function mockTimestamp(isoString) {
 
 /**
  * 共通のモック依存関係オブジェクトを作成
- * @returns {Object} モック依存関係オブジェクト { logger, eventEmitter, errorHandler, storageService, validator, ... }
+ * @returns {Object} モック依存関係オブジェクト { logger, eventEmitter, errorHandler, storageService, validator, traceIdGenerator, requestIdGenerator, ... }
  */
 function createMockDependencies() {
   const mockLogger = createMockLogger();
@@ -326,6 +366,9 @@ function createMockDependencies() {
     validator: mockValidator,
     handlebars: mockHandlebars,
     integrationManagerAdapter: mockIntegrationManagerAdapter, // 追加
+    // ID生成関数のモックも追加
+    traceIdGenerator: jest.fn(() => `mock-trace-${Date.now()}`),
+    requestIdGenerator: jest.fn(() => `mock-req-${Date.now()}`),
   };
 }
 

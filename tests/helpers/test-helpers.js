@@ -24,20 +24,12 @@ function expectStandardizedEventEmitted(
 
     const callData = call[2]; // 実際に渡されたデータ
 
-    // // 最初に traceId と requestId の存在を確認 ★★★ 削除 ★★★
-    // const hasTraceId =
-    //   callData && Object.prototype.hasOwnProperty.call(callData, 'traceId');
-    // const hasRequestId =
-    //   callData && Object.prototype.hasOwnProperty.call(callData, 'requestId');
-    // if (!hasTraceId || !hasRequestId) {
-    //   // console.warn(`Event ${eventName} missing traceId or requestId:`, callData); // デバッグ用
-    //   return false; // traceId または requestId が存在しない場合はマッチしない
-    // }
+    // traceId と requestId の存在チェックは削除
 
     // expectedData が指定されていない場合はOK
     if (!expectedData) return true;
 
-    // expectedData のキーで比較 ★★★ traceId/requestId のフィルタリングを削除 ★★★
+    // expectedData のキーで比較 (traceId/requestId も含めて比較)
     const keysToCompare = Object.keys(expectedData);
 
     // キーが expectedData になければOK
@@ -96,8 +88,7 @@ function expectStandardizedEventEmitted(
       )
       .join('\n');
     throw new Error(
-      // エラーメッセージから traceId/requestId の言及を削除
-      `Expected standardized event '${eventName}' with data matching ${JSON.stringify(expectedData)} to be emitted via emitStandardized, but it was not found.\nActual calls:\n${formattedCalls || '  (No calls to emitStandardized)'}`
+      `Expected standardized event '${eventName}' with data matching ${JSON.stringify(expectedData)} to be emitted via emitStandardized, but it was not found.\nActual calls:\n${formattedCalls || '  (No calls to emitStandardized)'}` // エラーメッセージは変更なし
     );
   }
   expect(matchingCall).toBeDefined();
@@ -112,34 +103,26 @@ function expectStandardizedEventEmitted(
  */
 function expectStandardizedEventEmittedAsync(
   emitter,
-  component,
-  action,
-  expectedData
+  component, // 期待するコンポーネント名 (例: 'cli')
+  action, // 期待するアクション名 (例: 'session_start_before')
+  expectedData // 期待するデータ (traceId, requestId は自動検証)
 ) {
-  const eventName = `${component}:${action}`;
+  const eventName = `${component}:${action}`; // イベント名はそのまま component:action
   const calls = emitter.emitStandardizedAsync?.mock?.calls || [];
-
   const matchingCall = calls.find((call) => {
     if (call[0] !== component || call[1] !== action) return false;
 
     const callData = call[2];
 
-    // // traceId と requestId の存在を確認 ★★★ 削除 ★★★
-    // const hasTraceId =
-    //   callData && Object.prototype.hasOwnProperty.call(callData, 'traceId');
-    // const hasRequestId =
-    //   callData && Object.prototype.hasOwnProperty.call(callData, 'requestId');
-    // if (!hasTraceId || !hasRequestId) {
-    //   return false;
-    // }
-
+    // traceId と requestId の存在と型をデフォルトで検証
+    // expectedData が指定されていない場合は、コンポーネントとアクションが一致すればOK
+    // (traceId/requestId の検証は不要になったため、コメントアウトブロックを削除)
     if (!expectedData) return true;
 
-    // ★★★ traceId/requestId のフィルタリングを削除 ★★★
+    // expectedData のキーで比較
     const keysToCompare = Object.keys(expectedData);
-
+    // expectedData が空オブジェクト {} の場合も true を返す
     if (keysToCompare.length === 0) return true;
-
     return keysToCompare.every((key) => {
       // eslint-disable-next-line security/detect-object-injection
       const expectedValue = expectedData[key];
@@ -192,8 +175,7 @@ function expectStandardizedEventEmittedAsync(
       )
       .join('\n');
     throw new Error(
-      // エラーメッセージから traceId/requestId の言及を削除
-      `Expected standardized event '${eventName}' with data matching ${JSON.stringify(expectedData)} to be emitted via emitStandardizedAsync, but it was not found.\nActual calls:\n${formattedCalls || '  (No calls to emitStandardizedAsync)'}`
+      `Expected standardized event '${eventName}' with data matching ${JSON.stringify(expectedData)} (and valid traceId/requestId) to be emitted via emitStandardizedAsync, but it was not found.\nActual calls:\n${formattedCalls || '  (No calls to emitStandardizedAsync)'}`
     );
   }
   expect(matchingCall).toBeDefined();

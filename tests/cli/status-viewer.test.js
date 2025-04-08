@@ -1,9 +1,6 @@
 const CliStatusViewer = require('../../src/cli/status-viewer');
 const { ApplicationError, CliError } = require('../../src/lib/utils/errors'); // CliError をインポート
-const {
-  createMockLogger,
-  createMockEventEmitter,
-} = require('../helpers/mock-factory');
+const { createMockDependencies } = require('../helpers/mock-factory'); // createMockDependencies をインポート
 // expectStandardizedEventEmittedAsync をインポート
 const {
   expectStandardizedEventEmittedAsync,
@@ -23,21 +20,24 @@ describe('CliStatusViewer', () => {
   let mockErrorHandler;
   let cliStatusViewer;
 
+  let mockDependencies; // モック依存関係を保持する変数
+
   beforeEach(() => {
-    mockLogger = createMockLogger();
-    mockEventEmitter = createMockEventEmitter();
-    mockStateManagerAdapter = {
-      getCurrentState: jest.fn().mockReturnValue('task_in_progress'),
-    };
-    mockTaskManagerAdapter = {
-      getAllTasks: jest.fn(),
-    };
-    mockSessionManagerAdapter = {
-      getLatestSession: jest.fn(),
-    };
-    mockErrorHandler = {
-      handle: jest.fn(),
-    };
+    mockDependencies = createMockDependencies(); // 共通モックを生成
+    mockLogger = mockDependencies.logger; // 個別変数にも代入
+    mockEventEmitter = mockDependencies.eventEmitter; // 個別変数にも代入
+    mockStateManagerAdapter = mockDependencies.stateManagerAdapter; // 共通モックから取得
+    mockTaskManagerAdapter = mockDependencies.taskManagerAdapter; // 共通モックから取得
+    mockSessionManagerAdapter = mockDependencies.sessionManagerAdapter; // 共通モックから取得
+    mockErrorHandler = mockDependencies.errorHandler; // 共通モックから取得
+
+    // モックメソッドを再設定 (必要に応じて)
+    mockStateManagerAdapter.getCurrentState = jest
+      .fn()
+      .mockReturnValue('task_in_progress');
+    mockTaskManagerAdapter.getAllTasks = jest.fn();
+    mockSessionManagerAdapter.getLatestSession = jest.fn();
+    mockErrorHandler.handle = jest.fn();
 
     // テスト対象インスタンスを作成
     cliStatusViewer = new CliStatusViewer({
@@ -46,6 +46,8 @@ describe('CliStatusViewer', () => {
       stateManagerAdapter: mockStateManagerAdapter,
       taskManagerAdapter: mockTaskManagerAdapter,
       sessionManagerAdapter: mockSessionManagerAdapter,
+      traceIdGenerator: mockDependencies.traceIdGenerator, // 注入
+      requestIdGenerator: mockDependencies.requestIdGenerator, // 注入
       // errorHandler: mockErrorHandler,
     });
 
@@ -136,13 +138,26 @@ describe('CliStatusViewer', () => {
         1
       );
       expect(result).toEqual(expectedStatusInfo);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Getting workflow status'),
-        expect.objectContaining({ operation })
+      // logger.info が2回呼び出されることを確認
+      expect(mockLogger.info).toHaveBeenCalledTimes(2);
+      // 1回目の呼び出しを検証
+      expect(mockLogger.info).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('Getting workflow status...'), // メッセージ修正
+        expect.objectContaining({
+          operation,
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
-      // 成功ログの期待値を修正 (第2引数なし)
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Workflow status retrieved successfully')
+      // 2回目の呼び出しを検証
+      expect(mockLogger.info).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('Workflow status retrieved successfully.'), // メッセージ修正
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        })
       );
     });
 
@@ -155,14 +170,15 @@ describe('CliStatusViewer', () => {
       // expectStandardizedEventEmittedAsync に変更
       expectStandardizedEventEmittedAsync(
         mockEventEmitter,
-        'cli_status',
-        `${operation}_before`
+        'cli',
+        'status_get_before', // イベント名を修正
+        {} // データなし
       );
       expectStandardizedEventEmittedAsync(
         mockEventEmitter,
-        'cli_status',
-        `${operation}_after`,
-        { statusInfo: expectedStatusInfo }
+        'cli',
+        'status_get_after', // イベント名を修正
+        { statusInfo: expectedStatusInfo } // データ修正
       );
     });
 
@@ -190,9 +206,9 @@ describe('CliStatusViewer', () => {
       // expectStandardizedEventEmittedAsync に変更
       expectStandardizedEventEmittedAsync(
         mockEventEmitter,
-        'cli_status',
-        `${operation}_after`,
-        { statusInfo: result }
+        'cli',
+        'status_get_after', // イベント名を修正
+        { statusInfo: result } // データ修正
       );
     });
 
@@ -216,7 +232,10 @@ describe('CliStatusViewer', () => {
       // エラーがスローされたことを確認し、CliError であることを検証
       expect(caughtError).toBeInstanceOf(CliError);
       // エラーオブジェクトの code と cause を検証
-      expect(caughtError).toHaveProperty('code', 'ERR_CLI_STATUS_GET'); // コードは CliError で指定したもの
+      expect(caughtError).toHaveProperty(
+        'code',
+        'ERR_CLI_STATUSVIEWER_GETWORKFLOWSTATUS' // 修正: クラス名を含むエラーコード
+      ); // _handleError が生成するコードに修正
       expect(caughtError).toHaveProperty('cause', originalError);
 
       // emitErrorEvent が1回呼び出されたことを確認
@@ -227,8 +246,17 @@ describe('CliStatusViewer', () => {
         mockLogger,
         'CliStatusViewer',
         operation,
-        caughtError, // 捕捉したエラーオブジェクトを期待値とする
-        null
+        expect.objectContaining({
+          // ObjectContaining を維持しつつ、期待するプロパティを修正
+          name: 'CliError',
+          code: 'ERR_CLI_STATUSVIEWER_GETWORKFLOWSTATUS', // 修正後のコード
+          cause: originalError,
+        }),
+        null,
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -252,7 +280,10 @@ describe('CliStatusViewer', () => {
       // エラーがスローされたことを確認し、CliError であることを検証
       expect(caughtError).toBeInstanceOf(CliError);
       // エラーオブジェクトの code と cause を検証
-      expect(caughtError).toHaveProperty('code', 'ERR_CLI_STATUS_GET'); // コードは CliError で指定したもの
+      expect(caughtError).toHaveProperty(
+        'code',
+        'ERR_CLI_STATUSVIEWER_GETWORKFLOWSTATUS' // 修正: クラス名を含むエラーコード
+      ); // _handleError が生成するコードに修正
       expect(caughtError).toHaveProperty('cause', originalError);
 
       // emitErrorEvent が1回呼び出されたことを確認
@@ -263,8 +294,17 @@ describe('CliStatusViewer', () => {
         mockLogger,
         'CliStatusViewer',
         operation,
-        caughtError, // 捕捉したエラーオブジェクトを期待値とする
-        null
+        expect.objectContaining({
+          // ObjectContaining を維持しつつ、期待するプロパティを修正
+          name: 'CliError',
+          code: 'ERR_CLI_STATUSVIEWER_GETWORKFLOWSTATUS', // 修正後のコード
+          cause: originalError,
+        }),
+        null,
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
     });
 
@@ -277,7 +317,12 @@ describe('CliStatusViewer', () => {
         taskManagerAdapter: mockTaskManagerAdapter,
         sessionManagerAdapter: mockSessionManagerAdapter,
         errorHandler: mockErrorHandler,
+        traceIdGenerator: mockDependencies.traceIdGenerator, // 注入
+        requestIdGenerator: mockDependencies.requestIdGenerator, // 注入
       });
+      // }); // ここで beforeEach を閉じるべきではない -> 削除済みのはず
+
+      // test ケースを beforeEach の外に移動 -> test ケース定義内にコードを移動
       const originalError = new Error('Task DB error');
       mockTaskManagerAdapter.getAllTasks.mockRejectedValue(originalError);
       const errorHandlerResult = { error: 'Failed to get tasks' };
@@ -290,15 +335,18 @@ describe('CliStatusViewer', () => {
         expect.objectContaining({
           // CliError インスタンスであることを期待
           name: 'CliError',
-          code: 'ERR_CLI_STATUS_GET',
+          code: 'ERR_CLI_STATUSVIEWER_GETWORKFLOWSTATUS', // 修正: クラス名を含むエラーコード
           cause: originalError,
         }),
         'CliStatusViewer',
         operation,
-        null // context は null が渡されるはず
+        expect.objectContaining({
+          traceId: expect.any(String),
+          requestId: expect.any(String),
+        }) // traceId, requestId を追加
       );
       expect(result).toEqual(errorHandlerResult);
       expect(emitErrorEvent).toHaveBeenCalledTimes(1); // エラーイベントは発行される
-    });
-  });
-});
+    }); // test(...) の閉じ括弧
+  }); // describe('getWorkflowStatus', ...) の閉じ括弧
+}); // describe('CliStatusViewer', ...) の閉じ括弧

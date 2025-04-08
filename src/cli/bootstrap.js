@@ -39,6 +39,8 @@ function bootstrap() {
     const taskManagerAdapter = container.get('taskManagerAdapter');
     const feedbackManagerAdapter = container.get('feedbackManagerAdapter');
     const stateManagerAdapter = container.get('stateManagerAdapter');
+    const traceIdGenerator = container.get('traceIdGenerator'); // ID生成関数を取得
+    const requestIdGenerator = container.get('requestIdGenerator'); // ID生成関数を取得
 
     // CLIクラス群のインスタンス化
     const cliWorkflowManager = new CliWorkflowManager({
@@ -46,6 +48,8 @@ function bootstrap() {
       eventEmitter,
       integrationManagerAdapter,
       stateManagerAdapter,
+      traceIdGenerator, // 注入
+      requestIdGenerator, // 注入
     });
     const cliSessionManager = new CliSessionManager({
       logger,
@@ -53,6 +57,8 @@ function bootstrap() {
       integrationManagerAdapter,
       sessionManagerAdapter,
       storageService,
+      traceIdGenerator, // 注入
+      requestIdGenerator, // 注入
     });
     const cliTaskManager = new CliTaskManager({
       logger,
@@ -61,6 +67,8 @@ function bootstrap() {
       taskManagerAdapter,
       storageService,
       validator,
+      traceIdGenerator, // 注入
+      requestIdGenerator, // 注入
     });
     const cliFeedbackHandler = new CliFeedbackHandler({
       logger,
@@ -69,12 +77,16 @@ function bootstrap() {
       feedbackManagerAdapter,
       storageService,
       validator,
+      traceIdGenerator, // 注入
+      requestIdGenerator, // 注入
     });
     const cliReportGenerator = new CliReportGenerator({
       logger,
       eventEmitter,
       integrationManagerAdapter,
       storageService,
+      traceIdGenerator, // 注入
+      requestIdGenerator, // 注入
     });
     const cliStatusViewer = new CliStatusViewer({
       logger,
@@ -82,11 +94,15 @@ function bootstrap() {
       stateManagerAdapter,
       taskManagerAdapter,
       sessionManagerAdapter,
+      traceIdGenerator, // 注入
+      requestIdGenerator, // 注入
     });
     const cliComponentSyncer = new CliComponentSyncer({
       logger,
       eventEmitter,
       integrationManagerAdapter,
+      traceIdGenerator, // 注入
+      requestIdGenerator, // 注入
     });
 
     // CliFacade のインスタンス化 (CliInteractiveMode は Facade を必要とするため後で)
@@ -108,6 +124,8 @@ function bootstrap() {
       logger,
       eventEmitter,
       cliFacade,
+      traceIdGenerator, // 注入
+      requestIdGenerator, // 注入
     });
     // Facade に InteractiveMode インスタンスを設定
     cliFacade.interactiveMode = cliInteractiveMode;

@@ -1,10 +1,12 @@
 const {
   ApplicationError,
   CliError,
-  StorageError, // FileWriteError の代わりに StorageError を使用
+  StorageError,
 } = require('../lib/utils/errors');
 const { emitErrorEvent } = require('../lib/utils/error-helpers');
 const path = require('path'); // ファイルパス操作に必要
+// ID生成関数をインポート (EventEmitter から取得するため不要)
+// const { generateTraceId, generateRequestId } = require('../lib/utils/id-generators');
 
 /**
  * CLIにおけるレポート生成関連の操作を管理するクラス
@@ -16,31 +18,149 @@ class CliReportGenerator {
    * @param {object} options.eventEmitter - EventEmitterインスタンス (必須)
    * @param {object} options.integrationManagerAdapter - IntegrationManagerAdapterインスタンス (必須)
    * @param {object} options.storageService - StorageServiceインスタンス (必須)
-   * @param {object} options.errorHandler - エラーハンドラー (オプション)
+   * @param {object} [options.errorHandler] - エラーハンドラー (オプション)
+   * @param {Function} options.traceIdGenerator - トレースID生成関数 (必須)
+   * @param {Function} options.requestIdGenerator - リクエストID生成関数 (必須)
    */
   constructor(options = {}) {
-    // 必須依存関係のチェック
-    const requiredDependencies = [
-      'logger',
-      'eventEmitter',
-      'integrationManagerAdapter',
-      'storageService',
-    ];
-    for (const dep of requiredDependencies) {
-      if (!options[dep]) {
-        throw new ApplicationError(
-          `CliReportGenerator requires ${dep} instance.`
-        );
-      }
-    }
+    // 分割代入で依存関係を取得
+    const {
+      logger,
+      eventEmitter,
+      integrationManagerAdapter,
+      storageService,
+      errorHandler, // 任意
+      traceIdGenerator,
+      requestIdGenerator,
+    } = options;
 
-    this.logger = options.logger;
-    this.eventEmitter = options.eventEmitter;
-    this.integrationManager = options.integrationManagerAdapter;
-    this.storageService = options.storageService; // ファイル出力に使用
-    this.errorHandler = options.errorHandler;
+    // 必須依存関係のチェック
+    if (!logger)
+      throw new ApplicationError(
+        'CliReportGenerator requires logger instance.'
+      );
+    if (!eventEmitter)
+      throw new ApplicationError(
+        'CliReportGenerator requires eventEmitter instance.'
+      );
+    if (!integrationManagerAdapter)
+      throw new ApplicationError(
+        'CliReportGenerator requires integrationManagerAdapter instance.'
+      );
+    if (!storageService)
+      throw new ApplicationError(
+        'CliReportGenerator requires storageService instance.'
+      );
+    if (!traceIdGenerator)
+      throw new ApplicationError(
+        'CliReportGenerator requires traceIdGenerator function.'
+      );
+    if (!requestIdGenerator)
+      throw new ApplicationError(
+        'CliReportGenerator requires requestIdGenerator function.'
+      );
+
+    this.logger = logger;
+    this.eventEmitter = eventEmitter;
+    this.integrationManager = integrationManagerAdapter;
+    this.storageService = storageService;
+    this.errorHandler = errorHandler; // 任意なのでチェック不要
+    this._traceIdGenerator = traceIdGenerator;
+    this._requestIdGenerator = requestIdGenerator;
 
     this.logger.debug('CliReportGenerator initialized');
+  }
+
+  /**
+   * 標準化されたイベントを発行する内部ヘルパー
+   * @param {string} action - アクション名 (例: 'generate_before')
+   * @param {object} [data={}] - イベントデータ
+   * @param {string} [traceId] - トレースID (指定されなければ生成)
+   * @param {string} [requestId] - リクエストID (指定されなければ生成)
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _emitEvent(action, data = {}, traceId, requestId) {
+    if (
+      !this.eventEmitter ||
+      typeof this.eventEmitter.emitStandardizedAsync !== 'function'
+    ) {
+      this.logger.warn(
+        `Cannot emit event report_${action}: eventEmitter or emitStandardizedAsync is missing.`
+      );
+      return;
+    }
+    const finalTraceId = traceId || this._traceIdGenerator();
+    const finalRequestId = requestId || this._requestIdGenerator();
+    const eventData = {
+      ...data,
+      traceId: finalTraceId,
+      requestId: finalRequestId,
+    };
+    try {
+      // コンポーネント名を 'cli'、アクション名を 'report_action' 形式に統一
+      await this.eventEmitter.emitStandardizedAsync(
+        'cli',
+        `report_${action}`,
+        eventData
+      );
+    } catch (error) {
+      this.logger.warn(`イベント発行中にエラー: cli:report_${action}`, {
+        error,
+      });
+    }
+  }
+
+  /**
+   * エラー処理を行う内部ヘルパー
+   * @param {Error} error - 発生したエラー
+   * @param {string} operation - 操作名
+   * @param {object} [context={}] - エラーコンテキスト
+   * @returns {*} エラーハンドラーの戻り値、またはエラーを再スロー
+   * @throws {CliError|ApplicationError|StorageError} エラーハンドラーがない場合、またはエラーハンドラーがエラーをスローした場合
+   * @private
+   */
+  _handleError(error, operation, context = {}) {
+    // 特定のエラーコードや型はそのまま使う
+    const knownErrorCodes = [
+      'ERR_REPORT_GENERATE',
+      'ERR_REPORT_GENERATE_UNEXPECTED',
+      'ERR_STORAGE', // StorageError のコード
+      'ERR_CLI_FILE_WRITE', // StorageError のコード (writeText から)
+    ];
+    const isKnownAppError =
+      error instanceof ApplicationError && knownErrorCodes.includes(error.code);
+    const isKnownStorageError = error instanceof StorageError; // StorageError はそのまま
+    const isKnownError = isKnownAppError || isKnownStorageError;
+
+    const processedError = isKnownError
+      ? error
+      : new CliError(`Failed during ${operation}`, error, {
+          // エラーコード生成ルールを統一 (コンポーネント名を含む)
+          code: `ERR_CLI_REPORTGENERATOR_${operation.toUpperCase()}`,
+          ...context,
+        });
+
+    emitErrorEvent(
+      this.eventEmitter,
+      this.logger,
+      'CliReportGenerator',
+      operation,
+      processedError,
+      null,
+      context
+    );
+
+    if (this.errorHandler) {
+      return this.errorHandler.handle(
+        processedError,
+        'CliReportGenerator',
+        operation,
+        context
+      );
+    } else {
+      throw processedError;
+    }
   }
 
   /**
@@ -48,35 +168,38 @@ class CliReportGenerator {
    * @param {string} reportType - レポートタイプ (例: 'task_summary', 'workflow_status')
    * @param {object} reportOptions - レポートオプション (yargsでパースされたオブジェクト)
    * @returns {Promise<string>} 生成されたレポート内容、またはファイルパス
-   * @throws {ApplicationError} レポート生成に失敗した場合
+   * @throws {CliError|ApplicationError|StorageError} レポート生成または書き込みに失敗した場合
    */
   async generateReport(reportType, reportOptions = {}) {
     const operation = 'generateReport';
-    const outputPath = reportOptions.output; // yargs でパースされたオプションから取得
-    const format = reportOptions.format || 'text'; // デフォルトは text
+    const outputPath = reportOptions.output;
+    const format = reportOptions.format || 'text';
     const noCache = reportOptions.noCache || false;
-
-    this.logger.info(`Generating report: ${reportType}`, {
-      operation,
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = {
       reportType,
       format,
       outputPath,
       noCache,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_report',
-      `${operation}_before`,
-      { reportType, format, outputPath, noCache }
+      traceId,
+      requestId,
+    };
+
+    await this._emitEvent(
+      'generate_before',
+      { reportType, format, outputPath, noCache },
+      traceId,
+      requestId
     );
+    this.logger.info(`Generating report: ${reportType}`, context);
 
     try {
-      // integrationManagerAdapter を使用してレポートを生成
       const reportContent = await this.integrationManager.generateReport(
         reportType,
-        { format, noCache } // 必要なオプションのみ渡す
+        { format, noCache }
       );
 
-      // integrationManagerAdapter がエラーオブジェクトを返す場合があるためチェック
       if (typeof reportContent === 'object' && reportContent.error) {
         throw new ApplicationError(
           `Report generation failed: ${reportContent.error}`,
@@ -92,7 +215,6 @@ class CliReportGenerator {
         );
       }
       if (typeof reportContent !== 'string') {
-        // 成功時は文字列を期待
         throw new ApplicationError(
           'Report generation did not return expected string content.',
           {
@@ -104,90 +226,44 @@ class CliReportGenerator {
 
       let resultPath = null;
       if (outputPath) {
-        // StorageService を使用してファイルに保存
         const writeSuccess = await this.storageService.writeText(
-          '.', // カレントディレクトリ基準
+          '.',
           outputPath,
           reportContent
         );
         if (!writeSuccess) {
-          // StorageError を使用するように修正 (コンストラクタ呼び出し修正)
           throw new StorageError(`Failed to write report file: ${outputPath}`, {
-            // options オブジェクトとして渡す
-            cause: null,
+            code: 'ERR_CLI_FILE_WRITE', // StorageError がこのコードを持つようにする
             context: { reportType, path: outputPath },
           });
         }
         resultPath = outputPath;
-        this.logger.info(`Report saved successfully to: ${resultPath}`);
+        this.logger.info(`Report saved successfully to: ${resultPath}`, {
+          traceId,
+          requestId,
+        });
       } else {
-        this.logger.info(`Report generated successfully: ${reportType}`);
-        // 標準出力への表示は呼び出し元 (Facade or EntryPoint) で行う
+        this.logger.info(`Report generated successfully: ${reportType}`, {
+          traceId,
+          requestId,
+        });
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_report',
-        `${operation}_after`,
+      await this._emitEvent(
+        'generate_after',
         {
           reportType,
           format,
           outputPath: resultPath,
           reportLength: reportContent.length,
-        }
+        },
+        traceId,
+        requestId
       );
-      // outputPath が指定されている場合はパスを、そうでなければレポート内容を返す
       return outputPath ? resultPath : reportContent;
     } catch (error) {
-      let cliError; // エラーオブジェクトを保持する変数
-      const baseContext = { reportType, format, outputPath, noCache };
-
-      // エラーの種類を判別し、適切なエラーオブジェクトを生成または選択
-      if (error.code === 'ERR_STORAGE') {
-        // error.code で判定するように変更
-        // StorageError はそのまま使用
-        cliError = error;
-      } else if (
-        error.code === 'ERR_REPORT_GENERATE' ||
-        error.code === 'ERR_REPORT_GENERATE_UNEXPECTED'
-      ) {
-        // アダプターが返す特定のエラーもそのまま使用
-        cliError = error;
-      } else {
-        // 上記以外のエラー (アダプターがスローしたエラーなど) は CliError でラップ
-        cliError = new CliError(
-          `Failed to generate report ${reportType}`,
-          error, // cause
-          {
-            // context
-            code: 'ERR_CLI_REPORT_GENERATE',
-            ...baseContext,
-          }
-        );
-      }
-
-      // エラーイベントを発行
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliReportGenerator',
-        operation,
-        cliError, // 適切に選択または生成されたエラーオブジェクトを使用
-        null,
-        baseContext
-      );
-
-      // errorHandler があれば委譲
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError, // 適切に選択または生成されたエラーオブジェクトを使用
-          'CliReportGenerator',
-          operation,
-          baseContext
-        );
-      } else {
-        // errorHandler がなければスロー
-        throw cliError; // 適切に選択または生成されたエラーオブジェクトをスロー
-      }
+      // エラーハンドラが値を返さない場合は null を返すなど、適切なデフォルト値を検討
+      return this._handleError(error, operation, context);
     }
   }
 }

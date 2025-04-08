@@ -1,5 +1,7 @@
-const { ApplicationError, CliError } = require('../lib/utils/errors'); // CliError をインポート
+const { ApplicationError, CliError } = require('../lib/utils/errors');
 const { emitErrorEvent } = require('../lib/utils/error-helpers');
+// ID生成関数をインポート (EventEmitter から取得するため不要)
+// const { generateTraceId, generateRequestId } = require('../lib/utils/id-generators');
 
 /**
  * CLIにおけるワークフロー関連の操作を管理するクラス
@@ -11,31 +13,146 @@ class CliWorkflowManager {
    * @param {object} options.eventEmitter - EventEmitterインスタンス (必須)
    * @param {object} options.integrationManagerAdapter - IntegrationManagerAdapterインスタンス (必須)
    * @param {object} options.stateManagerAdapter - StateManagerAdapterインスタンス (必須)
-   * @param {object} options.errorHandler - エラーハンドラー (オプション)
+   * @param {object} [options.errorHandler] - エラーハンドラー (オプション)
+   * @param {Function} options.traceIdGenerator - トレースID生成関数 (必須)
+   * @param {Function} options.requestIdGenerator - リクエストID生成関数 (必須)
    */
   constructor(options = {}) {
-    // 必須依存関係のチェック
-    const requiredDependencies = [
-      'logger',
-      'eventEmitter',
-      'integrationManagerAdapter',
-      'stateManagerAdapter',
-    ];
-    for (const dep of requiredDependencies) {
-      if (!options[dep]) {
-        throw new ApplicationError(
-          `CliWorkflowManager requires ${dep} instance.`
-        );
-      }
-    }
+    // 分割代入で依存関係を取得
+    const {
+      logger,
+      eventEmitter,
+      integrationManagerAdapter,
+      stateManagerAdapter,
+      errorHandler, // 任意
+      traceIdGenerator,
+      requestIdGenerator,
+    } = options;
 
-    this.logger = options.logger;
-    this.eventEmitter = options.eventEmitter;
-    this.integrationManager = options.integrationManagerAdapter;
-    this.stateManager = options.stateManagerAdapter;
-    this.errorHandler = options.errorHandler;
+    // 必須依存関係のチェック
+    if (!logger)
+      throw new ApplicationError(
+        'CliWorkflowManager requires logger instance.'
+      );
+    if (!eventEmitter)
+      throw new ApplicationError(
+        'CliWorkflowManager requires eventEmitter instance.'
+      );
+    if (!integrationManagerAdapter)
+      throw new ApplicationError(
+        'CliWorkflowManager requires integrationManagerAdapter instance.'
+      );
+    if (!stateManagerAdapter)
+      throw new ApplicationError(
+        'CliWorkflowManager requires stateManagerAdapter instance.'
+      );
+    if (!traceIdGenerator)
+      throw new ApplicationError(
+        'CliWorkflowManager requires traceIdGenerator function.'
+      );
+    if (!requestIdGenerator)
+      throw new ApplicationError(
+        'CliWorkflowManager requires requestIdGenerator function.'
+      );
+
+    this.logger = logger;
+    this.eventEmitter = eventEmitter;
+    this.integrationManager = integrationManagerAdapter;
+    this.stateManager = stateManagerAdapter;
+    this.errorHandler = errorHandler; // 任意なのでチェック不要
+    this._traceIdGenerator = traceIdGenerator;
+    this._requestIdGenerator = requestIdGenerator;
 
     this.logger.debug('CliWorkflowManager initialized');
+  }
+
+  /**
+   * 標準化されたイベントを発行する内部ヘルパー
+   * @param {string} action - アクション名 (例: 'init_before')
+   * @param {object} [data={}] - イベントデータ
+   * @param {string} [traceId] - トレースID (指定されなければ生成)
+   * @param {string} [requestId] - リクエストID (指定されなければ生成)
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _emitEvent(action, data = {}, traceId, requestId) {
+    if (
+      !this.eventEmitter ||
+      typeof this.eventEmitter.emitStandardizedAsync !== 'function'
+    ) {
+      this.logger.warn(
+        `Cannot emit event workflow_${action}: eventEmitter or emitStandardizedAsync is missing.`
+      );
+      return;
+    }
+    const finalTraceId = traceId || this._traceIdGenerator();
+    const finalRequestId = requestId || this._requestIdGenerator();
+    const eventData = {
+      ...data,
+      traceId: finalTraceId,
+      requestId: finalRequestId,
+    };
+    try {
+      // コンポーネント名を 'cli'、アクション名を 'workflow_action' 形式に統一
+      await this.eventEmitter.emitStandardizedAsync(
+        'cli',
+        `workflow_${action}`,
+        eventData
+      );
+    } catch (error) {
+      this.logger.warn(`イベント発行中にエラー: cli:workflow_${action}`, {
+        error,
+      });
+    }
+  }
+
+  /**
+   * エラー処理を行う内部ヘルパー
+   * @param {Error} error - 発生したエラー
+   * @param {string} operation - 操作名
+   * @param {object} [context={}] - エラーコンテキスト
+   * @returns {*} エラーハンドラーの戻り値、またはエラーを再スロー
+   * @throws {CliError|ApplicationError} エラーハンドラーがない場合、またはエラーハンドラーがエラーをスローした場合
+   * @private
+   */
+  _handleError(error, operation, context = {}) {
+    // 特定のエラーコードや型はそのまま使う
+    const knownErrorCodes = [
+      'ERR_WORKFLOW_INIT',
+      'ERR_WORKFLOW_INIT_UNEXPECTED',
+    ];
+    const isKnownAppError =
+      error instanceof ApplicationError && knownErrorCodes.includes(error.code);
+    const isKnownError = isKnownAppError; // 他の特定エラー型があれば追加
+
+    const processedError = isKnownError
+      ? error
+      : new CliError(`Failed during ${operation}`, error, {
+          // エラーコード生成ルールを統一 (コンポーネント名を含む)
+          code: `ERR_CLI_WORKFLOWMANAGER_${operation.toUpperCase()}`,
+          ...context,
+        });
+
+    emitErrorEvent(
+      this.eventEmitter,
+      this.logger,
+      'CliWorkflowManager',
+      operation,
+      processedError,
+      null,
+      context
+    );
+
+    if (this.errorHandler) {
+      return this.errorHandler.handle(
+        processedError,
+        'CliWorkflowManager',
+        operation,
+        context
+      );
+    } else {
+      throw processedError;
+    }
   }
 
   /**
@@ -43,102 +160,65 @@ class CliWorkflowManager {
    * @param {string} projectId - プロジェクトID
    * @param {string} request - 元のリクエスト
    * @returns {Promise<object>} 初期化結果
-   * @throws {ApplicationError} 初期化に失敗した場合
+   * @throws {CliError|ApplicationError} 初期化に失敗した場合
    */
   async initializeWorkflow(projectId, request) {
     const operation = 'initializeWorkflow';
-    this.logger.info(`Initializing workflow for project: ${projectId}`, {
-      operation,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_workflow',
-      `${operation}_before`,
-      { projectId, request }
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { projectId, request, traceId, requestId };
+
+    await this._emitEvent(
+      'init_before',
+      { projectId, request },
+      traceId,
+      requestId
+    );
+    this.logger.info(
+      `Initializing workflow for project: ${projectId}`,
+      context
     );
 
     try {
-      // integrationManagerAdapter を使用して初期化を実行
       const result = await this.integrationManager.initializeWorkflow(
         projectId,
         request
       );
 
-      // integrationManagerAdapter がエラーオブジェクトを返す場合があるためチェック
       if (result && result.error) {
-        // ApplicationError のシグネチャに合わせて修正
         throw new ApplicationError(
           `Workflow initialization failed: ${result.error}`,
           {
-            // options オブジェクト
             code: 'ERR_WORKFLOW_INIT',
             context: { projectId, request, errorDetail: result.error },
           }
         );
       }
       if (!result || !result.project) {
-        // 成功時の期待される構造を確認
-        // ApplicationError のシグネチャに合わせて修正
         throw new ApplicationError(
           'Workflow initialization did not return expected result.',
           {
-            // options オブジェクト
             code: 'ERR_WORKFLOW_INIT_UNEXPECTED',
             context: { projectId, request, result },
           }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_workflow',
-        `${operation}_after`,
-        { projectId, request, result }
+      await this._emitEvent(
+        'init_after',
+        { projectId, request, result },
+        traceId,
+        requestId
       );
       this.logger.info(
-        `Workflow initialized successfully for project: ${projectId}`
+        `Workflow initialized successfully for project: ${projectId}`,
+        { traceId, requestId }
       );
       return result;
     } catch (error) {
-      // ApplicationError のコンストラクタ呼び出しとエラーコードの扱いを修正
-      const cliError =
-        error instanceof ApplicationError &&
-        (error.code === 'ERR_WORKFLOW_INIT' ||
-          error.code === 'ERR_WORKFLOW_INIT_UNEXPECTED')
-          ? error // 特定のエラーコードはそのまま使用
-          : new CliError( // CliError でラップするように変更
-              `Failed to initialize workflow for project ${projectId}`,
-              error, // cause
-              {
-                // context
-                code: 'ERR_CLI_WORKFLOW_INIT', // エラーコードを指定
-                projectId,
-                request,
-              }
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliWorkflowManager',
-        operation,
-        cliError,
-        null,
-        { projectId, request }
-      );
-
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliWorkflowManager',
-          operation,
-          { projectId, request }
-        );
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
-
-  // 他のワークフロー関連メソッド (例: getWorkflowStatus など) をここに追加
-  // getWorkflowStatus は CliStatusViewer に移譲する可能性が高い
 }
 
 module.exports = CliWorkflowManager;

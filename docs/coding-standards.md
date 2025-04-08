@@ -13,7 +13,7 @@
     *   テストファイル: `kebab-case.test.js` (例: `user-service.test.js`)
     *   Markdownファイル: `kebab-case.md` (例: `coding-standards.md`)
 *   **イベント名:** `component:action` 形式を使用します。コンポーネント名とアクション名は `snake_case` または `camelCase` を使用できますが、プロジェクト内で統一してください。（現状のコードでは `snake_case` が多いようです）
-    *   例: `cache:item_set`, `git:commit_create_after`, `plugin:method_invoked`
+    *   例: `cache:item_set`, `git:commit_create_after`, `plugin:method_invoked`, `cli:init_before`, `cli:session_start_after`
 *   **テスト関連:**
     *   `describe` ブロック: テスト対象のクラス名や機能名を記述します (例: `'UserService'`, `'getUserData method'`)。
     *   `test` / `it` ブロック: テストケースの内容を具体的に記述します。`should` から始め、期待される動作を明確にします (例: `'should return user data for a valid ID'`, `'should throw NotFoundError if user does not exist'`)。
@@ -87,6 +87,7 @@
     *   `try...catch` ブロックを使用して、エラーが発生する可能性のある処理を囲みます。
     *   捕捉したエラーは、単にコンソールに出力するだけでなく、より具体的なカスタムエラークラス（`src/lib/utils/errors.js` で定義されているもの、または必要に応じて追加したもの）にラップして再スローするか、`errorHandler` に処理を委譲します。
     *   エラーメッセージには、問題の原因を特定するのに役立つコンテキスト情報を含めるように努めます。
+    *   CLIクラス固有のエラーコードは `ERR_CLI_<CLASSNAME>_<OPERATION>` の形式を推奨します (例: `ERR_CLI_TASKMANAGER_CREATETASK`)。
 *   **変数宣言:**
     *   再代入しない変数は `const` を使用します。
     *   再代入が必要な変数は `let` を使用します。
@@ -103,5 +104,5 @@
 *   **単一責任のテスト:** 各テストケースは、一つの具体的な動作や条件を検証することに集中します。複数のことを一度にテストしようとしないでください。
 *   **適切なアサーション:** `expect` を使用して、テストの期待結果を明確に検証します。単にエラーが発生しないことを確認するだけでなく、具体的な値、状態、モックの呼び出しなどを検証します。
 *   **マジックナンバー/文字列の回避:** テストコード内で使用する特定の数値や文字列には、意味のある定数名を付けるか、テストデータのセットアップで明確にします。
-*   **テストヘルパーの活用:** 繰り返し使用するセットアップロジックやカスタムアサーションは、`tests/helpers` 内のヘルパー関数に抽出し、テストコードの重複を減らします ([テスト戦略とガイドライン](./testing-guidelines.md#7-テストヘルパー利用法-testshelpers) 参照)。
+*   **テストヘルパーの活用:** 繰り返し使用するセットアップロジックやカスタムアサーションは、`tests/helpers` 内のヘルパー関数（例: `createMockDependencies`, `expectStandardizedEventEmittedAsync`）に抽出し、テストコードの重複を減らします ([テスト戦略とガイドライン](./testing-guidelines.md#7-テストヘルパー利用法-testshelpers) 参照)。
 *   **プロダクションコードへの依存:** テストコードは、テスト対象のパブリックインターフェースに依存すべきであり、内部実装の詳細に過度に依存しないようにします。これにより、リファクタリング耐性が向上します。

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * 統合マネージャーCLI (リファクタリング版)
  *
@@ -346,7 +345,7 @@ function parseArguments(processArgv) {
       .version()
       .alias('v', 'version')
       .strict()
-      .argv.exitProcess(false) // エラー時にプロセスを終了しない
+      .exitProcess(false).argv // exitProcess を argv の前に移動
   ); // 未定義のコマンドやオプションをエラーにする
 }
 
@@ -382,7 +381,8 @@ async function runCommand(argv, cliFacade, logger) {
     if (error.cause) {
       console.error(colors.red('原因:'), error.cause.message || error.cause);
     }
-    process.exit(1); // エラー終了
+    // process.exit(1); // エラー終了 -> エラーをスローするように変更
+    throw error; // エラーを再スロー
   }
 }
 
@@ -401,12 +401,20 @@ async function main() {
     await runCommand(argv, cliFacade, logger);
   } catch (error) {
     // bootstrap や parseArguments でのエラーを捕捉
-    // logger が利用可能であれば logger.fatal を使う (bootstrap 成功時)
+    // logger が利用可能であれば logger.fatal を使う
     if (logger) {
       logger.fatal('CLI initialization or argument parsing failed:', error);
+    } else {
+      // logger が利用できない場合は console.error で代替
+      console.error(
+        'Fatal error during initialization or argument parsing:',
+        error
+      );
     }
+    // 常にコンソールにエラーを出力し、プロセスを終了する
     console.error(colors.red('\n致命的エラーが発生しました:'), error);
-    process.exit(1);
+    // process.exit(1); -> エラーをスローするように変更
+    throw error; // エラーを再スロー
   }
 }
 
@@ -425,6 +433,8 @@ if (require.main === module) {
     // logger が利用可能であれば logger.fatal を使うべきだが、
     // main 実行前の初期化エラーの可能性も考慮し console.error を残す
     console.error(colors.red('\n予期せぬ致命的エラーが発生しました:'), error);
-    process.exit(1);
+    // process.exit(1); -> エラーをスローするように変更
+    // ここでエラーをスローしても、Node.js のデフォルトの動作でプロセスは終了する
+    // throw error; // 必要であれば再スロー
   });
 }

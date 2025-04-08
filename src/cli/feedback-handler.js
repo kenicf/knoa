@@ -3,10 +3,12 @@ const {
   ValidationError,
   CliError,
   NotFoundError,
-  StorageError, // FileWriteError の代わりに StorageError をインポート
+  StorageError,
 } = require('../lib/utils/errors');
 const { emitErrorEvent } = require('../lib/utils/error-helpers');
 const path = require('path'); // レポート保存パス用
+// ID生成関数をインポート (EventEmitter から取得するため不要)
+// const { generateTraceId, generateRequestId } = require('../lib/utils/id-generators');
 
 /**
  * CLIにおけるフィードバック関連の操作を管理するクラス
@@ -20,35 +22,172 @@ class CliFeedbackHandler {
    * @param {object} options.feedbackManagerAdapter - FeedbackManagerAdapterインスタンス (必須)
    * @param {object} options.storageService - StorageServiceインスタンス (必須)
    * @param {object} options.validator - Validatorインスタンス (必須)
-   * @param {object} options.errorHandler - エラーハンドラー (オプション)
+   * @param {object} [options.errorHandler] - エラーハンドラー (オプション)
+   * @param {Function} options.traceIdGenerator - トレースID生成関数 (必須)
+   * @param {Function} options.requestIdGenerator - リクエストID生成関数 (必須)
    */
   constructor(options = {}) {
-    // 必須依存関係のチェック
-    const requiredDependencies = [
-      'logger',
-      'eventEmitter',
-      'integrationManagerAdapter',
-      'feedbackManagerAdapter',
-      'storageService',
-      'validator',
-    ];
-    for (const dep of requiredDependencies) {
-      if (!options[dep]) {
-        throw new ApplicationError(
-          `CliFeedbackHandler requires ${dep} instance.`
-        );
-      }
-    }
+    // 分割代入で依存関係を取得
+    const {
+      logger,
+      eventEmitter,
+      integrationManagerAdapter,
+      feedbackManagerAdapter,
+      storageService,
+      validator,
+      errorHandler, // 任意
+      traceIdGenerator,
+      requestIdGenerator,
+    } = options;
 
-    this.logger = options.logger;
-    this.eventEmitter = options.eventEmitter;
-    this.integrationManager = options.integrationManagerAdapter;
-    this.feedbackManager = options.feedbackManagerAdapter;
-    this.storageService = options.storageService;
-    this.validator = options.validator; // フィードバック入力検証用
-    this.errorHandler = options.errorHandler;
+    // 必須依存関係のチェック
+    if (!logger)
+      throw new ApplicationError(
+        'CliFeedbackHandler requires logger instance.'
+      );
+    if (!eventEmitter)
+      throw new ApplicationError(
+        'CliFeedbackHandler requires eventEmitter instance.'
+      );
+    if (!integrationManagerAdapter)
+      throw new ApplicationError(
+        'CliFeedbackHandler requires integrationManagerAdapter instance.'
+      );
+    if (!feedbackManagerAdapter)
+      throw new ApplicationError(
+        'CliFeedbackHandler requires feedbackManagerAdapter instance.'
+      );
+    if (!storageService)
+      throw new ApplicationError(
+        'CliFeedbackHandler requires storageService instance.'
+      );
+    if (!validator)
+      throw new ApplicationError(
+        'CliFeedbackHandler requires validator instance.'
+      );
+    if (!traceIdGenerator)
+      throw new ApplicationError(
+        'CliFeedbackHandler requires traceIdGenerator function.'
+      );
+    if (!requestIdGenerator)
+      throw new ApplicationError(
+        'CliFeedbackHandler requires requestIdGenerator function.'
+      );
+
+    this.logger = logger;
+    this.eventEmitter = eventEmitter;
+    this.integrationManager = integrationManagerAdapter;
+    this.feedbackManager = feedbackManagerAdapter;
+    this.storageService = storageService;
+    this.validator = validator;
+    this.errorHandler = errorHandler; // 任意なのでチェック不要
+    this._traceIdGenerator = traceIdGenerator;
+    this._requestIdGenerator = requestIdGenerator;
 
     this.logger.debug('CliFeedbackHandler initialized');
+  }
+
+  /**
+   * 標準化されたイベントを発行する内部ヘルパー
+   * @param {string} action - アクション名 (例: 'collect_before')
+   * @param {object} [data={}] - イベントデータ
+   * @param {string} [traceId] - トレースID (指定されなければ生成)
+   * @param {string} [requestId] - リクエストID (指定されなければ生成)
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _emitEvent(action, data = {}, traceId, requestId) {
+    if (
+      !this.eventEmitter ||
+      typeof this.eventEmitter.emitStandardizedAsync !== 'function'
+    ) {
+      this.logger.warn(
+        `Cannot emit event feedback_${action}: eventEmitter or emitStandardizedAsync is missing.`
+      );
+      return;
+    }
+    const finalTraceId = traceId || this._traceIdGenerator();
+    const finalRequestId = requestId || this._requestIdGenerator();
+    const eventData = {
+      ...data,
+      traceId: finalTraceId,
+      requestId: finalRequestId,
+    };
+    try {
+      // コンポーネント名を 'cli'、アクション名を 'feedback_action' 形式に統一
+      await this.eventEmitter.emitStandardizedAsync(
+        'cli',
+        `feedback_${action}`,
+        eventData
+      );
+    } catch (error) {
+      this.logger.warn(`イベント発行中にエラー: cli:feedback_${action}`, {
+        error,
+      });
+    }
+  }
+
+  /**
+   * エラー処理を行う内部ヘルパー
+   * @param {Error} error - 発生したエラー
+   * @param {string} operation - 操作名
+   * @param {object} [context={}] - エラーコンテキスト
+   * @returns {*} エラーハンドラーの戻り値、またはエラーを再スロー
+   * @throws {CliError|ApplicationError|NotFoundError|StorageError|ValidationError} エラーハンドラーがない場合、またはエラーハンドラーがエラーをスローした場合
+   * @private
+   */
+  _handleError(error, operation, context = {}) {
+    // 特定のエラーコードや型はそのまま使う
+    const knownErrorCodes = [
+      'ERR_CLI_FEEDBACK_COLLECT_ADAPTER',
+      'ERR_CLI_FEEDBACK_COLLECT_UNEXPECTED',
+      'ERR_CLI_FEEDBACK_RESOLVE_ADAPTER',
+      'ERR_CLI_FEEDBACK_RESOLVE_UNEXPECTED',
+      'ERR_CLI_FEEDBACK_NOT_FOUND', // NotFoundError から来る可能性
+      'ERR_CLI_FEEDBACK_REOPEN_UNEXPECTED',
+      'ERR_CLI_FEEDBACK_REPORT_GENERATE',
+      'ERR_CLI_FILE_WRITE', // StorageError から来る可能性
+      'ERR_CLI_FEEDBACK_PRIORITIZE_UNEXPECTED',
+      'ERR_CLI_FEEDBACK_INTEGRATE_TASK_FAILED',
+      'ERR_CLI_FEEDBACK_INTEGRATE_SESSION_FAILED',
+      'ERR_CLI_FILE_READ', // StorageError から来る可能性
+    ];
+    const isKnownCliError =
+      error instanceof CliError && knownErrorCodes.includes(error.code);
+    const isKnownError =
+      error instanceof NotFoundError ||
+      error instanceof StorageError ||
+      error instanceof ValidationError ||
+      isKnownCliError;
+
+    const processedError = isKnownError
+      ? error
+      : new CliError(`Failed during ${operation}`, error, {
+          // エラーコード生成ルールを統一 (コンポーネント名を含む)
+          code: `ERR_CLI_FEEDBACKHANDLER_${operation.toUpperCase()}`,
+          ...context,
+        });
+
+    emitErrorEvent(
+      this.eventEmitter,
+      this.logger,
+      'CliFeedbackHandler',
+      operation,
+      processedError,
+      null,
+      context
+    );
+
+    if (this.errorHandler) {
+      return this.errorHandler.handle(
+        processedError,
+        'CliFeedbackHandler',
+        operation,
+        context
+      );
+    } else {
+      throw processedError;
+    }
   }
 
   /**
@@ -56,35 +195,33 @@ class CliFeedbackHandler {
    * @param {string} taskId - タスクID
    * @param {string} testCommand - テストコマンド
    * @returns {Promise<object>} 生成されたフィードバック情報
-   * @throws {CliError} 収集に失敗した場合
+   * @throws {CliError|ValidationError} 収集に失敗した場合
    */
   async collectFeedback(taskId, testCommand) {
     const operation = 'collectFeedback';
-    this.logger.info(`Collecting feedback for task: ${taskId}`, {
-      operation,
-      taskId,
-      testCommand,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_feedback',
-      `${operation}_before`,
-      { taskId, testCommand }
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, testCommand, traceId, requestId };
+    await this._emitEvent(
+      'collect_before',
+      { taskId, testCommand },
+      traceId,
+      requestId
     );
+    this.logger.info(`Collecting feedback for task: ${taskId}`, context);
 
     try {
-      // integrationManagerAdapter を使用して収集 (integration.js の実装に合わせる)
       const result = await this.integrationManager.collectFeedback(
         taskId,
         testCommand
       );
 
       if (result && result.error) {
-        // CliError を使用
         throw new CliError(
           `Feedback collection failed: ${result.error}`,
           null,
           {
-            code: 'ERR_CLI_FEEDBACK_COLLECT_ADAPTER', // アダプター由来を示すコード
+            code: 'ERR_CLI_FEEDBACK_COLLECT_ADAPTER',
             taskId,
             testCommand,
             errorDetail: result.error,
@@ -92,13 +229,11 @@ class CliFeedbackHandler {
         );
       }
       if (!result || !result.feedback_loop || !result.feedback_loop.task_id) {
-        // 成功時の期待される構造を確認
-        // CliError を使用
         throw new CliError(
           'Feedback collection did not return expected result.',
           null,
           {
-            code: 'ERR_CLI_FEEDBACK_COLLECT_UNEXPECTED', // より具体的なコード
+            code: 'ERR_CLI_FEEDBACK_COLLECT_UNEXPECTED',
             taskId,
             testCommand,
             result,
@@ -106,85 +241,60 @@ class CliFeedbackHandler {
         );
       }
 
-      // TODO: 必要であれば validator で result.feedback_loop を検証
+      // バリデーションを実行
+      const validationResult = this.validator.validateFeedbackInput(result);
+      if (!validationResult.isValid) {
+        throw new ValidationError(
+          'Invalid feedback data received after collection',
+          {
+            context: { errors: validationResult.errors, taskId, result },
+          }
+        );
+      }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, testCommand, result }
+      await this._emitEvent(
+        'collect_after',
+        { taskId, testCommand, result },
+        traceId,
+        requestId
       );
-      this.logger.info(`Feedback collected successfully for task: ${taskId}`);
+      this.logger.info(`Feedback collected successfully for task: ${taskId}`, {
+        traceId,
+        requestId,
+      });
       return result;
     } catch (error) {
-      // エラーコードの扱いを修正
-      const cliError =
-        error instanceof CliError && // CliError を確認
-        (error.code === 'ERR_CLI_FEEDBACK_COLLECT_ADAPTER' ||
-          error.code === 'ERR_CLI_FEEDBACK_COLLECT_UNEXPECTED')
-          ? error // 特定の CliError はそのまま使用
-          : new CliError( // それ以外のエラーは CliError でラップ
-              `Failed to collect feedback for task ${taskId}`,
-              error, // cause
-              { taskId, testCommand } // context
-              // code は CliError のデフォルト 'ERR_CLI'
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliFeedbackHandler',
-        operation,
-        cliError,
-        null,
-        { taskId, testCommand }
-      );
-
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliFeedbackHandler',
-          operation,
-          { taskId, testCommand }
-        );
-      } else {
-        throw cliError;
-      }
+      // エラーハンドラが値を返さない場合は null を返すなど、適切なデフォルト値を検討
+      return this._handleError(error, operation, context);
     }
   }
 
   /**
    * フィードバックを解決済みとしてマークする
-   * @param {string} feedbackId - フィードバックID (通常はタスクIDと同じ？ 要確認)
+   * @param {string} feedbackId - フィードバックID (通常はタスクID)
    * @returns {Promise<object>} 更新されたフィードバック情報
    * @throws {CliError} 解決に失敗した場合
    */
   async resolveFeedback(feedbackId) {
     const operation = 'resolveFeedback';
-    // feedbackId が実際には taskId を指している可能性が高いが、元の integration.js に合わせる
-    const taskId = feedbackId;
-    this.logger.info(`Resolving feedback for: ${feedbackId}`, {
-      operation,
-      feedbackId,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_feedback',
-      `${operation}_before`,
-      { feedbackId }
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { feedbackId, traceId, requestId }; // taskId ではなく feedbackId を使う
+    await this._emitEvent('resolve_before', { feedbackId }, traceId, requestId);
+    this.logger.info(`Resolving feedback for: ${feedbackId}`, context);
 
     try {
-      // integrationManagerAdapter を使用 (integration.js の実装に合わせる)
-      // 注意: integrationManager.resolveFeedback は feedbackId を引数に取るが、
-      // feedbackManager.updateFeedbackStatus は feedback オブジェクトを引数に取る。整合性を要確認。
-      // ここでは integrationManager のインターフェースに従う。
+      // TODO: integrationManager.resolveFeedback と feedbackManager.updateFeedbackStatus の
+      //       インターフェース不整合の可能性を確認し、必要であれば修正する。
+      //       現状は integrationManager のインターフェースに従う。
       const result = await this.integrationManager.resolveFeedback(feedbackId);
 
       if (result && result.error) {
-        // CliError を使用
         throw new CliError(
           `Feedback resolution failed: ${result.error}`,
           null,
           {
-            code: 'ERR_CLI_FEEDBACK_RESOLVE_ADAPTER', // アダプター由来を示すコード
+            code: 'ERR_CLI_FEEDBACK_RESOLVE_ADAPTER',
             feedbackId,
             errorDetail: result.error,
           }
@@ -195,132 +305,69 @@ class CliFeedbackHandler {
         !result.feedback_loop ||
         result.feedback_loop.feedback_status !== 'resolved'
       ) {
-        // 成功時の期待される構造を確認
-        // CliError を使用
         throw new CliError(
           'Feedback resolution did not return expected result.',
           null,
           {
-            code: 'ERR_CLI_FEEDBACK_RESOLVE_UNEXPECTED', // より具体的なコード
+            code: 'ERR_CLI_FEEDBACK_RESOLVE_UNEXPECTED',
             feedbackId,
             result,
           }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_feedback',
-        `${operation}_after`,
-        { feedbackId, result }
+      await this._emitEvent(
+        'resolve_after',
+        { feedbackId, result },
+        traceId,
+        requestId
       );
-      this.logger.info(`Feedback resolved successfully for: ${feedbackId}`);
+      this.logger.info(`Feedback resolved successfully for: ${feedbackId}`, {
+        traceId,
+        requestId,
+      });
       return result;
     } catch (error) {
-      // エラーコードの扱いを修正
-      const cliError =
-        error instanceof CliError && // CliError を確認
-        (error.code === 'ERR_CLI_FEEDBACK_RESOLVE_ADAPTER' ||
-          error.code === 'ERR_CLI_FEEDBACK_RESOLVE_UNEXPECTED')
-          ? error // 特定の CliError はそのまま使用
-          : new CliError( // それ以外のエラーは CliError でラップ
-              `Failed to resolve feedback ${feedbackId}`,
-              error, // cause
-              { feedbackId } // context
-              // code は CliError のデフォルト 'ERR_CLI'
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliFeedbackHandler',
-        operation,
-        cliError,
-        null,
-        { feedbackId }
-      );
-
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliFeedbackHandler',
-          operation,
-          { feedbackId }
-        );
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
   /**
    * フィードバックの状態を取得する
    * @param {string} taskId - タスクID
-   * @returns {Promise<object|null>} フィードバック情報、または null
-   * @throws {CliError|NotFoundError} 取得に失敗した場合
+   * @returns {Promise<object>} フィードバック情報
+   * @throws {CliError|NotFoundError} 取得に失敗した場合、またはフィードバックが見つからない場合
    */
   async getFeedbackStatus(taskId) {
     const operation = 'getFeedbackStatus';
-    this.logger.info(`Getting feedback status for task: ${taskId}`, {
-      operation,
-      taskId,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_feedback',
-      `${operation}_before`,
-      { taskId }
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, traceId, requestId };
+    await this._emitEvent('status_get_before', { taskId }, traceId, requestId);
+    this.logger.info(`Getting feedback status for task: ${taskId}`, context);
 
     try {
-      // feedbackManagerAdapter を直接使用 (feedback.js の実装に合わせる)
-      const feedback = await this.feedbackManager.getFeedbackByTaskId(taskId); // await を追加
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, feedbackFound: !!feedback }
-      );
-      if (feedback) {
-        this.logger.info(`Feedback status retrieved for task: ${taskId}`);
-      } else {
-        this.logger.warn(`Feedback not found for task: ${taskId}`, { taskId }); // logger.warn に context 追加
-        // NotFoundError をスローするか、null を返すかは設計次第
-        // NotFoundError を使用
+      const feedback = await this.feedbackManager.getFeedbackByTaskId(taskId);
+      if (!feedback) {
         throw new NotFoundError(`Feedback not found for task: ${taskId}`, {
-          // options オブジェクトを第2引数に
           code: 'ERR_CLI_FEEDBACK_NOT_FOUND',
-          context: { taskId }, // context を options 内に
+          context: { taskId },
         });
       }
+      await this._emitEvent(
+        'status_get_after',
+        { taskId, feedbackFound: true },
+        traceId,
+        requestId
+      );
+      this.logger.info(`Feedback status retrieved for task: ${taskId}`, {
+        traceId,
+        requestId,
+      });
       return feedback;
     } catch (error) {
-      // エラーコードの扱いを修正
-      const cliError =
-        error instanceof NotFoundError && // instanceof に戻す
-        error.code === 'ERR_CLI_FEEDBACK_NOT_FOUND'
-          ? error // NotFoundError はそのまま使用
-          : new CliError( // それ以外のエラーは CliError でラップ
-              `Failed to get feedback status for task ${taskId}`,
-              error, // cause
-              { taskId, code: error.code } // context に元のエラーコードを追加
-              // code は CliError のデフォルト 'ERR_CLI'
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliFeedbackHandler',
-        operation,
-        cliError,
-        null,
-        { taskId }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliFeedbackHandler',
-          operation,
-          { taskId }
-        );
-      } else {
-        throw cliError;
-      }
+      // NotFoundError は _handleError でそのままスローされる
+      return this._handleError(error, operation, context);
     }
   }
 
@@ -332,29 +379,21 @@ class CliFeedbackHandler {
    */
   async reopenFeedback(taskId) {
     const operation = 'reopenFeedback';
-    this.logger.info(`Reopening feedback for task: ${taskId}`, {
-      operation,
-      taskId,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_feedback',
-      `${operation}_before`,
-      { taskId }
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, traceId, requestId };
+    await this._emitEvent('reopen_before', { taskId }, traceId, requestId);
+    this.logger.info(`Reopening feedback for task: ${taskId}`, context);
 
     try {
-      // feedbackManagerAdapter を直接使用 (feedback.js の実装に合わせる)
-      const feedback = await this.feedbackManager.getFeedbackByTaskId(taskId); // await を追加
+      const feedback = await this.feedbackManager.getFeedbackByTaskId(taskId);
       if (!feedback) {
-        // NotFoundError を使用
         throw new NotFoundError(`Feedback not found for task: ${taskId}`, {
-          // options オブジェクトを第2引数に
           code: 'ERR_CLI_FEEDBACK_NOT_FOUND',
-          context: { taskId }, // context を options 内に
+          context: { taskId },
         });
       }
       const updatedFeedback = await this.feedbackManager.updateFeedbackStatus(
-        // await を追加
         feedback,
         'open'
       );
@@ -363,92 +402,64 @@ class CliFeedbackHandler {
         !updatedFeedback ||
         updatedFeedback.feedback_loop?.feedback_status !== 'open'
       ) {
-        // 成功時の期待される構造を確認
-        // CliError を使用
         throw new CliError(
           'Feedback reopen did not return expected result.',
           null,
           {
-            code: 'ERR_CLI_FEEDBACK_REOPEN_UNEXPECTED', // より具体的なコード
+            code: 'ERR_CLI_FEEDBACK_REOPEN_UNEXPECTED',
             taskId,
             result: updatedFeedback,
           }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, result: updatedFeedback }
+      await this._emitEvent(
+        'reopen_after',
+        { taskId, result: updatedFeedback },
+        traceId,
+        requestId
       );
-      this.logger.info(`Feedback reopened successfully for task: ${taskId}`);
+      this.logger.info(`Feedback reopened successfully for task: ${taskId}`, {
+        traceId,
+        requestId,
+      });
       return updatedFeedback;
     } catch (error) {
-      // エラーコードの扱いを修正
-      const cliError =
-        (error instanceof NotFoundError && // instanceof に戻す
-          error.code === 'ERR_CLI_FEEDBACK_NOT_FOUND') ||
-        (error instanceof CliError &&
-          error.code === 'ERR_CLI_FEEDBACK_REOPEN_UNEXPECTED')
-          ? error // 特定のエラーはそのまま使用
-          : new CliError( // それ以外のエラーは CliError でラップ
-              `Failed to reopen feedback for task ${taskId}`,
-              error, // cause
-              { taskId, code: error.code } // context に元のエラーコードを追加
-              // code は CliError のデフォルト 'ERR_CLI'
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliFeedbackHandler',
-        operation,
-        cliError,
-        null,
-        { taskId }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliFeedbackHandler',
-          operation,
-          { taskId }
-        );
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
   /**
    * フィードバックレポートを生成する
    * @param {string} taskId - タスクID
-   * @param {string|null} outputPath - 出力ファイルパス (nullの場合は標準出力)
+   * @param {string|null} [outputPath=null] - 出力ファイルパス (nullの場合は標準出力)
    * @returns {Promise<string>} 生成されたレポート内容、またはファイルパス
-   * @throws {CliError|FileWriteError} 生成に失敗した場合
+   * @throws {CliError|StorageError} 生成または書き込みに失敗した場合
    */
   async generateFeedbackReport(taskId, outputPath = null) {
     const operation = 'generateFeedbackReport';
-    this.logger.info(`Generating feedback report for task: ${taskId}`, {
-      operation,
-      taskId,
-      outputPath,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_feedback',
-      `${operation}_before`,
-      { taskId, outputPath }
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, outputPath, traceId, requestId };
+    await this._emitEvent(
+      'report_generate_before',
+      { taskId, outputPath },
+      traceId,
+      requestId
     );
+    this.logger.info(`Generating feedback report for task: ${taskId}`, context);
 
     try {
-      // feedbackManagerAdapter を直接使用 (feedback.js の実装に合わせる)
       const report =
-        await this.feedbackManager.generateFeedbackMarkdown(taskId); // await を追加
+        await this.feedbackManager.generateFeedbackMarkdown(taskId);
       if (!report) {
-        // CliError を使用
         throw new CliError(
           `Failed to generate feedback report for task ${taskId}`,
           null,
-          { code: 'ERR_CLI_FEEDBACK_REPORT_GENERATE', taskId } // より具体的なコード
+          {
+            code: 'ERR_CLI_FEEDBACK_REPORT_GENERATE',
+            taskId,
+          }
         );
       }
 
@@ -460,63 +471,37 @@ class CliFeedbackHandler {
           report
         );
         if (!writeSuccess) {
-          // StorageError を使用
+          // StorageService が false を返した場合、内部でエラーログは出力されているはず
+          // StorageError をスローして _handleError に処理させる
           throw new StorageError(
             `Failed to write feedback report file: ${outputPath}`,
             {
-              // options オブジェクトを第2引数に
               code: 'ERR_CLI_FILE_WRITE',
-              context: { taskId, path: outputPath }, // context を options 内に
+              context: { taskId, path: outputPath },
             }
           );
         }
         resultPath = outputPath;
         this.logger.info(
-          `Feedback report saved successfully to: ${resultPath}`
+          `Feedback report saved successfully to: ${resultPath}`,
+          { traceId, requestId }
         );
       } else {
         this.logger.info(
-          `Feedback report generated successfully for task: ${taskId}`
+          `Feedback report generated successfully for task: ${taskId}`,
+          { traceId, requestId }
         );
-        // 標準出力への表示は呼び出し元 (Facade or EntryPoint) で行う
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, outputPath: resultPath, reportLength: report.length }
+      await this._emitEvent(
+        'report_generate_after',
+        { taskId, outputPath: resultPath, reportLength: report.length },
+        traceId,
+        requestId
       );
-      return outputPath ? resultPath : report; // パス指定時はパス、なければ内容を返す
+      return outputPath ? resultPath : report;
     } catch (error) {
-      // エラーラップロジック修正 (error.code で判定)
-      const cliError =
-        error.code === 'ERR_CLI_FEEDBACK_REPORT_GENERATE' ||
-        error.code === 'ERR_CLI_FILE_WRITE' // StorageError のコードで判定
-          ? error // 特定のエラーはそのまま使用
-          : new CliError( // それ以外のエラーは CliError でラップ
-              `Failed to generate feedback report for task ${taskId}`,
-              error, // cause
-              { taskId, outputPath, code: error.code } // context に元のエラーコードを追加
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliFeedbackHandler',
-        operation,
-        cliError,
-        null,
-        { taskId, outputPath }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliFeedbackHandler',
-          operation,
-          { taskId, outputPath }
-        );
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
@@ -528,84 +513,48 @@ class CliFeedbackHandler {
    */
   async prioritizeFeedback(taskId) {
     const operation = 'prioritizeFeedback';
-    this.logger.info(`Prioritizing feedback for task: ${taskId}`, {
-      operation,
-      taskId,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_feedback',
-      `${operation}_before`,
-      { taskId }
-    );
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, traceId, requestId };
+    await this._emitEvent('prioritize_before', { taskId }, traceId, requestId);
+    this.logger.info(`Prioritizing feedback for task: ${taskId}`, context);
 
     try {
-      // feedbackManagerAdapter を直接使用 (feedback.js の実装に合わせる)
-      const feedback = await this.feedbackManager.getFeedbackByTaskId(taskId); // await を追加
+      const feedback = await this.feedbackManager.getFeedbackByTaskId(taskId);
       if (!feedback) {
-        // NotFoundError を使用
         throw new NotFoundError(`Feedback not found for task: ${taskId}`, {
-          // options オブジェクトを第2引数に
           code: 'ERR_CLI_FEEDBACK_NOT_FOUND',
-          context: { taskId }, // context を options 内に
+          context: { taskId },
         });
       }
       const updatedFeedback =
-        await this.feedbackManager.prioritizeFeedback(feedback); // await を追加
+        await this.feedbackManager.prioritizeFeedback(feedback);
 
       if (!updatedFeedback || !updatedFeedback.feedback_loop) {
-        // 成功時の期待される構造を確認 (ここは変更不要)
-        // CliError を使用
         throw new CliError(
           'Feedback prioritization did not return expected result.',
           null,
           {
-            code: 'ERR_CLI_FEEDBACK_PRIORITIZE_UNEXPECTED', // より具体的なコード
+            code: 'ERR_CLI_FEEDBACK_PRIORITIZE_UNEXPECTED',
             taskId,
             result: updatedFeedback,
           }
         );
       }
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, result: updatedFeedback }
+      await this._emitEvent(
+        'prioritize_after',
+        { taskId, result: updatedFeedback },
+        traceId,
+        requestId
       );
-      this.logger.info(`Feedback prioritized successfully for task: ${taskId}`);
+      this.logger.info(
+        `Feedback prioritized successfully for task: ${taskId}`,
+        { traceId, requestId }
+      );
       return updatedFeedback;
     } catch (error) {
-      // エラーコードの扱いを修正
-      const cliError =
-        (error instanceof NotFoundError && // instanceof に戻す
-          error.code === 'ERR_CLI_FEEDBACK_NOT_FOUND') ||
-        (error instanceof CliError &&
-          error.code === 'ERR_CLI_FEEDBACK_PRIORITIZE_UNEXPECTED')
-          ? error // 特定のエラーはそのまま使用
-          : new CliError( // それ以外のエラーは CliError でラップ
-              `Failed to prioritize feedback for task ${taskId}`,
-              error, // cause
-              { taskId, code: error.code } // context に元のエラーコードを追加
-              // code は CliError のデフォルト 'ERR_CLI'
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliFeedbackHandler',
-        operation,
-        cliError,
-        null,
-        { taskId }
-      );
-      if (this.errorHandler) {
-        return this.errorHandler.handle(
-          cliError,
-          'CliFeedbackHandler',
-          operation,
-          { taskId }
-        );
-      } else {
-        throw cliError;
-      }
+      return this._handleError(error, operation, context);
     }
   }
 
@@ -618,66 +567,43 @@ class CliFeedbackHandler {
    */
   async linkFeedbackToCommit(taskId, commitHash) {
     const operation = 'linkFeedbackToCommit';
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, commitHash, traceId, requestId };
+    await this._emitEvent(
+      'link_commit_before',
+      { taskId, commitHash },
+      traceId,
+      requestId
+    );
     this.logger.info(
       `Linking commit ${commitHash} to feedback for task ${taskId}`,
-      { operation, taskId, commitHash }
-    );
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_feedback',
-      `${operation}_before`,
-      { taskId, commitHash }
+      context
     );
 
     try {
-      // feedbackManagerAdapter を直接使用 (feedback.js の実装に合わせる)
-      const feedback = await this.feedbackManager.getFeedbackByTaskId(taskId); // await を追加
+      const feedback = await this.feedbackManager.getFeedbackByTaskId(taskId);
       if (!feedback) {
-        // NotFoundError を使用
         throw new NotFoundError(`Feedback not found for task: ${taskId}`, {
-          // options オブジェクトを第2引数に
           code: 'ERR_CLI_FEEDBACK_NOT_FOUND',
-          context: { taskId }, // context を options 内に
+          context: { taskId },
         });
       }
-      await this.feedbackManager.linkFeedbackToGitCommit(feedback, commitHash); // await を追加
+      await this.feedbackManager.linkFeedbackToGitCommit(feedback, commitHash);
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, commitHash }
+      await this._emitEvent(
+        'link_commit_after',
+        { taskId, commitHash },
+        traceId,
+        requestId
       );
       this.logger.info(
-        `Commit ${commitHash} linked to feedback for task ${taskId} successfully.`
+        `Commit ${commitHash} linked to feedback for task ${taskId} successfully.`,
+        { traceId, requestId }
       );
+      // void を返すため return なし
     } catch (error) {
-      // エラーコードの扱いを修正
-      const cliError =
-        error instanceof NotFoundError && // instanceof に戻す
-        error.code === 'ERR_CLI_FEEDBACK_NOT_FOUND'
-          ? error // NotFoundError はそのまま使用
-          : new CliError( // それ以外のエラーは CliError でラップ
-              `Failed to link commit ${commitHash} to feedback for task ${taskId}`,
-              error, // cause
-              { taskId, commitHash, code: error.code } // context に元のエラーコードを追加
-              // code は CliError のデフォルト 'ERR_CLI'
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliFeedbackHandler',
-        operation,
-        cliError,
-        null,
-        { taskId, commitHash }
-      );
-      if (this.errorHandler) {
-        this.errorHandler.handle(cliError, 'CliFeedbackHandler', operation, {
-          taskId,
-          commitHash,
-        });
-      } else {
-        throw cliError;
-      }
+      this._handleError(error, operation, context); // エラーハンドラは値を返さない想定
     }
   }
 
@@ -690,66 +616,43 @@ class CliFeedbackHandler {
    */
   async linkFeedbackToSession(taskId, sessionId) {
     const operation = 'linkFeedbackToSession';
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, sessionId, traceId, requestId };
+    await this._emitEvent(
+      'link_session_before',
+      { taskId, sessionId },
+      traceId,
+      requestId
+    );
     this.logger.info(
       `Linking session ${sessionId} to feedback for task ${taskId}`,
-      { operation, taskId, sessionId }
-    );
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_feedback',
-      `${operation}_before`,
-      { taskId, sessionId }
+      context
     );
 
     try {
-      // feedbackManagerAdapter を直接使用 (feedback.js の実装に合わせる)
-      const feedback = await this.feedbackManager.getFeedbackByTaskId(taskId); // await を追加
+      const feedback = await this.feedbackManager.getFeedbackByTaskId(taskId);
       if (!feedback) {
-        // NotFoundError を使用
         throw new NotFoundError(`Feedback not found for task: ${taskId}`, {
-          // options オブジェクトを第2引数に
           code: 'ERR_CLI_FEEDBACK_NOT_FOUND',
-          context: { taskId }, // context を options 内に
+          context: { taskId },
         });
       }
-      await this.feedbackManager.linkFeedbackToSession(feedback, sessionId); // await を追加
+      await this.feedbackManager.linkFeedbackToSession(feedback, sessionId);
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, sessionId }
+      await this._emitEvent(
+        'link_session_after',
+        { taskId, sessionId },
+        traceId,
+        requestId
       );
       this.logger.info(
-        `Session ${sessionId} linked to feedback for task ${taskId} successfully.`
+        `Session ${sessionId} linked to feedback for task ${taskId} successfully.`,
+        { traceId, requestId }
       );
+      // void を返すため return なし
     } catch (error) {
-      // エラーコードの扱いを修正
-      const cliError =
-        error instanceof NotFoundError && // instanceof に戻す
-        error.code === 'ERR_CLI_FEEDBACK_NOT_FOUND'
-          ? error // NotFoundError はそのまま使用
-          : new CliError( // それ以外のエラーは CliError でラップ
-              `Failed to link session ${sessionId} to feedback for task ${taskId}`,
-              error, // cause
-              { taskId, sessionId, code: error.code } // context に元のエラーコードを追加
-              // code は CliError のデフォルト 'ERR_CLI'
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliFeedbackHandler',
-        operation,
-        cliError,
-        null,
-        { taskId, sessionId }
-      );
-      if (this.errorHandler) {
-        this.errorHandler.handle(cliError, 'CliFeedbackHandler', operation, {
-          taskId,
-          sessionId,
-        });
-      } else {
-        throw cliError;
-      }
+      this._handleError(error, operation, context);
     }
   }
 
@@ -761,74 +664,48 @@ class CliFeedbackHandler {
    */
   async integrateFeedbackWithTask(taskId) {
     const operation = 'integrateFeedbackWithTask';
-    this.logger.info(`Integrating feedback with task ${taskId}`, {
-      operation,
-      taskId,
-    });
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_feedback',
-      `${operation}_before`,
-      { taskId }
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, traceId, requestId };
+    await this._emitEvent(
+      'integrate_task_before',
+      { taskId },
+      traceId,
+      requestId
     );
+    this.logger.info(`Integrating feedback with task ${taskId}`, context);
 
     try {
-      // feedbackManagerAdapter を直接使用 (feedback.js の実装に合わせる)
-      // integrateFeedbackWithTask は taskId を2つ取るが、feedback.js では同じIDを渡している
       const result = await this.feedbackManager.integrateFeedbackWithTask(
-        // await を確認 (元々あった)
         taskId,
         taskId
       );
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, success: result }
-      );
-      if (result) {
-        this.logger.info(
-          `Feedback integrated with task ${taskId} successfully.`
-        );
-      } else {
-        this.logger.warn(`Failed to integrate feedback with task ${taskId}.`);
-        // CliError を使用
+      if (!result) {
         throw new CliError(
           `Failed to integrate feedback with task ${taskId}`,
           null,
-          { code: 'ERR_CLI_FEEDBACK_INTEGRATE_TASK_FAILED', taskId } // より具体的なコード
+          {
+            code: 'ERR_CLI_FEEDBACK_INTEGRATE_TASK_FAILED',
+            taskId,
+          }
         );
       }
+
+      await this._emitEvent(
+        'integrate_task_after',
+        { taskId, success: result },
+        traceId,
+        requestId
+      );
+      this.logger.info(
+        `Feedback integrated with task ${taskId} successfully.`,
+        { traceId, requestId }
+      );
       return result;
     } catch (error) {
-      // エラーコードの扱いを修正
-      const cliError =
-        error instanceof CliError && // CliError を確認
-        error.code === 'ERR_CLI_FEEDBACK_INTEGRATE_TASK_FAILED'
-          ? error // 特定の CliError はそのまま使用
-          : new CliError( // それ以外のエラーは CliError でラップ
-              `Failed to integrate feedback with task ${taskId}`,
-              error, // cause
-              { taskId } // context
-              // code は CliError のデフォルト 'ERR_CLI'
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliFeedbackHandler',
-        operation,
-        cliError,
-        null,
-        { taskId }
-      );
-      if (this.errorHandler) {
-        return (
-          this.errorHandler.handle(cliError, 'CliFeedbackHandler', operation, {
-            taskId,
-          }) || false
-        );
-      } else {
-        throw cliError;
-      }
+      const handledResult = this._handleError(error, operation, context);
+      return handledResult === undefined ? false : handledResult;
     }
   }
 
@@ -841,80 +718,52 @@ class CliFeedbackHandler {
    */
   async integrateFeedbackWithSession(taskId, sessionId) {
     const operation = 'integrateFeedbackWithSession';
+    const traceId = this._traceIdGenerator();
+    const requestId = this._requestIdGenerator();
+    const context = { taskId, sessionId, traceId, requestId };
+    await this._emitEvent(
+      'integrate_session_before',
+      { taskId, sessionId },
+      traceId,
+      requestId
+    );
     this.logger.info(
       `Integrating feedback for task ${taskId} with session ${sessionId}`,
-      { operation, taskId, sessionId }
-    );
-    await this.eventEmitter.emitStandardizedAsync(
-      'cli_feedback',
-      `${operation}_before`,
-      { taskId, sessionId }
+      context
     );
 
     try {
-      // feedbackManagerAdapter を直接使用 (feedback.js の実装に合わせる)
       const result = await this.feedbackManager.integrateFeedbackWithSession(
-        // await を確認 (元々あった)
         taskId,
         sessionId
       );
 
-      await this.eventEmitter.emitStandardizedAsync(
-        'cli_feedback',
-        `${operation}_after`,
-        { taskId, sessionId, success: result }
-      );
-      if (result) {
-        this.logger.info(
-          `Feedback for task ${taskId} integrated with session ${sessionId} successfully.`
-        );
-      } else {
-        this.logger.warn(
-          `Failed to integrate feedback for task ${taskId} with session ${sessionId}.`
-        );
-        // CliError を使用
+      if (!result) {
         throw new CliError(
           `Failed to integrate feedback for task ${taskId} with session ${sessionId}`,
           null,
           {
-            code: 'ERR_CLI_FEEDBACK_INTEGRATE_SESSION_FAILED', // より具体的なコード
+            code: 'ERR_CLI_FEEDBACK_INTEGRATE_SESSION_FAILED',
             taskId,
             sessionId,
           }
         );
       }
+
+      await this._emitEvent(
+        'integrate_session_after',
+        { taskId, sessionId, success: result },
+        traceId,
+        requestId
+      );
+      this.logger.info(
+        `Feedback for task ${taskId} integrated with session ${sessionId} successfully.`,
+        { traceId, requestId }
+      );
       return result;
     } catch (error) {
-      // エラーコードの扱いを修正
-      const cliError =
-        error instanceof CliError && // CliError を確認
-        error.code === 'ERR_CLI_FEEDBACK_INTEGRATE_SESSION_FAILED'
-          ? error // 特定の CliError はそのまま使用
-          : new CliError( // それ以外のエラーは CliError でラップ
-              `Failed to integrate feedback for task ${taskId} with session ${sessionId}`,
-              error, // cause
-              { taskId, sessionId } // context
-              // code は CliError のデフォルト 'ERR_CLI'
-            );
-      emitErrorEvent(
-        this.eventEmitter,
-        this.logger,
-        'CliFeedbackHandler',
-        operation,
-        cliError,
-        null,
-        { taskId, sessionId }
-      );
-      if (this.errorHandler) {
-        return (
-          this.errorHandler.handle(cliError, 'CliFeedbackHandler', operation, {
-            taskId,
-            sessionId,
-          }) || false
-        );
-      } else {
-        throw cliError;
-      }
+      const handledResult = this._handleError(error, operation, context);
+      return handledResult === undefined ? false : handledResult;
     }
   }
 }
