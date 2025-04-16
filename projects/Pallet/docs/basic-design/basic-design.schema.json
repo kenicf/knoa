@@ -1,0 +1,1890 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Basic Design Document Schema for Business Support Application",
+  "description": "Schema for the YAML source of truth for the basic design document, incorporating JSON Schema for validation. v1.9 - Enhanced schema definition clarity and strictness based on improvement strategy v1.8 review. Strengthened 'fk_references' pattern, 'screen_id' pattern (using oneOf), and added specific writing instructions to descriptions for 'compliance_summary', 'detailed_design_ref', and 'implementation_notes'.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "description": "Schema version identifier. Indicates the version of this schema document.",
+      "type": "string",
+      "const": "1.9"
+    },
+    "document_info": {
+      "description": "Metadata about the basic design document.",
+      "$ref": "#/definitions/DocumentInfo"
+    },
+    "prerequisite_documents": {
+      "description": "List of prerequisite documents referenced in this design. Ensure IDs defined here are used consistently in 'references'. Maintain this list according to `prerequisite_documents` section in `basic-design-yaml-schema.yaml`.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/PrerequisiteDocument"
+      }
+    },
+    "introduction": {
+      "description": "Introduction section based on basic-design-01-introduction.md. Provides the overall purpose and scope of the design. Should align with the project's requirements statement (`req-statement`).",
+      "$ref": "#/definitions/Introduction"
+    },
+    "system_configuration": {
+      "description": "System architecture and components based on basic-design-02-system-configuration.md. Describes the high-level structure and interactions. Should consider FE/BE separation as per `design-principles-vba.md`.",
+      "$ref": "#/definitions/SystemConfiguration"
+    },
+    "backend_design": {
+      "description": "Backend database design details based on basic-design-03-backend-design.md. Defines tables, fields, and relationships. Ensure adherence to naming conventions (`coding-standards-vba.md`) and key strategies (`design-principles-vba.md`).",
+      "$ref": "#/definitions/BackendDesign"
+    },
+    "query_definitions": {
+      "description": "List of query definitions based on basic-design-04-query-definitions.md. Defines data retrieval and manipulation logic. Consider performance implications (`design-principles-vba.md` 5項) and naming conventions (`coding-standards-vba.md`).",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/QueryDefinition"
+      }
+    },
+    "frontend_design": {
+      "description": "Frontend UI/UX design details based on basic-design-05-frontend-design.md. Defines screens, transitions, and UI principles. Crucially incorporates UI/Logic separation (`design-principles-vba.md`, `testing-guidelines-vba.md`), accessibility (`frontend-design-vba.md`, `persol-theme-guideline.md`, `req-statement` 5.4), and usability.",
+      "$ref": "#/definitions/FrontendDesign"
+    },
+    "module_design": {
+      "description": "Overview of key software modules (classes, standard modules) based on basic-design-06-module-design.md (example). Defines the responsibilities and interfaces of major code components, emphasizing SRP, DI, and testability (`design-principles-vba.md`, `testing-guidelines-vba.md`).",
+      "$ref": "#/definitions/ModuleDesign"
+    },
+    "cross_cutting_concerns": {
+      "description": "Cross-cutting concerns applicable throughout the system, such as error handling, security, and deployment strategies, based on basic-design-07/08/09.md (examples). Requires adherence to relevant standards (`design-principles-vba.md`, `coding-standards-vba.md`).",
+      "$ref": "#/definitions/CrossCuttingConcerns"
+    },
+    "glossary": {
+      "description": "Definition of project-specific terms used throughout the design documents, based on basic-design-10-glossary.md (example). Ensures consistent terminology.",
+      "$ref": "#/definitions/Glossary"
+    },
+    "appendices": {
+      "description": "Optional appendices for supplementary information not covered elsewhere.",
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "document_info",
+    "prerequisite_documents",
+    "introduction",
+    "system_configuration",
+    "backend_design",
+    "query_definitions",
+    "frontend_design"
+  ],
+  "definitions": {
+    "DocumentStatus": {
+      "description": "Represents the current status of a document or a design element.",
+      "type": "string",
+      "enum": ["DRAFT", "WIP", "FIXED", "REVIEW", "APPROVED", "DEPRECATED"]
+    },
+    "StandardComplianceItem": {
+      "description": "Structure to describe compliance with a specific standard document section. Clearly state HOW the design complies.",
+      "type": "object",
+      "properties": {
+        "standard_doc_id": {
+          "type": "string",
+          "description": "ID of the referenced standard document (must be defined in prerequisite_documents). Ensure the ID matches the list exactly."
+        },
+        "section": {
+          "type": "string",
+          "description": "Relevant section, chapter, or principle in the standard document (e.g., '1. SRP', '4. Testability', 'Appendix A.1'). Be specific."
+        },
+        "compliance_summary": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "(Required Recommended) Brief summary of **HOW this design element complies** with the specified standard (YAML summary記述: 500文字推奨). **Describe concretely how compliance is achieved.** Details should be in the linked Markdown (`detailed_design_ref`). Example: '- standard_doc_id: design-prin\\n section: 1. SRP\\n compliance_summary: 認証ロジックのみに責務を限定。DBアクセスはUserRepositoryに分離。'"
+        }
+      },
+      "required": ["standard_doc_id", "compliance_summary"]
+    },
+    "DocumentInfo": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Official title of this Basic Design Document."
+        },
+        "version": {
+          "type": "string",
+          "description": "Version number of the generated design document output (e.g., '0.9', '1.0'). Corresponds to the overall document state."
+        },
+        "status": {
+          "description": "Overall status of this basic design document.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "last_updated": {
+          "type": "string",
+          "format": "date",
+          "description": "Date of the last significant update to this YAML source file for the current version (YYYY-MM-DD)."
+        },
+        "authors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of authors or contributors to this design document."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Brief overview of the system being designed and the purpose of this document (YAML概要記述: 1000文字推奨). Should reference the requirements statement (e.g., `req-statement`). Reflects schema v1.9 changes."
+        },
+        "change_log": {
+          "description": "Record of changes made to this design document (or the schema itself). Maintain this diligently.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "description": "Version number associated with the change (e.g., '1.8', '1.9')."
+              },
+              "date": {
+                "type": "string",
+                "format": "date",
+                "description": "Date the change was made (YYYY-MM-DD)."
+              },
+              "author": {
+                "type": "string",
+                "description": "Author of the change."
+              },
+              "summary": {
+                "type": "string",
+                "description": "Brief description of the changes made in this version."
+              }
+            },
+            "required": ["version", "date", "author", "summary"]
+          },
+          "items": [
+            {
+              "version": "1.9",
+              "date": "2025-04-15",
+              "author": "Gemini",
+              "summary": "Enhanced schema definition clarity and strictness based on v1.8 review. Strengthened patterns for 'fk_references' and 'screen_id'. Added specific writing instructions to descriptions for 'compliance_summary', 'detailed_design_ref', and 'implementation_notes'."
+            },
+            {
+              "version": "1.8",
+              "date": "2025-04-15",
+              "author": "Gemini",
+              "summary": "Final adjustments based on improvement strategy: Deprecated legacy 'data' field, added 'injection_type' to dependencies, enhanced descriptions with standard document references and cautions."
+            }
+          ]
+        },
+        "general_notes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "General notes, disclaimers, or process information regarding this document. Include references to key guidelines like `yaml-vs-markdown-guideline.md`."
+        }
+      },
+      "required": [
+        "title",
+        "version",
+        "status",
+        "last_updated",
+        "authors",
+        "description",
+        "change_log"
+      ]
+    },
+    "PrerequisiteDocument": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the prerequisite document, used for referencing within this schema (e.g., 'req-statement', 'coding-std', 'design-prin', 'testing-guide', 'frontend-design-vba', 'persol-theme'). Use lowercase letters, numbers, hyphens. **Ensure consistency with `prerequisite_documents` list.**",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name or title of the prerequisite document."
+        },
+        "path": {
+          "type": "string",
+          "description": "Optional relative file path to the prerequisite document from this YAML file's location (e.g., '../coding-standards-vba.md'). Helps navigation but needs maintenance if file structure changes."
+        },
+        "version": {
+          "type": "string",
+          "description": "Optional version number or identifier of the prerequisite document (e.g., '4.0')."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional brief description of the document's relevance or purpose (YAML概要記述: 500文字推奨)."
+        }
+      },
+      "required": ["id", "name"]
+    },
+    "Introduction": {
+      "type": "object",
+      "properties": {
+        "purpose": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Purpose of this basic design document, aligning with the project goals outlined in the requirements statement (`req-statement`) (YAML概要記述: 1000文字推奨)."
+        },
+        "scope": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Scope of the system covered by this basic design document (in-scope/out-of-scope clarification) (YAML概要記述: 1000文字推奨)."
+        }
+      },
+      "required": ["purpose", "scope"]
+    },
+    "DocumentReference": {
+      "description": "Reference to a specific part of another document (prerequisite or self). Used for traceability.",
+      "type": "object",
+      "properties": {
+        "doc_id": {
+          "type": "string",
+          "description": "ID of the referenced document (must be defined in `prerequisite_documents`). **Ensure the referenced document ID exists in the list.**"
+        },
+        "section": {
+          "type": "string",
+          "description": "Optional specific section, chapter, table, figure number, or principle name in the referenced document (e.g., '5.4', 'Appendix A', '1. SRP'). Be as specific as possible."
+        },
+        "screen_id": {
+          "type": "string",
+          "description": "Optional specific screen ID if referencing a screen definition within this document. Ensure the referenced screen ID exists in `frontend_design.screens`."
+        },
+        "table_name": {
+          "type": "string",
+          "description": "Optional specific table name if referencing a table definition within this document. Ensure the referenced table name exists in `backend_design.tables`."
+        },
+        "query_id": {
+          "type": "string",
+          "description": "Optional specific query ID if referencing a query definition within this document. Ensure the referenced query ID exists in `query_definitions`."
+        },
+        "module_id": {
+          "type": "string",
+          "description": "Optional specific module ID if referencing a module definition within this document. Ensure the referenced module ID exists in `module_design.modules`."
+        }
+      },
+      "required": ["doc_id"]
+    },
+    "StandardDetailsSection": {
+      "description": "Standardized section for documenting design rationale, testing strategy, compliance, and other considerations for major design elements (e.g., components, tables, queries, screens, modules). Follow the `yaml-vs-markdown-guideline.md` for content detail: YAML for summaries, Markdown (`detailed_design_ref`) for details. **Crucially, discuss non-functional requirements (performance, security, extensibility) and how the design addresses them. Mention transaction boundaries if relevant here or in the detailed Markdown.**",
+      "type": "object",
+      "properties": {
+        "design_rationale": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "(Required Recommended) The core reasoning behind this design choice (e.g., Why this table structure? Why this algorithm?). Reference relevant principles from `design-principles-vba.md`. (YAML summary記述: 500文字推奨. Detail in `detailed_design_ref`)."
+        },
+        "testing_strategy": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "(Required Recommended) Overview of the testing approach for this component/element (e.g., Unit tests with mocks, Integration tests, Key scenarios). Reference `testing-guidelines-vba.md`. (YAML summary記述: 500文字推奨. Detail in `detailed_design_ref`)."
+        },
+        "performance_considerations": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "(Optional but Recommended for critical elements) Performance-related concerns (e.g., query speed, UI responsiveness) or optimizations. Reference NFRs from `req-statement`. (YAML summary記述: 500文字推奨. Detail in `detailed_design_ref`)."
+        },
+        "security_considerations": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "(Optional but Recommended if applicable) Security-related notes or measures specific to this element (e.g., input validation, data handling). Reference NFRs from `req-statement`. (YAML summary記述: 500文字推奨. Detail in `detailed_design_ref`)."
+        },
+        "extensibility_notes": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "(Optional) Considerations for future extensions or modifications. How easy is it to change or add functionality related to this element? (YAML summary記述: 500文字推奨. Detail in `detailed_design_ref`)."
+        },
+        "unresolved_issues": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "(Optional) List of unresolved design issues or open questions related to this element at the time of writing. Track these carefully."
+        },
+        "other_notes": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "(Optional) Other relevant notes, important remarks, or considerations (e.g., Transaction management details if not explicitly modeled elsewhere). (YAML概要記述: 500文字推奨. Detail in `detailed_design_ref`)."
+        },
+        "standard_compliance": {
+          "description": "(Required Recommended) Explicit statement on how this element complies with relevant project standards (e.g., design principles, coding standards, accessibility). Use the `StandardComplianceItem` structure. Be specific about HOW compliance is achieved.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/StandardComplianceItem" }
+        }
+      },
+      "required": []
+    },
+    "SystemConfiguration": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "description": "Status of this section.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "overview": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Text overview of the system configuration and architecture, emphasizing the FE/BE split and key technologies. Reference `design-principles-vba.md` 2.1. (YAML概要記述: 1000文字推奨)."
+        },
+        "components": {
+          "description": "List of major logical or physical components of the system (FE, BE, Excel, etc.).",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique component identifier (e.g., 'fe', 'be', 'excel-original'). Use lowercase letters, numbers, hyphens.",
+                "pattern": "^[a-z0-9-]+$"
+              },
+              "name": {
+                "type": "string",
+                "description": "Human-readable name of the component (e.g., 'Frontend (Access)', 'Backend Database')."
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 500,
+                "description": "Brief description of the component's role and primary responsibilities (YAML概要記述: 500文字推奨)."
+              },
+              "technology": {
+                "type": "string",
+                "description": "Optional primary technology used (e.g., 'MS Access VBA', 'MS Access ACCDB', 'MS Excel')."
+              },
+              "location": {
+                "type": "string",
+                "description": "Optional location or runtime environment (e.g., 'User PC', 'Shared Folder', 'Backup Server')."
+              },
+              "details": {
+                "description": "Detailed design considerations specific to this component using the standard structure. Discuss interactions with other components.",
+                "$ref": "#/definitions/StandardDetailsSection"
+              }
+            },
+            "required": ["id", "name", "description"]
+          }
+        },
+        "diagram": {
+          "description": "Reference to the system configuration diagram (Mermaid recommended).",
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Title for the diagram (e.g., 'System Configuration Diagram')."
+            },
+            "description": {
+              "type": "string",
+              "maxLength": 500,
+              "description": "Brief description of what the diagram illustrates (e.g., components, data flow) (YAML概要記述: 500文字推奨)."
+            },
+            "mermaid_file": {
+              "type": "string",
+              "description": "Required relative path to the Mermaid file (.mmd or .mermaid) defining the diagram. Ensure the file exists and follows Mermaid guidelines.",
+              "pattern": "\\.(mmd|mermaid)$"
+            }
+          },
+          "required": ["title", "description", "mermaid_file"]
+        },
+        "deployment_notes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional high-level notes regarding deployment strategy or considerations for this configuration (e.g., FE distribution, BE placement). Detailed plan in `cross_cutting_concerns.deployment_plan`."
+        },
+        "security_considerations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional high-level security considerations specific to the overall system configuration (e.g., shared folder access, VBA protection). Detailed design in `cross_cutting_concerns.security_design`."
+        },
+        "references": {
+          "description": "Optional references to relevant sections in prerequisite documents (e.g., `req-statement` section on operating environment).",
+          "type": "array",
+          "items": { "$ref": "#/definitions/DocumentReference" }
+        }
+      },
+      "required": ["status", "overview", "components", "diagram"]
+    },
+    "BackendDesign": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "description": "Status of this section.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "database_overview": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Overview of the database design approach, technology (MS Access), key principles (e.g., FE/BE split, staging DB, key strategy - UUID vs Autonumber, audit fields). Reference relevant sections in `design-principles-vba.md` (e.g., 3.1). (YAML概要記述: 1000文字推奨)."
+        },
+        "general_notes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional general notes about the backend design, such as naming conventions reference (`coding-standards-vba.md` 1項), PK/FK/Index strategy details, audit fields implementation notes (e.g., VBA trigger), data type considerations."
+        },
+        "tables": {
+          "description": "List of database table definitions.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/TableDefinition" }
+        },
+        "relationships": {
+          "description": "Definition of relationships between tables.",
+          "type": "object",
+          "properties": {
+            "status": {
+              "description": "Status of the relationships definition.",
+              "$ref": "#/definitions/DocumentStatus"
+            },
+            "diagrams": {
+              "description": "Optional list of Entity-Relationship diagrams (Mermaid recommended).",
+              "type": "array",
+              "items": { "$ref": "#/definitions/DiagramDefinition" }
+            },
+            "details": {
+              "description": "List of detailed relationship definitions specifying parent/child tables, keys, and integrity rules. Ensure consistency with table definitions.",
+              "type": "array",
+              "items": { "$ref": "#/definitions/RelationshipDetail" }
+            }
+          },
+          "required": ["status", "details"]
+        }
+      },
+      "required": ["status", "database_overview", "tables", "relationships"]
+    },
+    "TableFieldDefinition": {
+      "description": "Defines a single field (column) within a database table. Follow `coding-standards-vba.md` for naming.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Physical field name. Recommended: PascalCase. Follow `coding-standards-vba.md`. Example: 'UserName'.",
+          "pattern": "^[A-Z][a-zA-Z0-9]*$"
+        },
+        "logical_name": {
+          "type": "string",
+          "description": "Logical field name (Japanese or project language). Example: 'ユーザー名'."
+        },
+        "data_type": {
+          "type": "string",
+          "description": "MS Access data type. Choose the most appropriate type for the data.",
+          "enum": [
+            "テキスト",
+            "メモ型",
+            "数値型",
+            "日時型",
+            "通貨型",
+            "オートナンバー",
+            "Yes/No型",
+            "OLEオブジェクト",
+            "ハイパーリンク",
+            "添付ファイル",
+            "集計",
+            "ルックアップウィザード"
+          ]
+        },
+        "size_format": {
+          "type": ["string", "integer", "null"],
+          "description": "Specifies size or format based on `data_type`. テキスト: size (e.g., 100, 255). 数値型: format (e.g., 'バイト型', '整数型', '長整数型', '単精度浮動小数点型', '倍精度浮動小数点型', 'レプリケーション ID', '十進数'). 日時型: format (e.g., '日付 (標準)', '時刻 (L)'). オートナンバー: format ('長整数型', 'レプリケーション ID'). GUID(テキスト): '{GUID}'. Null if not applicable. **Ensure the format is valid for the selected `data_type`.**"
+        },
+        "is_pk": {
+          "type": "boolean",
+          "default": false,
+          "description": "Is this field part of the primary key? (true/false)"
+        },
+        "is_fk": {
+          "type": "boolean",
+          "default": false,
+          "description": "Is this field a foreign key? (true/false)"
+        },
+        "fk_references": {
+          "type": ["string", "null"],
+          "description": "If `is_fk` is true, specify the referenced 'TableName.FieldName'. **Ensure the referenced table and field exist and match types.** Null otherwise.",
+          "pattern": "^[TM]_[A-Z][a-zA-Z0-9]*\\.[A-Z][a-zA-Z0-9]*$"
+        },
+        "allow_null": {
+          "type": "boolean",
+          "description": "Can this field accept null values? (true/false). **Note:** In Access, setting a field as `Required=Yes` in the table design implicitly sets `Allow Nulls=No`."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Optional Access 'Required' property (Yes/No). Usually reflects `!allow_null`. Set this explicitly if the Access property needs to be Yes. **Note:** Access enforces this at the table level, preventing empty strings in text fields as well if set to Yes, which might differ from `allow_null=false` behavior in other DBs."
+        },
+        "index_type": {
+          "description": "Simple index indicator for this field. Use table's 'indexes' property for composite indexes. 'PK' implies unique & indexed. Allowed values: PK, Unique, Index, None. Choose 'Index' for frequently searched/sorted fields.",
+          "type": "string",
+          "enum": ["PK", "Unique", "Index", "None"],
+          "default": "None"
+        },
+        "validation_rule": {
+          "type": ["string", "null"],
+          "description": "Optional MS Access validation rule expression (e.g., '>0', 'Like \"???-####\"'). Null if not used."
+        },
+        "validation_text": {
+          "type": ["string", "null"],
+          "description": "Optional MS Access validation message displayed when the rule is violated. Null if not used."
+        },
+        "default_value": {
+          "type": ["string", "number", "boolean", "null"],
+          "description": "Optional default value for the field (e.g., 0, '\"Pending\"', 'Now()', 'Yes'). Use string for functions or literal strings. Null if not used."
+        },
+        "remarks": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional additional notes or explanations about the field's purpose, constraints, or specific usage (e.g., 'Generated by VBA', 'Used for search criteria'). (YAML概要記述: 500文字推奨)."
+        }
+      },
+      "required": [
+        "name",
+        "logical_name",
+        "data_type",
+        "is_pk",
+        "is_fk",
+        "allow_null"
+      ]
+    },
+    "TableIndexDefinition": {
+      "description": "Defines a specific index (potentially composite) on a table. Use for multi-field indexes or specific index naming.",
+      "type": "object",
+      "properties": {
+        "index_name": {
+          "type": "string",
+          "description": "Name of the index (e.g., 'IX_TableName_Field1Field2', 'UQ_TableName_Field'). Follow naming conventions from `coding-standards-vba.md` (e.g., PK_, UQ_, IX_ prefixes).",
+          "pattern": "^(IX|UQ|PK)_([A-Z][a-zA-Z0-9]*_)*[A-Z][a-zA-Z0-9]*$"
+        },
+        "fields": {
+          "description": "List of field names included in this index. Order matters for composite indexes. **Ensure these fields exist in the table.**",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "unique": {
+          "type": "boolean",
+          "description": "Specifies if the index enforces uniqueness (true/false)."
+        },
+        "primary": {
+          "type": "boolean",
+          "default": false,
+          "description": "Specifies if this index is the primary key (true/false). Should align with `is_pk` flags in fields."
+        }
+      },
+      "required": ["index_name", "fields", "unique"]
+    },
+    "TableDefinition": {
+      "description": "Defines a database table. Ensure consistency with ER diagrams and relationship definitions.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Physical table name. Recommended: PascalCase starting with 'T_' (Transaction) or 'M_' (Master). Follow `coding-standards-vba.md`. Example: 'T_CaseInfo'.",
+          "pattern": "^(T|M)_[A-Z][a-zA-Z0-9]*$"
+        },
+        "status": {
+          "description": "Status of this table definition.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "logical_name": {
+          "type": "string",
+          "description": "Logical table name (Japanese or project language). Example: '案件情報テーブル'."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Description of the table's purpose and the data it holds (YAML概要記述: 500文字推奨)."
+        },
+        "fields": {
+          "description": "List of fields (columns) in this table. Define all columns here.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/TableFieldDefinition" }
+        },
+        "indexes": {
+          "description": "Optional detailed index definitions (primarily for composite indexes or specific naming). Simple single-field indexes can be defined via field's `index_type`. Define PK index here if composite.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/TableIndexDefinition" }
+        },
+        "details": {
+          "description": "Detailed design considerations specific to this table (e.g., data volume expectations, specific usage patterns, audit trail needs). Use the standard structure.",
+          "$ref": "#/definitions/StandardDetailsSection"
+        },
+        "references": {
+          "description": "Optional references to relevant sections in prerequisite documents (e.g., `req-statement` data requirements).",
+          "type": "array",
+          "items": { "$ref": "#/definitions/DocumentReference" }
+        },
+        "detailed_design_ref": {
+          "type": "string",
+          "description": "Optional relative path to a detailed design markdown file. **Use this for detailed explanations** (complex validation logic, specific usage notes, relationship rationale, alternative designs, etc.). Recommended for complex tables. Ensure the file exists and follows the guideline.",
+          "pattern": "\\.md$"
+        }
+      },
+      "required": ["name", "status", "logical_name", "description", "fields"]
+    },
+    "DiagramDefinition": {
+      "description": "Defines a diagram, typically represented by a Mermaid file.",
+      "type": "object",
+      "properties": {
+        "diagram_id": {
+          "type": "string",
+          "description": "Unique identifier for the diagram within its context (e.g., 'er-core', 'auth-flow', 'transition-main'). Use lowercase letters, numbers, hyphens.",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "title": { "type": "string", "description": "Title of the diagram." },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Brief description of what the diagram illustrates (YAML概要記述: 500文字推奨)."
+        },
+        "mermaid_file": {
+          "type": "string",
+          "description": "Required relative path to the Mermaid file (.mmd or .mermaid) defining the diagram. **Ensure the file exists and adheres to Mermaid syntax and project conventions.**",
+          "pattern": "\\.(mmd|mermaid)$"
+        }
+      },
+      "required": ["diagram_id", "title", "description", "mermaid_file"]
+    },
+    "RelationshipDetail": {
+      "description": "Defines the specifics of a relationship between two tables in MS Access.",
+      "type": "object",
+      "properties": {
+        "parent_table": {
+          "type": "string",
+          "description": "Name of the parent table (the 'one' side in a one-to-many). **Ensure this table is defined in `backend_design.tables`.**"
+        },
+        "parent_pk_field": {
+          "type": "string",
+          "description": "Name of the primary key field(s) in the parent table involved in the relationship. For composite keys, list all fields. **Ensure these field(s) exist and are (part of) the PK in the parent table.**"
+        },
+        "child_table": {
+          "type": "string",
+          "description": "Name of the child table (the 'many' side in a one-to-many). **Ensure this table is defined in `backend_design.tables`.**"
+        },
+        "child_fk_field": {
+          "type": "string",
+          "description": "Name of the foreign key field(s) in the child table involved in the relationship. For composite keys, list all fields in corresponding order. **Ensure these field(s) exist in the child table and match the parent PK type(s).**"
+        },
+        "relationship_type": {
+          "type": "string",
+          "description": "Type of the relationship (Cardinality).",
+          "enum": ["1対1", "1対多", "多対多"]
+        },
+        "referential_integrity": {
+          "type": "boolean",
+          "description": "Specifies if referential integrity should be enforced by the database (Access 'Enforce Referential Integrity' setting). Usually true unless specific reasons exist (e.g., nullable FK)."
+        },
+        "cascade_update": {
+          "type": "boolean",
+          "description": "Specifies if updates to the parent's primary key should cascade to the child's foreign key (Access 'Cascade Update Related Fields'). Often true, but be cautious with Autonumber PKs."
+        },
+        "cascade_delete": {
+          "type": "boolean",
+          "description": "Specifies if deleting the parent record should cascade and delete related child records (Access 'Cascade Delete Related Records'). **Use with extreme caution.** Define the policy clearly based on data retention needs."
+        },
+        "remarks": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional notes about the relationship, its purpose, specific integrity rules, or cascade behavior rationale (YAML概要記述: 500文字推奨)."
+        }
+      },
+      "required": [
+        "parent_table",
+        "parent_pk_field",
+        "child_table",
+        "child_fk_field",
+        "relationship_type",
+        "referential_integrity",
+        "cascade_update",
+        "cascade_delete"
+      ]
+    },
+    "ParameterDefinition": {
+      "description": "Defines a parameter for a query filter or a module method/event. Follow `coding-standards-vba.md` for naming.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Parameter name. Recommended: camelCase. Follow `coding-standards-vba.md`. Example: 'startDate'.",
+          "pattern": "^[a-z][a-zA-Z0-9]*$"
+        },
+        "type": {
+          "type": "string",
+          "description": "Parameter data type. Use VBA types (e.g., String, Long, Integer, Date, Boolean, Variant, Object, specific Class Name like 'Customer') for module parameters. Use SQL-like types (e.g., Text, Number, DateTime, Yes/No) for query parameters defined in Access Query Design or SQL. Be specific and consistent."
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["ByVal", "ByRef"],
+          "default": "ByVal",
+          "description": "(Module Parameters) Specifies if the parameter is passed by value or by reference. Default is ByVal in VBA unless explicitly ByRef. Prefer `ByVal` unless modification is intended (`coding-standards-vba.md` 4項)."
+        },
+        "optional": {
+          "type": "boolean",
+          "default": false,
+          "description": "(Module Parameters) Specifies if the parameter is optional (using `Optional` keyword)."
+        },
+        "default_value": {
+          "type": ["string", "number", "boolean", "null"],
+          "description": "(Module Parameters) Optional default value if the parameter is `Optional`."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Description of the parameter's purpose (YAML概要記述: 500文字推奨)."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "(Filter Parameters) Is this filter parameter logically required for the query to execute meaningfully or return expected results? (true/false)"
+        },
+        "control_type": {
+          "type": "string",
+          "description": "Optional hint for the expected UI control type on the frontend (e.g., TextBox, ComboBox, DatePicker) for this filter parameter.",
+          "$ref": "#/definitions/ControlTypeEnum"
+        },
+        "source_query_id": {
+          "type": ["string", "null"],
+          "description": "Optional Query ID (from `query_definitions`) for ComboBox source list for this filter parameter. **Ensure the referenced query ID exists.** Null if not applicable."
+        },
+        "remarks": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional remarks, constraints, or specific usage notes, especially for module parameters (e.g., 'Must be a positive integer', 'Handles Null input'). (YAML概要記述: 500文字推奨)."
+        }
+      },
+      "required": ["name", "type", "description"]
+    },
+    "QueryDefinition": {
+      "description": "Defines a database query (typically an Access Query Object or VBA-constructed SQL).",
+      "type": "object",
+      "properties": {
+        "query_id": {
+          "type": "string",
+          "description": "Unique identifier for the query (e.g., 'Q_SearchCases', 'Q_UpdateStatus'). Recommended: 'Q_' prefix followed by PascalCase. Follow `coding-standards-vba.md`. Example: 'Q_GetActiveUsers'.",
+          "pattern": "^Q_[A-Z][a-zA-Z0-9]*$"
+        },
+        "status": {
+          "description": "Status of this query definition.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "logical_name": {
+          "type": "string",
+          "description": "Logical query name (Japanese or project language). Example: '有効ユーザー取得クエリ'."
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Description of the query's purpose and intended use (e.g., 'Used as RecordSource for frmUserList', 'Updates status after export'). (YAML概要記述: 500文字推奨)."
+        },
+        "query_type": {
+          "type": "string",
+          "description": "Type of MS Access query.",
+          "enum": [
+            "選択クエリ",
+            "テーブル作成クエリ",
+            "追加クエリ",
+            "更新クエリ",
+            "クロス集計クエリ",
+            "削除クエリ",
+            "ユニオンクエリ",
+            "パススルークエリ",
+            "データ定義クエリ",
+            "その他"
+          ]
+        },
+        "primary_tables": {
+          "description": "List of main source tables or other queries used by this query. **Ensure these tables/queries are defined.**",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "primary_fields": {
+          "description": "List of main fields returned (for select queries) or affected (for action queries). Use table/query aliases if needed (e.g., 'T_CaseInfo.CaseUUID', 'UserName').",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "filter_conditions_summary": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Summary of the filter conditions (WHERE clause logic). Mention if dynamic filtering is applied via VBA. (YAML概要記述: 500文字推奨)."
+        },
+        "filter_parameters": {
+          "description": "Optional list of parameters used in the filter conditions. Define each parameter using `ParameterDefinition`.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/ParameterDefinition" }
+        },
+        "join_conditions_summary": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Summary of the join conditions (JOIN clause logic, e.g., 'INNER JOIN M_User ON T_CaseInfo.UserID = M_User.UserID'). (YAML概要記述: 500文字推奨)."
+        },
+        "sql_definition": {
+          "type": "string",
+          "description": "Optional full SQL definition. **For complex SQL, store in a separate `.sql` file and reference it here OR describe the logic in `detailed_design_ref` following `yaml-vs-markdown-guideline.md`. Avoid very long SQL strings in YAML.**"
+        },
+        "details": {
+          "description": "Detailed design considerations specific to this query (e.g., performance optimization notes, rationale for complex logic, transaction requirements if an action query). Use the standard structure.",
+          "$ref": "#/definitions/StandardDetailsSection"
+        },
+        "remarks": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional other remarks about the query, such as specific usage patterns, data source notes, or assumptions (YAML概要記述: 500文字推奨)."
+        },
+        "references": {
+          "description": "Optional references to relevant sections in prerequisite documents (e.g., `req-statement` reporting requirements).",
+          "type": "array",
+          "items": { "$ref": "#/definitions/DocumentReference" }
+        },
+        "detailed_design_ref": {
+          "type": "string",
+          "description": "Optional relative path to a detailed design markdown file. **Use this for detailed explanations** (complex logic walkthrough, performance tuning details, dynamic SQL generation approach, etc.). **Recommended for complex or critical queries.** Ensure the file exists and follows the guideline.",
+          "pattern": "\\.md$"
+        }
+      },
+      "required": [
+        "query_id",
+        "status",
+        "logical_name",
+        "purpose",
+        "query_type",
+        "primary_tables",
+        "primary_fields"
+      ]
+    },
+    "ScreenDetailsDataSourceItem": {
+      "description": "Defines a single data source used by a screen.",
+      "type": "object",
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "table",
+            "query",
+            "context_class",
+            "module_function",
+            "other"
+          ],
+          "description": "Type of the data source."
+        },
+        "source_id": {
+          "type": "string",
+          "description": "Name/ID of the table, query, class, or function. **Ensure the referenced source exists or is defined elsewhere.** Example: 'Q_GetActiveUsers', 'AppContext'."
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "How this data source is used by the screen (e.g., 'Form RecordSource', 'ComboBox RowSource', 'Lookup Data', 'User Info Display'). Be specific. (YAML概要記述: 500文字推奨)."
+        },
+        "fields": {
+          "description": "Optional list of key fields primarily used from this data source on the screen. Helps understand data dependency.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "remarks": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional remarks about the data source usage (e.g., 'Filtered dynamically by VBA', 'Read-only'). (YAML概要記述: 500文字推奨)."
+        }
+      },
+      "required": ["source_type", "source_id", "purpose"]
+    },
+    "ScreenDetailsUILogicSeparation": {
+      "description": "Describes the strategy for separating UI concerns (Form) from business logic (Modules/Classes). Crucial for testability and maintainability.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Overview of the UI/Logic separation strategy (e.g., 'Event procedures call methods in ModuleX', 'Uses MVP pattern with Presenter class XYZ'). Reference `design-principles-vba.md` 1, 4項. (YAML概要記述: 500文字推奨)."
+        },
+        "related_modules": {
+          "description": "(Required Recommended) List of related logic module IDs (classes or standard modules) responsible for business logic, validation, data access. **Ensure these modules are defined in `module_design`.** Example: ['ValidationModule', 'CaseRepository'].",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "testability_considerations": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "(Required Recommended) Notes on how testability is ensured by this separation (e.g., 'Logic modules are UI-independent and testable with mocks', 'Dependencies injected via properties'). Reference `testing-guidelines-vba.md` 4項. (YAML summary記述: 500文字推奨)."
+        },
+        "references": {
+          "description": "Optional references to relevant design principles or testing guidelines.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/DocumentReference" }
+        }
+      },
+      "required": ["description", "testability_considerations"]
+    },
+    "ScreenDetailsDataIntegrationItem": {
+      "description": "Defines a single data item passed to or from a screen.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the data item (e.g., 'SelectedCaseUUID', 'UserName', 'FilterCriteria'). Use meaningful names."
+        },
+        "type": {
+          "type": "string",
+          "description": "Data type (e.g., 'Long', 'String', 'Date', 'Variant', 'Dictionary', 'CustomClass')."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Is this data item always expected/passed? (true/false)"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Purpose or content of the data item (YAML概要記述: 500文字推奨)."
+        }
+      },
+      "required": ["name", "type"]
+    },
+    "ScreenDetailsDataIntegrationIO": {
+      "description": "Describes data input to or output from a screen, including target/source and method.",
+      "type": "object",
+      "properties": {
+        "target_screen_id": {
+          "type": "string",
+          "description": "ID of the target/source screen or context (e.g., 'FRM11001', 'AppContext', 'CallingModule'). **Ensure the referenced screen ID exists if applicable.**"
+        },
+        "data": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "(Deprecated) Simple list of data item names. Use `data_items` for better structure and detail. Preference should be given to `data_items`.",
+          "deprecated": true
+        },
+        "data_items": {
+          "description": "(Recommended) Detailed list of data items being passed/received using `ScreenDetailsDataIntegrationItem`. Preferred over the simple 'data' list.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/ScreenDetailsDataIntegrationItem" }
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "OpenArgs",
+            "AppContext",
+            "TempVars",
+            "Event",
+            "ModuleCall",
+            "ControlProperty",
+            "None"
+          ],
+          "description": "Method used for data transfer. **Choose wisely based on scope and coupling.** Avoid global variables (`coding-standards-vba.md` 4項)."
+        },
+        "trigger": {
+          "type": "string",
+          "description": "When this data transfer occurs (e.g., 'On Button Click', 'On Form Load', 'On Authentication Success', 'On Record DoubleClick')."
+        },
+        "remarks": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional remarks about the data integration (e.g., 'OpenArgs parsing required', 'AppContext handles null checks'). (YAML概要記述: 500文字推奨)."
+        }
+      },
+      "required": ["target_screen_id", "method", "trigger"]
+    },
+    "ScreenDetailsAccessibility": {
+      "description": "Describes accessibility considerations for a screen. Crucially important. Follow `persol-theme-guideline.md` 5項 and `frontend-design-vba.md` Appendix A.",
+      "type": "object",
+      "properties": {
+        "checklist_references": {
+          "description": "(Required Recommended) List of applicable checklist item IDs from `frontend-design-vba.md` Appendix A that need specific attention or implementation (e.g., ['A.1', 'A.2', 'A.6']). **Ensure referenced checklist IDs are valid and kept in sync with the guideline document.**",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^A\\.\\d+$"
+          }
+        },
+        "implementation_notes": {
+          "description": "(Required Recommended) Specific implementation instructions, considerations, or focus points for accessibility on this screen (YAML summary記述: 500文字推奨). **Describe concrete implementation approaches** for the referenced checklist items (e.g., Specific Tab order, Label-Control association method, Contrast assurance method). Details should be in `detailed_design_ref`.",
+          "type": "string",
+          "maxLength": 500
+        },
+        "references": {
+          "description": "Optional references to specific sections in accessibility guidelines (`frontend-design-vba.md`, `persol-theme-guideline.md`, `req-statement` 5.4).",
+          "type": "array",
+          "items": { "$ref": "#/definitions/DocumentReference" }
+        }
+      },
+      "required": []
+    },
+    "ScreenDetails": {
+      "description": "Provides detailed design information for a specific screen, broken down into key areas. Ensures comprehensive design considerations.",
+      "type": "object",
+      "properties": {
+        "data_sources": {
+          "description": "Primary data sources used by this screen (RecordSource, RowSource, lookup data). Define using `ScreenDetailsDataSourceItem`.",
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string",
+              "maxLength": 500,
+              "description": "Brief overview of how data is sourced for this screen (YAML概要記述: 500文字推奨)."
+            },
+            "items": {
+              "description": "List of specific data sources.",
+              "type": "array",
+              "items": { "$ref": "#/definitions/ScreenDetailsDataSourceItem" }
+            }
+          },
+          "required": ["items"]
+        },
+        "ui_logic_separation": {
+          "description": "Strategy for separating UI (Form) from business logic (Modules/Classes). **Mandatory consideration for testability.**",
+          "$ref": "#/definitions/ScreenDetailsUILogicSeparation"
+        },
+        "data_integration": {
+          "description": "How this screen integrates and exchanges data with others (inputs/outputs). Define using `ScreenDetailsDataIntegrationIO`.",
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string",
+              "maxLength": 500,
+              "description": "Brief overview of data flow in and out of this screen (YAML概要記述: 500文字推奨)."
+            },
+            "inputs": {
+              "description": "Data received by this screen.",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ScreenDetailsDataIntegrationIO"
+              }
+            },
+            "outputs": {
+              "description": "Data passed from this screen.",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ScreenDetailsDataIntegrationIO"
+              }
+            },
+            "global_variable_policy": {
+              "type": "string",
+              "description": "Statement on adherence to global variable policy. **Must state 'Prohibited per `coding-standards-vba.md` section 4' or provide justification if exceptions are made (discouraged).** Reference `coding-standards-vba.md` 4項 and `testing-guidelines-vba.md` 2項."
+            }
+          },
+          "required": ["inputs", "outputs", "global_variable_policy"]
+        },
+        "accessibility": {
+          "description": "Accessibility considerations and implementation notes. **Mandatory consideration.** Reference `ScreenDetailsAccessibility` definition.",
+          "$ref": "#/definitions/ScreenDetailsAccessibility"
+        },
+        "ui_elements": {
+          "description": "Optional list of primary or noteworthy UI elements (Controls) on the screen and their purpose. Helps understand the screen's composition.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Control name (following `coding-standards-vba.md`, e.g., 'txtUserName', 'cmdSave')."
+              },
+              "type": {
+                "description": "Type of the UI control.",
+                "$ref": "#/definitions/ControlTypeEnum"
+              },
+              "label": {
+                "type": "string",
+                "description": "Associated label text (if applicable)."
+              },
+              "purpose": {
+                "type": "string",
+                "maxLength": 500,
+                "description": "Brief purpose or key function of this UI element (e.g., 'User login ID input', 'Saves current record'). (YAML概要記述: 500文字推奨)."
+              }
+            },
+            "required": ["name", "type", "purpose"]
+          }
+        },
+        "details_section": {
+          "description": "Standard design considerations (rationale, testing, etc.) specifically for this screen.",
+          "$ref": "#/definitions/StandardDetailsSection"
+        }
+      },
+      "required": [
+        "data_sources",
+        "ui_logic_separation",
+        "data_integration",
+        "accessibility",
+        "details_section"
+      ]
+    },
+    "ControlTypeEnum": {
+      "description": "Enumeration of common MS Access control types. Use 'Other' for non-standard or custom controls.",
+      "type": "string",
+      "enum": [
+        "TextBox",
+        "Label",
+        "CommandButton",
+        "ComboBox",
+        "ListBox",
+        "CheckBox",
+        "OptionGroup",
+        "OptionButton",
+        "ToggleButton",
+        "Frame",
+        "Image",
+        "Subform",
+        "Subreport",
+        "TabControl",
+        "Attachment",
+        "Rectangle",
+        "Line",
+        "BoundObjectFrame",
+        "UnboundObjectFrame",
+        "CustomControl",
+        "WebBrowser",
+        "NavigationControl",
+        "Chart",
+        "DatePicker",
+        "Other"
+      ]
+    },
+    "ScreenDefinition": {
+      "description": "Defines a single screen (Form or Report) in the application.",
+      "type": "object",
+      "properties": {
+        "screen_id": {
+          "description": "Unique screen identifier. Follow project naming convention defined in `frontend-design-vba.md` 3.3.",
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Standard screen ID format (e.g., 'FRM00001', 'RPT11002_SUMMARY').",
+              "pattern": "^(FRM|RPT)\\d{5}(_[A-Z]+)?$"
+            },
+            {
+              "type": "string",
+              "description": "Common screen ID format (e.g., 'FRM90001_ERR', 'FRM90002_CNF').",
+              "pattern": "^FRM900\\d{2}_(ERR|CNF|INFO|PROC|ESCL|LOCK|ABOUT)$"
+            }
+          ]
+        },
+        "status": {
+          "description": "Status of this screen definition.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "screen_name": {
+          "type": "string",
+          "description": "Human-readable name of the screen. Follow naming conventions in `frontend-design-vba.md` 3.4."
+        },
+        "screen_type": {
+          "type": "string",
+          "enum": ["Form", "Report", "Dialog"],
+          "description": "Type of the screen object (Form, Report, Dialog). Determines typical interaction model."
+        },
+        "category": {
+          "type": "string",
+          "description": "Functional category the screen belongs to (e.g., '認証', '案件管理', 'データ連携', '共通', '管理機能'). Helps organize the screen list."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Brief description of the screen's purpose and main functionality (YAML概要記述: 500文字推奨)."
+        },
+        "primary_sources": {
+          "description": "Optional list of main screen IDs from which a user typically navigates TO this screen. **Ensure referenced screen IDs exist.** Aids in understanding flow.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "primary_destinations": {
+          "description": "Optional list of main screen IDs to which a user typically navigates FROM this screen. **Ensure referenced screen IDs exist.** Aids in understanding flow.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "details": {
+          "description": "Detailed design information for this screen using the `ScreenDetails` structure. **This is the core definition.**",
+          "$ref": "#/definitions/ScreenDetails"
+        },
+        "references": {
+          "description": "Optional references to relevant sections in prerequisite documents (e.g., `req-statement` requirements, `frontend-design-vba.md` UI guidelines).",
+          "type": "array",
+          "items": { "$ref": "#/definitions/DocumentReference" }
+        },
+        "related_modules": {
+          "description": "Optional list of strongly related logic module IDs (classes or standard modules) primarily used by this screen. **Ensure these modules are defined in `module_design`.** Provides quick overview of dependencies (details in `ScreenDetails.ui_logic_separation`).",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "detailed_design_ref": {
+          "type": "string",
+          "description": "Optional relative path to a detailed design markdown file. **Use this for detailed explanations** (complex event logic, dynamic UI behavior, detailed control specifications, alternative designs, etc.). **Recommended for complex screens.** Ensure the file exists and follows the guideline.",
+          "pattern": "\\.md$"
+        },
+        "layout_sketch_file": {
+          "type": "string",
+          "description": "Optional relative path to a layout sketch or wireframe image file (e.g., .png, .jpg). Ensure the file exists. Helps visualize the design."
+        },
+        "ui_components": {
+          "description": "Optional overview list of primary UI control types used on the screen.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/ControlTypeEnum" }
+        }
+      },
+      "required": [
+        "screen_id",
+        "status",
+        "screen_name",
+        "screen_type",
+        "category",
+        "description",
+        "details"
+      ]
+    },
+    "FrontendDesign": {
+      "description": "Top-level definition for the frontend design, encompassing principles, common elements, screens, and transitions.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "description": "Status of this section.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "general_principles": {
+          "description": "List of general UI/UX design principles applied across the application. **Should explicitly reference** `persol-theme-guideline.md`, `design-principles-vba.md`, `testing-guidelines-vba.md`, `frontend-design-vba.md`, and `req-statement` 5.4.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "common_ui_components": {
+          "description": "Optional definitions for common or reusable UI components (e.g., custom button styles, standard dialog layouts) and their standard styling/behavior based on `persol-theme-guideline.md`.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "component_id": {
+                "type": "string",
+                "description": "Unique identifier for the common component (e.g., 'StdButton', 'RequiredTextBox', 'ConfirmDialogLayout')."
+              },
+              "component_type": {
+                "description": "Base MS Access control type or conceptual component type.",
+                "$ref": "#/definitions/ControlTypeEnum"
+              },
+              "style_description": {
+                "type": "string",
+                "maxLength": 500,
+                "description": "Description of the standard style (colors, fonts, borders, size) based on `persol-theme-guideline.md`. (YAML概要記述: 500文字推奨)."
+              },
+              "behavior_description": {
+                "type": "string",
+                "maxLength": 500,
+                "description": "Optional description of standard behavior (e.g., validation, event handling pattern). (YAML概要記述: 500文字推奨)."
+              },
+              "accessibility_notes": {
+                "type": "string",
+                "maxLength": 500,
+                "description": "Specific accessibility considerations for this common component. (YAML概要記述: 500文字推奨)."
+              }
+            },
+            "required": [
+              "component_id",
+              "component_type",
+              "style_description",
+              "accessibility_notes"
+            ]
+          }
+        },
+        "screens": {
+          "description": "List of all screen definitions in the application. **This is the main inventory.**",
+          "type": "array",
+          "items": { "$ref": "#/definitions/ScreenDefinition" }
+        },
+        "screen_transitions": {
+          "description": "Definition of overall screen transition diagrams (Mermaid recommended). Should cover major user flows.",
+          "type": "object",
+          "properties": {
+            "status": {
+              "description": "Status of the screen transitions definition.",
+              "$ref": "#/definitions/DocumentStatus"
+            },
+            "diagrams": {
+              "description": "List of screen transition diagrams (typically using Mermaid). Reference `frontend-design-vba.md` 4 for guidelines.",
+              "type": "array",
+              "items": { "$ref": "#/definitions/DiagramDefinition" }
+            }
+          },
+          "required": ["status", "diagrams"]
+        }
+      },
+      "required": [
+        "status",
+        "general_principles",
+        "screens",
+        "screen_transitions"
+      ]
+    },
+    "AccessModifierEnum": {
+      "description": "Enumeration of VBA access modifiers.",
+      "type": "string",
+      "enum": ["Public", "Private", "Friend"]
+    },
+    "ReadWriteEnum": {
+      "description": "Enumeration for VBA property access types (Get, Let, Set).",
+      "type": "string",
+      "enum": ["Get", "Let", "Set", "Get/Let", "Get/Set"]
+    },
+    "ModuleDependency": {
+      "description": "Defines a dependency on another module or library.",
+      "type": "object",
+      "properties": {
+        "dependency_id": {
+          "type": "string",
+          "description": "ID or name of the depended-upon module (e.g., 'UserRepository', 'LoggingService') or library (e.g., 'Microsoft Scripting Runtime'). **Ensure referenced internal module IDs exist.**"
+        },
+        "injection_type": {
+          "type": "string",
+          "enum": ["Property", "Method", "None"],
+          "default": "None",
+          "description": "(Recommended) Specifies how this dependency is typically provided/injected. 'Property' (via Property Set), 'Method' (via method argument), 'None' (direct usage or global, less ideal for testability). Helps clarify coupling and DI strategy (`design-principles-vba.md` 2項)."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Optional brief description of why this dependency is needed. (YAML概要記述: 200文字推奨)."
+        }
+      },
+      "required": ["dependency_id"]
+    },
+    "MethodDefinition": {
+      "description": "Defines a method (Sub or Function) within a module. Focus on public interface.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Method name (PascalCase recommended). Follow `coding-standards-vba.md`."
+        },
+        "access": {
+          "description": "Access modifier.",
+          "$ref": "#/definitions/AccessModifierEnum"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["Sub", "Function"],
+          "description": "Specifies if it's a Sub or a Function."
+        },
+        "parameters": {
+          "description": "Optional list of parameters for the method. Define using `ParameterDefinition`.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/ParameterDefinition" }
+        },
+        "return_type": {
+          "type": ["string", "null"],
+          "description": "Return data type (for Functions only, e.g., 'String', 'Long', 'Boolean', 'Variant', 'Customer'). Null for Subs."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Description of the method's purpose, key behavior, and expected outcome. (YAML概要記述: 500文字推奨)."
+        },
+        "error_handling": {
+          "type": "string",
+          "description": "Description of the error handling strategy implemented within this method (e.g., 'Uses standard On Error GoTo Label and CleanExit pattern', 'Raises custom error vbObjectError+1001 on invalid input'). Reference `design-principles-vba.md` 3項 and `coding-standards-vba.md` 4項. **Be specific.**"
+        },
+        "remarks": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional additional remarks or usage notes (e.g., 'Requires DatabaseHandler to be set', 'Not thread-safe'). (YAML概要記述: 500文字推奨)."
+        }
+      },
+      "required": ["name", "access", "type", "description", "error_handling"]
+    },
+    "PropertyDefinition": {
+      "description": "Defines a property (Get/Let/Set) within a class module. Focus on public interface.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Property name (PascalCase recommended). Follow `coding-standards-vba.md`."
+        },
+        "access": {
+          "description": "Access modifier for the property procedures (usually Public for external access).",
+          "$ref": "#/definitions/AccessModifierEnum"
+        },
+        "type": {
+          "type": "string",
+          "description": "Data type of the property (e.g., 'String', 'Long', 'Customer', 'ILogger')."
+        },
+        "read_write": {
+          "description": "Specifies the access procedures implemented (Get, Let, Set). Choose the appropriate combination.",
+          "$ref": "#/definitions/ReadWriteEnum"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Description of the property's purpose. (YAML概要記述: 500文字推奨)."
+        },
+        "remarks": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional remarks, e.g., about validation performed in Let/Set, or if it's used for Dependency Injection. (YAML概要記述: 500文字推奨)."
+        }
+      },
+      "required": ["name", "access", "type", "read_write", "description"]
+    },
+    "EventDefinition": {
+      "description": "Defines a custom event raised by a class module.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Event name (PascalCase recommended). Follow `coding-standards-vba.md`."
+        },
+        "parameters": {
+          "description": "Optional list of parameters passed with the event. Define using `ParameterDefinition`.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/ParameterDefinition" }
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Description of when and why the event is raised (e.g., 'Raised after each record is processed', 'Raised on validation failure'). (YAML概要記述: 500文字推奨)."
+        },
+        "remarks": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional remarks about the event usage or payload. (YAML概要記述: 500文字推奨)."
+        }
+      },
+      "required": ["name", "description"]
+    },
+    "ModuleDefinition": {
+      "description": "Defines a software module (Class or Standard Module). Key building block of the application logic.",
+      "type": "object",
+      "properties": {
+        "module_id": {
+          "type": "string",
+          "description": "Unique identifier for the module (typically the module name). Recommended: PascalCase. Follow `coding-standards-vba.md`. Example: 'CustomerRepository'.",
+          "pattern": "^[A-Z][a-zA-Z0-9]*$"
+        },
+        "status": {
+          "description": "Status of this module definition.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "module_type": {
+          "type": "string",
+          "enum": ["Class Module", "Standard Module"],
+          "description": "Type of the VBA module."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Description of the module's overall purpose and key responsibility (SRP). (YAML概要記述: 500文字推奨)."
+        },
+        "responsibilities": {
+          "description": "List of primary responsibilities based on SRP (Single Responsibility Principle). Be concise and clear. Reference `design-principles-vba.md` 1項.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dependencies": {
+          "description": "List of other modules or key external dependencies (e.g., specific libraries, other classes). **Use `ModuleDependency` structure to clarify if dependency is injected.** Aids understanding coupling and testability (`design-principles-vba.md` 2項, `testing-guidelines-vba.md` 4項). **Ensure referenced module IDs exist.**",
+          "type": "array",
+          "items": { "$ref": "#/definitions/ModuleDependency" }
+        },
+        "methods": {
+          "description": "Optional list of major public methods defined in this module. Focus on the public API.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/MethodDefinition" }
+        },
+        "properties": {
+          "description": "Optional list of major public properties (primarily for Class Modules). Focus on the public API.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/PropertyDefinition" }
+        },
+        "events": {
+          "description": "Optional list of public events raised by this module (primarily for Class Modules).",
+          "type": "array",
+          "items": { "$ref": "#/definitions/EventDefinition" }
+        },
+        "details": {
+          "description": "Detailed design considerations specific to this module (e.g., internal algorithms, state management, transaction handling). Use the standard structure. **Address testability explicitly.**",
+          "$ref": "#/definitions/StandardDetailsSection"
+        },
+        "references": {
+          "description": "Optional references to relevant sections in prerequisite documents (e.g., related requirements in `req-statement`, design patterns used from `design-principles-vba.md`).",
+          "type": "array",
+          "items": { "$ref": "#/definitions/DocumentReference" }
+        },
+        "detailed_design_ref": {
+          "type": "string",
+          "description": "Optional relative path to a detailed design markdown file. **Use this for detailed explanations** (complex algorithms, detailed state management, sequence diagrams, alternative designs, etc.). **Recommended for complex or critical modules.** Ensure the file exists and follows the guideline.",
+          "pattern": "\\.md$"
+        }
+      },
+      "required": [
+        "module_id",
+        "status",
+        "module_type",
+        "description",
+        "responsibilities",
+        "details"
+      ]
+    },
+    "ModuleDesign": {
+      "description": "Overall definition of the application's module structure. Organizes the codebase logically.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "description": "Status of this section.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "overview": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Overview of the module design approach, emphasizing principles like UI/logic separation, SRP, DI, testability. Reference `design-principles-vba.md` 1, 2項 and `testing-guidelines-vba.md` 4項. Explain the layering strategy if applicable (e.g., Presentation, Business Logic, Data Access). (YAML概要記述: 1000文字推奨)."
+        },
+        "modules": {
+          "description": "List of key module definitions. This forms the core logical structure of the application.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/ModuleDefinition" }
+        }
+      },
+      "required": ["status", "overview", "modules"]
+    },
+    "LogLevelDefinition": {
+      "description": "Defines a specific logging level and its intended use.",
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["FATAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
+          "description": "Name of the log level. Use standard levels."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Description of when this log level should be used (e.g., FATAL: Application crash, ERROR: Action failed, WARN: Potential issue, INFO: Major operations, DEBUG: Detailed steps, TRACE: Verbose). (YAML概要記述: 500文字推奨)."
+        }
+      },
+      "required": ["level", "description"]
+    },
+    "ErrorHandlingStrategy": {
+      "description": "Defines the overall strategy for error handling and logging. Critical for application robustness.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "description": "Status of this section.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "overview": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Overview of the error handling approach (e.g., 'Standard `On Error GoTo Label` with `CleanExit` pattern', 'Centralized error logging service'). Reference `design-principles-vba.md` 3項 and `coding-standards-vba.md` 4項. (YAML概要記述: 1000文字推奨)."
+        },
+        "logging": {
+          "description": "Details about error logging mechanism.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "description": "Name of the log table (e.g., 'T_Log'). **Ensure this table is defined in `backend_design`.**"
+            },
+            "module_id": {
+              "type": "string",
+              "description": "Optional ID of the common logging module/service (e.g., 'LoggingService'). **Ensure this module is defined in `module_design`.**"
+            },
+            "recorded_info": {
+              "description": "List of main information fields to be recorded in the log table (e.g., Timestamp, Level, Message, Source, UserID, ErrorNumber, ErrorDescription). Should match `T_Log` definition.",
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "log_levels": {
+              "description": "Definition of the log levels used in the application. Use `LogLevelDefinition`.",
+              "type": "array",
+              "items": { "$ref": "#/definitions/LogLevelDefinition" }
+            }
+          },
+          "required": ["table", "recorded_info", "log_levels"]
+        },
+        "user_feedback": {
+          "description": "Strategy for providing feedback to the user upon encountering errors.",
+          "type": "object",
+          "properties": {
+            "strategy": {
+              "type": "string",
+              "maxLength": 500,
+              "description": "Description of the feedback strategy (e.g., 'Use common error form `FRM90001_ERR`', 'Display specific MsgBox', 'Highlight invalid input field'). Reference relevant common screen IDs. (YAML概要記述: 500文字推奨)."
+            },
+            "message_policy": {
+              "type": "string",
+              "maxLength": 500,
+              "description": "Policy for crafting user-facing error messages (e.g., 'Clear, concise, non-technical, suggest next steps', 'Avoid revealing internal details'). Reference `frontend-design-vba.md` A.10. (YAML概要記述: 500文字推奨)."
+            }
+          },
+          "required": ["strategy", "message_policy"]
+        },
+        "details": {
+          "description": "Detailed design considerations specific to error handling (e.g., handling specific error types, retry mechanisms). Use the standard structure.",
+          "$ref": "#/definitions/StandardDetailsSection"
+        },
+        "references": {
+          "description": "References to relevant standards or common error screen definitions (`design-principles-vba.md` 3項, `coding-standards-vba.md` 4項, `FRM90001_ERR`).",
+          "type": "array",
+          "items": { "$ref": "#/definitions/DocumentReference" }
+        }
+      },
+      "required": ["status", "overview", "logging", "user_feedback", "details"]
+    },
+    "SecurityDesign": {
+      "description": "Defines the overall security design considerations. Align with `req-statement` 5.1.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "description": "Status of this section.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "authentication": {
+          "description": "Details about user authentication.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "description": "Authentication method (e.g., 'ID/Password via M_User', 'Windows Authentication (if applicable)', 'None')."
+            },
+            "password_storage": {
+              "description": "Mechanism for storing passwords securely (if ID/Password method is used). **Mandatory consideration if storing passwords.**",
+              "type": "object",
+              "properties": {
+                "mechanism": {
+                  "type": "string",
+                  "description": "Technique used (e.g., 'Hashing + Salt', 'Not Stored (Windows Auth)'). Must be secure if storing.",
+                  "enum": ["Hashing + Salt", "Not Stored", "Other"]
+                },
+                "algorithm": {
+                  "type": "string",
+                  "description": "Specific algorithm used if hashing (e.g., 'PBKDF2 via .NET', 'SHA-256', 'BCrypt via library'). Needs careful selection based on available tools/libraries."
+                },
+                "storage_table": {
+                  "type": "string",
+                  "description": "Table where credentials/hashes are stored (e.g., 'M_User'). Ensure table exists."
+                },
+                "storage_fields": {
+                  "description": "Fields used for storage (e.g., 'PasswordHash', 'PasswordSalt'). Ensure fields exist.",
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            },
+            "account_lockout": {
+              "type": "string",
+              "description": "Account lockout policy description (e.g., 'Not Implemented', 'Implemented via external system', '3 failed attempts lock for 15 mins (requires custom implementation)')."
+            }
+          },
+          "required": ["method"]
+        },
+        "authorization": {
+          "description": "Details about user authorization and access control.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "description": "Authorization method (e.g., 'Role-Based Access Control (RBAC)', 'User-level permissions', 'None'). RBAC is common.",
+              "enum": ["RBAC", "UserLevel", "None", "Other"]
+            },
+            "role_definition_table": {
+              "type": "string",
+              "description": "Table defining roles (e.g., 'M_Role') if RBAC is used. Ensure table exists."
+            },
+            "permission_definition_table": {
+              "type": "string",
+              "description": "Table defining permissions per role (e.g., 'M_RoleMenuPermission') if RBAC is used. Ensure table exists."
+            },
+            "control_point": {
+              "type": "string",
+              "description": "Where authorization checks are typically performed (e.g., 'Main Menu display', 'Screen Load event', 'Specific Button Click events')."
+            }
+          },
+          "required": ["method"]
+        },
+        "data_security": {
+          "description": "Measures for securing data at rest and potentially in transit (within network).",
+          "type": "object",
+          "properties": {
+            "access_control": {
+              "type": "string",
+              "description": "Primary method for controlling access to backend data files (e.g., 'OS File/Folder Permissions via Active Directory Groups', 'Database Password (limited)')."
+            },
+            "vba_protection": {
+              "type": "string",
+              "description": "Method for protecting VBA code in the FE file (e.g., 'VBA Project Password Protection (standard)', 'ACCDE format (removes source code)')."
+            },
+            "data_encryption": {
+              "type": "string",
+              "description": "Data encryption strategy (e.g., 'Not Implemented', 'Field-level via external library (specify)', 'Database Password (limited encryption)')."
+            },
+            "input_validation": {
+              "type": "string",
+              "description": "Strategy for validating user input to prevent security vulnerabilities (e.g., SQL Injection (less common in Access FE/BE but consider dynamic SQL), Data Tampering). Emphasize 'Implemented in Validation Modules/Repositories'."
+            }
+          },
+          "required": [
+            "access_control",
+            "vba_protection",
+            "data_encryption",
+            "input_validation"
+          ]
+        },
+        "details": {
+          "description": "Detailed design considerations specific to security (e.g., specific threats addressed, rationale for algorithm choice, audit logging for security events). Use the standard structure.",
+          "$ref": "#/definitions/StandardDetailsSection"
+        },
+        "references": {
+          "description": "Optional references to relevant security requirements (`req-statement` 5.1) or standards.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/DocumentReference" }
+        }
+      },
+      "required": [
+        "status",
+        "authentication",
+        "authorization",
+        "data_security",
+        "details"
+      ]
+    },
+    "DeploymentDependency": {
+      "description": "Defines a system dependency required for deployment on user machines or servers.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the dependency (e.g., 'MS Access Runtime', '.NET Framework', 'Specific OCX/DLL', 'ODBC Driver')."
+        },
+        "version": {
+          "type": "string",
+          "description": "Required version or version range (e.g., '365 Current Channel', '>= 4.8', '12.0')."
+        },
+        "distribution": {
+          "type": "string",
+          "description": "How the dependency is distributed or installed (e.g., 'Pre-installed via standard SOE', 'Included in installer', 'Manual install required by IT', 'Download link provided')."
+        }
+      },
+      "required": ["name", "version", "distribution"]
+    },
+    "DeploymentPlan": {
+      "description": "Defines the high-level strategy for deploying and updating the application.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "description": "Status of this section.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "fe_deployment": {
+          "description": "Frontend (FE) deployment details.",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "description": "Deployment method (e.g., 'Manual copy of ACCDE from Shared Folder', 'Installer package (MSI)', 'ClickOnce (if applicable)')."
+            },
+            "update_strategy": {
+              "type": "string",
+              "description": "How frontend updates are delivered (e.g., 'Manual file replacement', 'Automatic update check via custom VBA code', 'Installer update', 'Group Policy')."
+            }
+          },
+          "required": ["method", "update_strategy"]
+        },
+        "be_deployment": {
+          "description": "Backend (BE) deployment details.",
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string",
+              "description": "Deployment location (e.g., 'Specific Shared Folder Path (e.g., \\\\server\\share\\app_be)', 'Requires specific AD group access')."
+            },
+            "initial_data": {
+              "type": "string",
+              "description": "Process for setting up initial data (master data, configuration) (e.g., 'Manual import via dedicated script', 'Included in initial BE file', 'No initial data needed')."
+            },
+            "update_strategy": {
+              "type": "string",
+              "description": "How backend updates (schema changes, data migration) are handled (e.g., 'Manual execution of DDL/DML scripts by admin', 'Automated migration script triggered by FE version check')."
+            }
+          },
+          "required": ["location", "initial_data", "update_strategy"]
+        },
+        "dependencies": {
+          "description": "List of system dependencies required for deployment. Define using `DeploymentDependency`.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/DeploymentDependency" }
+        },
+        "rollback_strategy": {
+          "description": "Plan for rolling back a failed deployment or update.",
+          "type": "object",
+          "properties": {
+            "overview": {
+              "type": "string",
+              "maxLength": 500,
+              "description": "Overview of the rollback strategy (e.g., 'Revert FE/BE files to previous version from backup/repository'). (YAML概要記述: 500文字推奨)."
+            },
+            "fe_rollback": {
+              "type": "string",
+              "description": "Steps for rolling back the frontend (e.g., 'Restore previous ACCDE file', 'Run previous installer')."
+            },
+            "be_rollback": {
+              "type": "string",
+              "description": "Steps for rolling back the backend (e.g., 'Restore BE database from backup', 'Run rollback scripts if available'). **Consider data loss implications.**"
+            }
+          },
+          "required": ["overview", "fe_rollback", "be_rollback"]
+        },
+        "details": {
+          "description": "Detailed design considerations specific to deployment (e.g., testing in staging environment, user communication plan). Use the standard structure.",
+          "$ref": "#/definitions/StandardDetailsSection"
+        }
+      },
+      "required": [
+        "status",
+        "fe_deployment",
+        "be_deployment",
+        "dependencies",
+        "rollback_strategy",
+        "details"
+      ]
+    },
+    "CrossCuttingConcerns": {
+      "description": "Container for concerns that affect multiple parts of the system.",
+      "type": "object",
+      "properties": {
+        "error_handling_strategy": {
+          "description": "Overall strategy for error handling and logging. References `ErrorHandlingStrategy` definition.",
+          "$ref": "#/definitions/ErrorHandlingStrategy"
+        },
+        "security_design": {
+          "description": "Overall security design. References `SecurityDesign` definition.",
+          "$ref": "#/definitions/SecurityDesign"
+        },
+        "deployment_plan": {
+          "description": "Overall deployment plan. References `DeploymentPlan` definition.",
+          "$ref": "#/definitions/DeploymentPlan"
+        }
+      },
+      "required": [
+        "error_handling_strategy",
+        "security_design",
+        "deployment_plan"
+      ]
+    },
+    "GlossaryTerm": {
+      "description": "Defines a single term in the project glossary.",
+      "type": "object",
+      "properties": {
+        "term": {
+          "type": "string",
+          "description": "The term being defined. Keep consistent."
+        },
+        "definition": {
+          "type": "string",
+          "description": "The clear and concise definition of the term in the context of this specific project."
+        },
+        "related_components": {
+          "description": "Optional list of related system component IDs where this term is particularly relevant.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "references": {
+          "description": "Optional references where this term is significantly used or defined (e.g., specific `req-statement` section).",
+          "type": "array",
+          "items": { "$ref": "#/definitions/DocumentReference" }
+        }
+      },
+      "required": ["term", "definition"]
+    },
+    "Glossary": {
+      "description": "A collection of project-specific terms and their definitions to ensure common understanding.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "description": "Status of this section.",
+          "$ref": "#/definitions/DocumentStatus"
+        },
+        "terms": {
+          "description": "List of glossary terms defined using `GlossaryTerm`.",
+          "type": "array",
+          "items": { "$ref": "#/definitions/GlossaryTerm" }
+        }
+      },
+      "required": ["status", "terms"]
+    }
+  }
+}

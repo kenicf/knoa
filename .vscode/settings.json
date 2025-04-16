@@ -14,5 +14,7 @@
     "editor.codeActionsOnSave": {
       "source.fixAll.eslint": "explicit"
     }
-  }
+  },
+  // Windows環境でのデフォルトターミナルプロファイルをPowerShellに設定
+  "terminal.integrated.defaultProfile.windows": "PowerShell"
 }

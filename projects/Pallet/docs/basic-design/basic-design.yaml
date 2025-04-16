@@ -1,0 +1,4469 @@
+# Basic Design Document Source of Truth
+# Schema Version: 1.9
+# This file will be populated based on the migration plan.
+
+schema_version: '1.9'
+
+document_info:
+  title: '業務支援アプリケーション 基本設計書'
+  version: '0.1' # Initial draft version
+  status: 'WIP'
+  last_updated: '2025-04-15' # Update this date as changes are made
+  authors:
+    - 'Roo (AI Assistant)'
+    - 'Kenichi (Reviewer/Leader)' # Add actual authors/reviewers
+  description: |
+    顧客Excel管理表への直接入力に伴う課題を解決し、業務効率と品質向上を目指す業務支援アプリケーションの基本設計書。
+    YAMLをSource of Truthとし、JSON Schema v1.9に準拠。詳細は関連Markdown参照。
+    要件定義書 Ver.4.0に基づく。
+  change_log:
+    - version: '1.9'
+      date: '2025-04-15'
+      author: 'Gemini'
+      summary: "Enhanced schema definition clarity and strictness based on v1.8 review. Strengthened patterns for 'fk_references' and 'screen_id'. Added specific writing instructions to descriptions for 'compliance_summary', 'detailed_design_ref', and 'implementation_notes'."
+    - version: '1.8'
+      date: '2025-04-15'
+      author: 'Gemini'
+      summary: "Final adjustments based on improvement strategy: Deprecated legacy 'data' field, added 'injection_type' to dependencies, enhanced descriptions with standard document references and cautions."
+    - version: '0.1' # Initial YAML structure creation
+      date: '2025-04-15'
+      author: 'Roo (AI Assistant)'
+      summary: 'Created initial YAML file structure based on migration plan step 3.1. Added schema_version, document_info, and prerequisite_documents.'
+  general_notes:
+    - 'This document follows the YAML vs Markdown Guideline (v1.4).'
+    - 'Refer to `basic-design.schema.json` (v1.9) for detailed field definitions and constraints.'
+    - 'Detailed explanations, rationale, and complex logic should be documented in linked Markdown files referenced via `detailed_design_ref`.'
+
+prerequisite_documents:
+  - id: 'req-statement'
+    name: '業務支援ツール 要件定義書'
+    version: '4.0'
+    description: 'The primary requirements document driving this design.'
+  - id: 'ai-guide-vba'
+    name: 'AI Developer Guide (VBA)'
+    path: '../ai-developer-guide-vba.md'
+    description: 'Guidelines for using AI assistance in VBA development.'
+  - id: 'coding-std-vba'
+    name: 'Coding Standards (VBA)'
+    path: '../coding-standards-vba.md'
+    description: 'VBA coding conventions, naming rules, and best practices.'
+  - id: 'design-prin-vba'
+    name: 'Design Principles and Patterns (VBA)'
+    path: '../design-principles-vba.md'
+    description: 'Architectural principles (SRP, DI, Error Handling, etc.) for VBA applications.'
+  - id: 'testing-guide-vba'
+    name: 'Testing Guidelines (VBA)'
+    path: '../testing-guidelines-vba.md'
+    description: 'Guidelines for unit testing, integration testing, and testability design in VBA.'
+  - id: 'frontend-design-vba' # Added based on frontend section references
+    name: 'Frontend Design Guidelines (VBA/Access)'
+    path: '../frontend-design-vba.md' # Assuming path, adjust if needed
+    description: 'Guidelines for Access form design, UI/UX, and accessibility.'
+  - id: 'persol-theme' # Added based on frontend section references
+    name: "CSS Theme Guideline 'persol-universal-manual'"
+    path: '../persol-theme-guideline.md' # Assuming path, adjust if needed
+    description: 'Visual design guidelines (colors, typography, layout) referenced for UI consistency.'
+  - id: 'schema-v1.9'
+    name: 'Basic Design Schema v1.9'
+    path: './basic-design.schema.json'
+    description: 'The JSON Schema definition used to validate this YAML document.'
+  - id: 'yaml-md-guide'
+    name: 'YAML vs Markdown Guideline v1.4'
+    path: './yaml-vs-markdown-guideline.md'
+    description: 'Guideline defining the content split between YAML and referenced Markdown files.'
+
+introduction:
+  purpose: | # maxLength: 1000
+    「業務支援ツール 要件定義書 Ver.4.0」に基づき、業務支援アプリケーションの基本設計を定義する。
+    顧客Excel管理表への直接入力に伴う課題（煩雑化、ミス、作業漏れ、破損リスク）を軽減し、業務効率と品質向上を目的とする。
+    本書は要件を技術的にブレークダウンし、システム全体の骨格を定義する。後続の詳細設計・実装の基礎資料となる。
+    開発は本書および前提文書（標準ドキュメント群）に準拠する。
+  scope: | # maxLength: 1000
+    本システムの全体構成、バックエンド設計（DB構造、リレーション）の基本設計を対象とする。
+    フロントエンド設計（画面、機能フロー）、詳細ロジック、非機能要件詳細、モジュール設計、Excel連携詳細は後続セクションまたは詳細設計書で定義する。
+    現時点(Ver.0.2)ではシステム構成、BE設計(テーブル定義、リレーションシップ)までを定義。
+
+system_configuration:
+  status: 'FIXED' # Based on basic-design-02-system-configuration.md
+  overview: | # maxLength: 1000
+    「設計原則とパターン (VBA版)」に基づき、FE/BE分離構成を採用。
+    FEはAccessアプリ(.accdb/.accde)でメンバーPC上で動作。UI、ロジック、Excelコピー支援機能を含む。
+    BEはAccess DB(.accdb)で共有フォルダに配置。テーブル、クエリ、リレーションを一元管理。
+    BE内には論理的にマスタ、イベント管理、ログ、実績集計、ステージングの各テーブル群を含む。
+  components:
+    - id: 'fe'
+      name: 'FE: Access (.accdb/.accde)'
+      description: 'ユーザーインターフェース、UI制御ロジック、BEへのデータアクセス要求、Excelコピー支援プロセスを含む。' # maxLength: 500
+      technology: 'MS Access VBA'
+      location: 'メンバーPC'
+      details:
+        design_rationale: 'ユーザー操作の直接的なインターフェース。保守性と応答性を考慮。' # maxLength: 500
+        testing_strategy: 'UIテストは手動中心。ロジック分離したモジュールは単体テスト。【testing-guide-vba】参照。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'design-prin-vba'
+            section: '2.1 FE/BE分離'
+            compliance_summary: 'UIとデータ永続化層を分離する原則に従い、FEとして定義。'
+    - id: 'be'
+      name: 'BE: Access DB (.accdb)'
+      description: 'データの実体を一元管理。テーブル、クエリ、リレーションシップを含む。' # maxLength: 500
+      technology: 'MS Access ACCDB'
+      location: '共有フォルダ (顧客業務フォルダ内)'
+      details:
+        design_rationale: 'データの一元管理と整合性維持。共有フォルダ配置によるアクセス制御。' # maxLength: 500
+        testing_strategy: 'テーブル定義、リレーション、クエリの単体テスト。データアクセス層経由でのテスト。【testing-guide-vba】参照。' # maxLength: 500
+        security_considerations: '共有フォルダのアクセス権限設定が重要。DBパスワード設定も検討。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'design-prin-vba'
+            section: '2.1 FE/BE分離'
+            compliance_summary: 'データ永続化層として定義。'
+    - id: 'master-tables'
+      name: 'Master Tables'
+      description: 'BE内のマスタデータ群（ユーザー、業務種別、工程定義など）。' # maxLength: 500
+      technology: 'MS Access Tables'
+      location: 'BE内'
+      details:
+        design_rationale: 'システム全体で参照される基本情報を格納。' # maxLength: 500
+    - id: 'event-mgmt-tables'
+      name: 'Event Mgmt Tables'
+      description: 'BE内のイベント管理関連テーブル群（イベント本体、詳細、関連）。' # maxLength: 500
+      technology: 'MS Access Tables'
+      location: 'BE内'
+      details:
+        design_rationale: '問合せ、エラー報告等のイベント情報を構造化して管理。' # maxLength: 500
+    - id: 'log-table'
+      name: 'Log Table'
+      description: 'BE内のログテーブル（システムログ、エラーログ）。' # maxLength: 500
+      technology: 'MS Access Table'
+      location: 'BE内'
+      details:
+        design_rationale: 'システム動作の追跡とトラブルシューティング用。' # maxLength: 500
+    - id: 'perf-summary-table'
+      name: 'Perf Summary Table'
+      description: 'BE内の日次実績集計テーブル。' # maxLength: 500
+      technology: 'MS Access Table'
+      location: 'BE内'
+      details:
+        design_rationale: '日次バッチで実績を集計し、ダッシュボード表示のパフォーマンスを向上。' # maxLength: 500
+    - id: 'staging-tables'
+      name: 'Staging Tables'
+      description: 'BE内のステージングDB関連テーブル群（一時取込、案件情報、作業履歴、チェックミス）。' # maxLength: 500
+      technology: 'MS Access Tables'
+      location: 'BE内'
+      details:
+        design_rationale: 'Excelからのデータ取込先、作業領域として使用。原本Excelへの直接操作を回避。' # maxLength: 500
+    - id: 'excel-original'
+      name: '顧客Excel管理表 (原本)'
+      description: 'マスターデータとなるExcelファイル。原則直接編集しない。' # maxLength: 500
+      technology: 'MS Excel'
+      location: '共有フォルダ (顧客業務フォルダ内)'
+      details:
+        design_rationale: '既存のデータソース。システムはこれへの直接依存を減らす。' # maxLength: 500
+    - id: 'excel-copy'
+      name: 'コピーExcel管理表'
+      description: '作業用にコピーされたExcelファイル。FEへのデータ取込元。' # maxLength: 500
+      technology: 'MS Excel'
+      location: '共有フォルダ (顧客業務フォルダ内)'
+      details:
+        design_rationale: '原本保護のため、作業はこのコピーに対して行う。' # maxLength: 500
+    - id: 'report-escalation'
+      name: 'エスカレーションレポート (CSV等)'
+      description: 'データ転記時のイレギュラー情報を出力するファイル。' # maxLength: 500
+      technology: 'CSV / Text File'
+      location: '共有フォルダ (顧客業務フォルダ内)'
+      details:
+        design_rationale: '手動対応が必要なケースを記録・通知。' # maxLength: 500
+    - id: 'backup-storage'
+      name: 'BE Backup Storage'
+      description: 'BEデータベースのバックアップ保管場所。' # maxLength: 500
+      technology: 'File System / Backup Server'
+      location: 'バックアップ領域 (運用要件で定義)'
+      details:
+        design_rationale: 'データ保護と障害復旧のため。' # maxLength: 500
+  diagram:
+    title: 'システム構成図'
+    description: '主要コンポーネントとデータフローを示す。' # maxLength: 500
+    mermaid_file: './diagrams/system-configuration.mmd' # Required, ensure file exists
+  deployment_notes:
+    - 'FEは各メンバーPCへ配布。BEはアクセス権管理された共有フォルダへ配置。'
+  security_considerations:
+    - '共有フォルダのアクセス権限設定が重要。BEデータベースパスワードも検討。'
+  references:
+    - doc_id: 'design-prin-vba'
+      section: '2.1 FE/BE分離'
+    - doc_id: 'req-statement'
+      section: '4.1' # Excelコピー支援プロセス
+
+backend_design:
+  status: 'FIXED' # Based on basic-design-03-backend-design.md
+  database_overview: | # maxLength: 1000
+    BEはMS Access (.accdb)。FE/BE分離構成。
+    ステージングDBを設け、原本Excelへの直接操作を回避。
+    システム独自の安定したキー（T_CaseInfoはUUID、他は主にオートナンバー）でリレーションを維持。
+    正規化を基本としつつ、性能・簡便性のため一部冗長性許容。
+    全テーブルに原則として監査項目(CreatedDateTime, UpdatedDateTime)を設け、VBAで自動更新。
+    命名規則、データ型、制約は標準規約(coding-std-vba)に準拠。
+  general_notes:
+    - '命名規則: テーブル名(T_/M_ + PascalCase), フィールド名(PascalCase)。【coding-std-vba】1項準拠。'
+    - 'キー戦略: T_CaseInfoはUUID(テキスト38文字)、他は主にオートナンバー。詳細は各テーブル定義参照。【design-prin-vba】3.1項考慮。'
+    - '監査項目: CreatedDateTime, UpdatedDateTime は原則必須(No Null)。VBAでの自動更新を想定。'
+    - 'インデックス: PK, Unique制約に加え、検索・結合・ソート対象フィールドにIndex(重複可)を設定。'
+    - 'リレーションシップ: 参照整合性は原則有効。連鎖更新/削除はデータ保持ポリシーに基づき設定。'
+  tables:
+    # --- マスタテーブル ---
+    - name: 'M_BusinessType'
+      status: 'FIXED'
+      logical_name: '業務種別マスタ'
+      description: '業務の種類（例：「証明書関連」）を管理する。' # maxLength: 500
+      fields:
+        - name: 'BusinessTypeID'
+          logical_name: '業務種別ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: '業務種別の一意な識別子。' # maxLength: 500
+        - name: 'BusinessTypeName'
+          logical_name: '業務種別名'
+          data_type: 'テキスト'
+          size_format: 100
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Unique'
+          remarks: '例：「証明書関連」「資格情報登録」。一意であるべき。' # maxLength: 500
+        - name: 'StandardWorkloadFactor'
+          logical_name: '標準巻き取り工数'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'この業務の1件あたり標準工数（秒単位）。巻き取り工数計算用。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '業務種別の補足説明（任意）。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true # Default to Yes
+          remarks: 'この業務種別が現在有効かを示すフラグ。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_BusinessType'
+          fields: ['BusinessTypeID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_BusinessType_Name'
+          fields: ['BusinessTypeName']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_BusinessType_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'システムで扱う業務の種類を定義する基本マスタ。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUnique制約(BusinessTypeName)のテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_BusinessType.md' # Recommended
+    - name: 'M_ProcessDefinition'
+      status: 'FIXED'
+      logical_name: '工程定義マスタ'
+      description: '抽象化された工程（作業の性質）を定義する。業務フローの構成要素となる。' # maxLength: 500
+      fields:
+        - name: 'ProcessDefinitionID'
+          logical_name: '工程定義ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: '工程定義の一意な識別子。' # maxLength: 500
+        - name: 'BusinessTypeID'
+          logical_name: '業務種別ID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_BusinessType.BusinessTypeID' # Corrected format
+          allow_null: true # FKだがNULL許容
+          required: false
+          index_type: 'Index'
+          remarks: 'M_BusinessType.BusinessTypeID と紐づく。特定の業務種別固有の工程の場合に指定（共通工程ならNULL）。' # maxLength: 500
+        - name: 'AbstractProcessCode'
+          logical_name: '抽象工程コード'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index' # Composite index defined below
+          remarks: '抽象工程を示すコード。BusinessTypeIDとの組み合わせで一意性を担保する複合インデックスを推奨。' # maxLength: 500
+        - name: 'ProcessName'
+          logical_name: '工程名'
+          data_type: 'テキスト'
+          size_format: 100
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: '抽象化された工程の名称（例：「受付」「入力」）。検索・表示用にインデックスを設定。' # maxLength: 500
+        - name: 'DefaultProcessType'
+          logical_name: '標準工程種別'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '工程の性質を示す分類（例：「メイン作業」「チェック」）。検索・表示用にインデックスを設定。' # maxLength: 500
+        - name: 'StandardDurationMinutes'
+          logical_name: '標準所要時間（分）'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'この工程の標準的な所要時間の目安（分単位）。実績集計等での利用を想定。' # maxLength: 500
+        - name: 'IsMandatoryInDefaultFlow'
+          logical_name: '標準フロー必須フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: false
+          remarks: '主要な業務パターンにおいて、この工程が必須かどうかを示す目安。' # maxLength: 500
+        - name: 'CanMultipleWorkers'
+          logical_name: '複数担当者可否フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: false
+          remarks: '複数担当者が関与しうる工程かどうかの目安。' # maxLength: 500
+        - name: 'RequiresDifferentChecker'
+          logical_name: '別担当者チェック要否フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: false
+          remarks: '作業者と異なる担当者によるチェックが必要な工程かどうかの目安。' # maxLength: 500
+        - name: 'StandardOrder'
+          logical_name: '標準順序'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '業務フロー内での標準的な表示順や実行順を示す（任意）。ソート用にインデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'この工程定義が現在有効かを示すフラグ。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_ProcessDefinition'
+          fields: ['ProcessDefinitionID']
+          unique: true
+          primary: true
+        - index_name: 'IX_M_ProcessDefinition_BizType' # FK index
+          fields: ['BusinessTypeID']
+          unique: false
+          primary: false
+        - index_name: 'UQ_M_ProcessDefinition_BizType_Code' # Composite Unique Index (Recommended)
+          fields: ['BusinessTypeID', 'AbstractProcessCode']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_ProcessDefinition_Name'
+          fields: ['ProcessName']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_ProcessDefinition_Type'
+          fields: ['DefaultProcessType']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_ProcessDefinition_Order'
+          fields: ['StandardOrder']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_ProcessDefinition_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: '作業の単位となる工程を抽象化して定義。業務フロー構築や実績集計の基礎。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特に複合ユニーク制約(BusinessTypeID, AbstractProcessCode)のテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_ProcessDefinition.md' # Recommended
+    - name: 'M_User'
+      status: 'FIXED'
+      logical_name: 'ユーザーマスタ'
+      description: 'システム利用者の情報を管理する。' # maxLength: 500
+      fields:
+        - name: 'UserID'
+          logical_name: 'ユーザーID'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'ユーザーの一意な識別子（例：社員番号など）。ログイン認証等で使用。' # maxLength: 500
+        - name: 'UserName'
+          logical_name: '氏名'
+          data_type: 'テキスト'
+          size_format: 100
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: '利用者の氏名。検索・表示用にインデックスを設定。' # maxLength: 500
+        - name: 'PasswordHash'
+          logical_name: 'パスワードハッシュ'
+          data_type: 'テキスト'
+          size_format: 255 # Adjust size based on hash algorithm
+          is_pk: false
+          is_fk: false
+          allow_null: false # Assuming password is required
+          required: true
+          index_type: 'None'
+          remarks: 'ハッシュ化されたパスワード。アルゴリズムに応じてサイズ調整。' # maxLength: 500
+        - name: 'PasswordSalt'
+          logical_name: 'パスワードソルト'
+          data_type: 'テキスト'
+          size_format: 100 # Adjust size based on salt generation
+          is_pk: false
+          is_fk: false
+          allow_null: false # Assuming salt is required with hash
+          required: true
+          index_type: 'None'
+          remarks: 'パスワードハッシュ化に使用するソルト。' # maxLength: 500
+        - name: 'RoleID'
+          logical_name: 'ロールID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_Role.RoleID'
+          allow_null: true # FKだがNULL許容
+          required: false
+          index_type: 'Index'
+          remarks: 'M_Role.RoleID と紐づく。役割（管理者、一般メンバー等）。権限管理のキーとなるためインデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'このユーザーが現在有効（在籍中など）かを示すフラグ。ログイン制御や検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_User'
+          fields: ['UserID']
+          unique: true
+          primary: true
+        - index_name: 'IX_M_User_Name'
+          fields: ['UserName']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_User_RoleID' # FK index
+          fields: ['RoleID']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_User_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'システム利用者情報を管理。UserIDを主キーとし、ロールによる権限管理を行う。' # maxLength: 500
+        testing_strategy: 'CRUD操作、ログイン認証ロジック（パスワードハッシュ比較）のテスト。RoleIDのFK制約テスト。' # maxLength: 500
+        security_considerations: 'パスワードはハッシュ化＋ソルトで保存必須。パスワードポリシー適用は詳細設計。アカウントロックアウトは実装しない。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+          - standard_doc_id: 'req-statement'
+            section: '5.1'
+            compliance_summary: 'ID/パスワード認証要件に対応。パスワードハッシュ化を実装。'
+      detailed_design_ref: './detailed-designs/M_User.md' # Recommended
+    - name: 'M_UserTaskAbility'
+      status: 'FIXED'
+      logical_name: 'ユーザー対応可能タスクマスタ'
+      description: 'ユーザーが対応可能なタスク（工程）を管理する（M_User と M_ProcessDefinition の多対多関係）。' # maxLength: 500
+      fields:
+        - name: 'UserID'
+          logical_name: 'ユーザーID'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: true # Part of composite PK
+          is_fk: true
+          fk_references: 'M_User.UserID'
+          allow_null: false
+          required: true
+          index_type: 'PK' # Defined in composite index below
+          remarks: 'M_User.UserID と紐づく。主キーの一部。' # maxLength: 500
+        - name: 'ProcessDefinitionID'
+          logical_name: '工程定義ID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: true # Part of composite PK
+          is_fk: true
+          fk_references: 'M_ProcessDefinition.ProcessDefinitionID'
+          allow_null: false
+          required: true
+          index_type: 'PK' # Defined in composite index below
+          remarks: 'M_ProcessDefinition.ProcessDefinitionID と紐づく。主キーの一部。' # maxLength: 500
+        - name: 'SkillLevel'
+          logical_name: 'スキルレベル'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '(任意) 対応可能レベル（例: 1:見習い, 3:標準, 5:熟練）。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_UserTaskAbility' # Composite Primary Key
+          fields: ['UserID', 'ProcessDefinitionID']
+          unique: true
+          primary: true
+        # Individual FK indexes are often beneficial even with composite PK
+        - index_name: 'IX_M_UserTaskAbility_UserID'
+          fields: ['UserID']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_UserTaskAbility_ProcessDefinitionID'
+          fields: ['ProcessDefinitionID']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'ユーザーと工程の多対多関係を表現する中間テーブル。タスク割り当てやスキル管理の基礎。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特に複合主キー制約とFK制約のテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_UserTaskAbility.md' # Recommended
+    - name: 'M_Role'
+      status: 'FIXED'
+      logical_name: 'ロールマスタ'
+      description: 'ユーザーの役割（権限グループ）を管理する。' # maxLength: 500
+      fields:
+        - name: 'RoleID'
+          logical_name: 'ロールID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'ロールの一意な識別子。' # maxLength: 500
+        - name: 'RoleName'
+          logical_name: 'ロール名'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Unique'
+          remarks: '例: "管理者", "一般"。一意であるべき。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'ロールの補足説明（任意）。' # maxLength: 500
+        - name: 'DisplayOrder'
+          logical_name: '表示順'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '画面表示時のソート順（任意）。インデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'このロールが現在有効か。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_Role'
+          fields: ['RoleID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_Role_Name'
+          fields: ['RoleName']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_Role_DisplayOrder'
+          fields: ['DisplayOrder']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_Role_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'RBAC（ロールベースアクセス制御）の基礎となるマスタ。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUnique制約(RoleName)のテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_Role.md' # Recommended
+    - name: 'M_RoleMenuPermission'
+      status: 'FIXED'
+      logical_name: 'ロールメニュー権限マスタ'
+      description: 'ロールごとにアクセス可能な画面と、メニュー表示に必要な情報（表示名、順序、グループ）を管理する。' # maxLength: 500
+      fields:
+        - name: 'RoleMenuPermissionID'
+          logical_name: '権限ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'レコードの一意な識別子（代理キー）。' # maxLength: 500
+        - name: 'RoleID'
+          logical_name: 'ロールID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false # Part of composite unique index, not PK itself
+          is_fk: true
+          fk_references: 'M_Role.RoleID'
+          allow_null: false
+          required: true
+          index_type: 'Index' # Defined in composite index below
+          remarks: 'M_Role.RoleID と紐づく。必須項目。ScreenIDとの複合ユニーク制約を推奨。検索用にインデックス設定。' # maxLength: 500
+        - name: 'ScreenID'
+          logical_name: '画面ID'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false # Part of composite unique index
+          is_fk: false # Not a direct FK, but references screen definitions
+          allow_null: false
+          required: true
+          index_type: 'Index' # Defined in composite index below
+          remarks: 'アクセス対象画面のID (FRMXXXXX_XXX形式)。必須項目。RoleIDとの複合ユニーク制約を推奨。検索用にインデックス設定。' # maxLength: 500
+        - name: 'CanView'
+          logical_name: '閲覧権限'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: false
+          remarks: 'このロールがこの画面/機能を閲覧できるか。メニュー表示の可否判断に使用。' # maxLength: 500
+        - name: 'CanExecute'
+          logical_name: '実行/編集権限'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: false
+          remarks: 'このロールがこの画面/機能で実行や編集操作を行えるか。ボタンの有効/無効状態の制御に使用。' # maxLength: 500
+        - name: 'MenuDisplayName'
+          logical_name: 'メニュー表示名'
+          data_type: 'テキスト'
+          size_format: 100
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          remarks: 'メインメニューのボタン等に表示される名前。アクセスキー（例: &L）を含む想定 (例: 案件一覧(&L))。必須項目。' # maxLength: 500
+        - name: 'MenuGroup'
+          logical_name: 'メニューグループ'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index' # Defined in composite index below
+          remarks: 'メニュー項目を分類するグループ名（例: "基本操作", "管理機能"）。フォーム上のFrame等での整理用。DisplayOrderとの複合インデックスをソート用に設定。必須項目。' # maxLength: 500
+        - name: 'DisplayOrder'
+          logical_name: '表示順'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index' # Defined in composite index below
+          default_value: 0
+          remarks: 'MenuGroup 内での表示順序。小さい値が先。MenuGroupとの複合インデックスをソート用に設定。必須項目。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_RoleMenuPermission'
+          fields: ['RoleMenuPermissionID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_RoleMenuPermission_RoleScreen' # Composite Unique Index (Recommended)
+          fields: ['RoleID', 'ScreenID']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_RoleMenuPermission_RoleID' # FK index
+          fields: ['RoleID']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_RoleMenuPermission_ScreenID'
+          fields: ['ScreenID']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_RoleMenuPermission_GroupOrder' # Sort index
+          fields: ['MenuGroup', 'DisplayOrder']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'RBACに基づき、ロールごとの画面アクセス権限とメニュー表示情報を定義する。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特に複合ユニーク制約(RoleID, ScreenID)のテスト。メニュー表示ロジックのテスト（本テーブルのデータを使用）。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_RoleMenuPermission.md' # Recommended
+    - name: 'M_SystemStatus'
+      status: 'FIXED'
+      logical_name: 'システムステータスマスタ'
+      description: '案件のシステム内部ステータス（例: 取込済、作業中、転記済）を管理する。' # maxLength: 500
+      fields:
+        - name: 'SystemStatusID'
+          logical_name: 'システム状態ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'システムステータスの一意な識別子。' # maxLength: 500
+        - name: 'SystemStatusName'
+          logical_name: 'システム状態名'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Unique'
+          remarks: '例: "取込済", "作業中", "転記済"。一意であるべき。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'ステータスの補足説明（任意）。' # maxLength: 500
+        - name: 'DisplayOrder'
+          logical_name: '表示順'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '画面表示時のソート順（任意）。インデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'このステータスが現在有効か。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_SystemStatus'
+          fields: ['SystemStatusID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_SystemStatus_Name'
+          fields: ['SystemStatusName']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_SystemStatus_DisplayOrder'
+          fields: ['DisplayOrder']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_SystemStatus_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: '案件のワークフロー状態を管理するための基本マスタ。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUnique制約(SystemStatusName)のテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_SystemStatus.md' # Recommended
+    - name: 'M_OverallCaseStatus'
+      status: 'FIXED'
+      logical_name: '案件全体ステータスマスタ'
+      description: '案件の全体的な状態（工程整合性や確認要否など）を管理する。' # maxLength: 500
+      fields:
+        - name: 'OverallCaseStatusID'
+          logical_name: '案件全体状態ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: '案件全体ステータスの一意な識別子。' # maxLength: 500
+        - name: 'OverallCaseStatusName'
+          logical_name: '案件全体状態名'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Unique'
+          remarks: '例: "正常", "要確認", "異常あり"。一意であるべき。' # maxLength: 500
+        - name: 'IsAlertStatus'
+          logical_name: '警告状態フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: false
+          remarks: '注意喚起が必要な状態か (任意)。検索用にインデックスを設定。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'ステータスの補足説明（任意）。' # maxLength: 500
+        - name: 'DisplayOrder'
+          logical_name: '表示順'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '画面表示時のソート順（任意）。インデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'このステータスが現在有効か。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_OverallCaseStatus'
+          fields: ['OverallCaseStatusID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_OverallCaseStatus_Name'
+          fields: ['OverallCaseStatusName']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_OverallCaseStatus_Alert'
+          fields: ['IsAlertStatus']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_OverallCaseStatus_Order'
+          fields: ['DisplayOrder']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_OverallCaseStatus_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: '案件のシステムステータスとは別に、全体的な健全性や注意喚起レベルを示すマスタ。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUnique制約(OverallCaseStatusName)のテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_OverallCaseStatus.md' # Recommended
+    - name: 'M_MissCategory'
+      status: 'FIXED'
+      logical_name: 'ミスカテゴリマスタ'
+      description: 'チェックミスのカテゴリを管理する。' # maxLength: 500
+      fields:
+        - name: 'MissCategoryID'
+          logical_name: 'ミスカテゴリID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'ミスカテゴリの一意な識別子。' # maxLength: 500
+        - name: 'MissCategoryName'
+          logical_name: 'ミスカテゴリ名'
+          data_type: 'テキスト'
+          size_format: 100
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Unique'
+          remarks: '例: "入力誤り", "判断ミス"。一意であるべき。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'カテゴリの補足説明（任意）。' # maxLength: 500
+        - name: 'DisplayOrder'
+          logical_name: '表示順'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '画面表示時のソート順（任意）。インデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'このカテゴリが現在有効か。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_MissCategory'
+          fields: ['MissCategoryID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_MissCategory_Name'
+          fields: ['MissCategoryName']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_MissCategory_DisplayOrder'
+          fields: ['DisplayOrder']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_MissCategory_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'チェックミス分析の分類軸となるマスタ。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUnique制約(MissCategoryName)のテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_MissCategory.md' # Recommended
+    - name: 'M_ActionType'
+      status: 'FIXED'
+      logical_name: 'アクション種別マスタ'
+      description: '作業履歴のアクションの種類（例: 開始、終了）を管理する。' # maxLength: 500
+      fields:
+        - name: 'ActionTypeID'
+          logical_name: 'アクション種別ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'アクション種別の一意な識別子。' # maxLength: 500
+        - name: 'ActionTypeName'
+          logical_name: 'アクション種別名'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Unique'
+          remarks: '例: "開始", "終了", "チェック完了", "完了"。一意であるべき。' # maxLength: 500
+        - name: 'IsStartAction'
+          logical_name: '開始アクション'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: false
+          remarks: '工程開始を示すアクションか (任意)。実績集計等で利用する可能性を考慮しインデックスを設定。' # maxLength: 500
+        - name: 'IsEndAction'
+          logical_name: '終了アクション'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: false
+          remarks: '工程/案件終了を示すアクションか (任意)。実績集計等で利用する可能性を考慮しインデックスを設定。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'アクション種別の補足説明（任意）。' # maxLength: 500
+        - name: 'DisplayOrder'
+          logical_name: '表示順'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '画面表示時のソート順（任意）。インデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'このアクション種別が現在有効か。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_ActionType'
+          fields: ['ActionTypeID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_ActionType_Name'
+          fields: ['ActionTypeName']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_ActionType_IsStart'
+          fields: ['IsStartAction']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_ActionType_IsEnd'
+          fields: ['IsEndAction']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_ActionType_DisplayOrder'
+          fields: ['DisplayOrder']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_ActionType_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: '作業履歴(T_WorkHistory)で記録されるアクションの種類を定義。実績集計やリードタイム計算のキーとなる。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUnique制約(ActionTypeName)のテスト。IsStartAction/IsEndActionフラグの利用ロジックのテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_ActionType.md' # Recommended
+    - name: 'M_EventType'
+      status: 'FIXED'
+      logical_name: 'イベント種別マスタ'
+      description: 'イベント管理機能で扱うイベントの種類（例: 問合せ、クレーム）を管理する。' # maxLength: 500
+      fields:
+        - name: 'EventTypeID'
+          logical_name: 'イベント種別ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'イベント種別の一意な識別子。' # maxLength: 500
+        - name: 'EventTypeName'
+          logical_name: 'イベント種別名'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Unique'
+          remarks: '例: "問合せ", "クレーム", "エラー報告"。一意であるべき。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'イベント種別の補足説明（任意）。' # maxLength: 500
+        - name: 'DisplayOrder'
+          logical_name: '表示順'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '画面表示時のソート順（任意）。インデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'このイベント種別が現在有効か。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_EventType'
+          fields: ['EventTypeID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_EventType_Name'
+          fields: ['EventTypeName']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_EventType_DisplayOrder'
+          fields: ['DisplayOrder']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_EventType_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'イベント管理機能の分類軸となるマスタ。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUnique制約(EventTypeName)のテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_EventType.md' # Recommended
+    - name: 'M_Status'
+      status: 'FIXED'
+      logical_name: '対応状況マスタ'
+      description: 'イベント管理機能におけるイベントの対応状況（例: 新規受付、対応中、完了）を管理する。' # maxLength: 500
+      fields:
+        - name: 'StatusID'
+          logical_name: '対応状況ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: '対応状況の一意な識別子。' # maxLength: 500
+        - name: 'StatusName'
+          logical_name: '対応状況名'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Unique'
+          remarks: '例: "新規受付", "対応中", "完了"。一意であるべき。' # maxLength: 500
+        - name: 'IsClosedStatus'
+          logical_name: 'クローズ状態'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: false
+          remarks: '完了/クローズ状態を示すか (任意)。検索用にインデックスを設定。' # maxLength: 500
+        - name: 'DisplayOrder'
+          logical_name: '表示順'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '画面表示時のソート順（任意）。インデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'この対応状況が現在有効か。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_Status'
+          fields: ['StatusID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_Status_Name'
+          fields: ['StatusName']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_Status_IsClosed'
+          fields: ['IsClosedStatus']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_Status_DisplayOrder'
+          fields: ['DisplayOrder']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_Status_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'イベント(T_Event)の現在の対応状況を示すためのマスタ。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUnique制約(StatusName)のテスト。IsClosedStatusフラグの利用ロジックのテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_Status.md' # Recommended
+      status: 'FIXED'
+      logical_name: 'イベント詳細種別マスタ'
+      description: 'イベントへの追記（スクラップ）の種類（例: 初期報告、対応記録）を管理する。' # maxLength: 500
+      fields:
+        - name: 'DetailTypeID'
+          logical_name: '詳細種別ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: '詳細種別の一意な識別子。' # maxLength: 500
+        - name: 'DetailTypeName'
+          logical_name: '詳細種別名'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Unique'
+          remarks: '例: "初期報告", "対応記録", "コメント"。一意であるべき。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '詳細種別の補足説明（任意）。' # maxLength: 500
+        - name: 'DisplayOrder'
+          logical_name: '表示順'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '画面表示時のソート順（任意）。インデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'この詳細種別が現在有効か。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_EventDetailType'
+          fields: ['DetailTypeID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_EventDetailType_Name'
+          fields: ['DetailTypeName']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_EventDetailType_Order'
+          fields: ['DisplayOrder']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_EventDetailType_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'イベント詳細(T_EventDetail)の追記内容の種類を分類するためのマスタ。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUnique制約(DetailTypeName)のテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_EventDetailType.md' # Recommended
+    - name: 'M_EventDetailType'
+      status: 'FIXED'
+      logical_name: 'イベント詳細種別マスタ'
+      description: 'イベントへの追記（スクラップ）の種類（例: 初期報告、対応記録）を管理する。' # maxLength: 500
+      fields:
+        - name: 'DetailTypeID'
+          logical_name: '詳細種別ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: '詳細種別の一意な識別子。' # maxLength: 500
+        - name: 'DetailTypeName'
+          logical_name: '詳細種別名'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Unique'
+          remarks: '例: "初期報告", "対応記録", "コメント"。一意であるべき。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '詳細種別の補足説明（任意）。' # maxLength: 500
+        - name: 'DisplayOrder'
+          logical_name: '表示順'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '画面表示時のソート順（任意）。インデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'この詳細種別が現在有効か。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_EventDetailType'
+          fields: ['DetailTypeID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_EventDetailType_Name'
+          fields: ['DetailTypeName']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_EventDetailType_Order'
+          fields: ['DisplayOrder']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_EventDetailType_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'イベント詳細(T_EventDetail)の追記内容の種類を分類するためのマスタ。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUnique制約(DetailTypeName)のテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_EventDetailType.md' # Recommended
+    - name: 'M_EventUserRole'
+      status: 'FIXED' # Assuming fixed based on source markdown
+      logical_name: 'イベント関連ユーザー役割マスタ'
+      description: 'イベントに関連するユーザーの役割（例: 報告者、担当者）を管理する。' # maxLength: 500
+      fields:
+        - name: 'UserRoleID'
+          logical_name: 'ユーザー役割ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'ユーザー役割の一意な識別子。' # maxLength: 500
+        - name: 'UserRoleName'
+          logical_name: 'ユーザー役割名'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Unique'
+          remarks: '例: "報告者", "担当者", "確認者"。一意であるべき。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'ユーザー役割の補足説明（任意）。' # maxLength: 500
+        - name: 'DisplayOrder'
+          logical_name: '表示順'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '画面表示時のソート順（任意）。インデックスを設定。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'この役割が現在有効か。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_EventUserRole'
+          fields: ['UserRoleID']
+          unique: true
+          primary: true
+        - index_name: 'UQ_M_EventUserRole_Name'
+          fields: ['UserRoleName']
+          unique: true
+          primary: false
+        - index_name: 'IX_M_EventUserRole_Order'
+          fields: ['DisplayOrder']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_EventUserRole_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'イベント(T_Event)とユーザー(M_User)の関連付けにおいて、ユーザーの役割を定義するためのマスタ。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUnique制約(UserRoleName)のテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_EventUserRole.md' # Recommended
+    - name: 'M_Setting'
+      status: 'FIXED'
+      logical_name: '設定マスタ'
+      description: 'システム全体の設定値（例: デフォルトパス、特定機能のON/OFFフラグなど）をキー・バリュー形式で管理する。' # maxLength: 500
+      fields:
+        - name: 'SettingKey'
+          logical_name: '設定キー'
+          data_type: 'テキスト'
+          size_format: 100
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: '設定項目を識別する一意なキー (英語推奨、例: DefaultExportPath, EnableAutoBackup)。' # maxLength: 500
+        - name: 'SettingValue'
+          logical_name: '設定値'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '設定値。VBAコード側で適切なデータ型に変換して利用する。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '設定項目の内容や目的を説明する（必須推奨）。' # maxLength: 500
+        - name: 'ValueTypeHint'
+          logical_name: '値の型ヒント'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '(任意) 値の期待されるデータ型を示すヒント文字列（例: String, Integer, Boolean, Date）。' # maxLength: 500
+        - name: 'IsEditable'
+          logical_name: 'ユーザー編集可'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: false
+          remarks: '(任意) 管理画面等でユーザーがこの設定値を編集できるかを示すフラグ。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_Setting'
+          fields: ['SettingKey']
+          unique: true
+          primary: true
+      details:
+        design_rationale: 'システムの動作パラメータやフラグを一元管理し、運用や機能拡張時の柔軟性を確保。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特に設定値の型変換・バリデーションのテスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_Setting.md' # Recommended
+    - name: 'M_Holiday'
+      status: 'FIXED'
+      logical_name: '祝日マスタ'
+      description: '営業日計算で使用する祝日（国民の祝日など）の日付と名称を管理する。リードタイム分析などで利用。' # maxLength: 500
+      fields:
+        - name: 'HolidayDate'
+          logical_name: '祝日'
+          data_type: '日付型'
+          size_format: null
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: '祝日の日付。主キー。' # maxLength: 500
+        - name: 'HolidayName'
+          logical_name: '祝日名'
+          data_type: 'テキスト'
+          size_format: 100
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: '祝日の名称（例：「元日」、「建国記念の日」）。検索用にインデックスを設定。' # maxLength: 500
+        - name: 'Description'
+          logical_name: '説明'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '祝日の補足説明（任意）。' # maxLength: 500
+        - name: 'IsActive'
+          logical_name: '有効フラグ'
+          data_type: 'Yes/No型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: true
+          remarks: 'この祝日定義が現在有効か。検索条件として利用されるためインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_M_Holiday'
+          fields: ['HolidayDate']
+          unique: true
+          primary: true
+        - index_name: 'IX_M_Holiday_Name'
+          fields: ['HolidayName']
+          unique: false
+          primary: false
+        - index_name: 'IX_M_Holiday_IsActive'
+          fields: ['IsActive']
+          unique: false
+          primary: false
+      details:
+        design_rationale: '営業日計算やリードタイム分析等で、祝日を除外するための基礎データを管理。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特に祝日重複登録の防止（PK制約）と有効フラグの切替テスト。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(M_...)、フィールド名(PascalCase)を規約に従い命名。'
+      detailed_design_ref: './detailed-designs/M_Holiday.md' # Recommended
+    # --- トランザクションテーブル ---
+    - name: 'T_CaseInfo'
+      status: 'FIXED'
+      logical_name: '案件情報テーブル'
+      description: '案件の共通コア情報とシステム上のステータスを管理する。ステージングDBの中心となるテーブルの一つ。' # maxLength: 500
+      fields:
+        - name: 'CaseUUID'
+          logical_name: '案件独自キー'
+          data_type: 'テキスト'
+          size_format: 38
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: '案件の一意な識別子（UUID形式、例: "{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}"）。VBAで生成・設定。' # maxLength: 500
+        - name: 'BusinessTypeID'
+          logical_name: '業務種別ID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_BusinessType.BusinessTypeID'
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: 'M_BusinessType.BusinessTypeID と紐づく。必須項目。検索・集計用にインデックスを設定。' # maxLength: 500
+        - name: 'ImportSourceFile'
+          logical_name: '取込元ファイル名'
+          data_type: 'テキスト'
+          size_format: 255
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: 'どのコピーExcelファイルから取り込まれたかのファイルパスまたはファイル名。トレーサビリティ用。検索用にインデックスを設定。' # maxLength: 500
+        - name: 'ImportDateTime'
+          logical_name: '取込日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: 'Now()'
+          remarks: 'データが取り込まれた日時。検索・ソート用にインデックスを設定。' # maxLength: 500
+        - name: 'LastUpdatedDateTime'
+          logical_name: '最終更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: 'Now()'
+          remarks: 'このレコードが最後に（主にFEから）更新された日時。トリガー等での自動更新想定。検索・ソート用にインデックスを設定。' # maxLength: 500
+        - name: 'CaseMgmtNumber'
+          logical_name: '案件管理番号'
+          data_type: 'テキスト'
+          size_format: 100
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: 'Excel上の管理番号など、検索キーとして利用する可能性のある項目。NULLを許容するが、検索効率のためインデックスを設定。' # maxLength: 500
+        - name: 'SystemStatusID'
+          logical_name: 'システム状態ID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_SystemStatus.SystemStatusID'
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: 'M_SystemStatus.SystemStatusID と紐づく。案件の現在のシステム内部状態。FKだがNULL許容（初期状態など）。検索・絞り込み用にインデックスを設定。' # maxLength: 500
+        - name: 'OverallCaseStatusID'
+          logical_name: '案件全体状態ID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_OverallCaseStatus.OverallCaseStatusID'
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: 'M_OverallCaseStatus.OverallCaseStatusID と紐づく。案件の全体的な状態。FKだがNULL許容。検索・絞り込み用にインデックスを設定。' # maxLength: 500
+        - name: 'RequestDateTime'
+          logical_name: '依頼日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '顧客からの依頼日時（納期管理用）。検索・ソート用にインデックスを設定。' # maxLength: 500
+        - name: 'DueDate'
+          logical_name: '納期'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: 'この案件の納期。遅延チェックや検索・ソート用にインデックスを設定。' # maxLength: 500
+        - name: 'PrimaryUserID'
+          logical_name: '主担当者ユーザーID'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_User.UserID'
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: 'M_User.UserID と紐づく（任意）。案件の主担当者。FKだがNULL許容。検索・絞り込み用にインデックスを設定。' # maxLength: 500
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。' # maxLength: 500
+      indexes:
+        - index_name: 'PK_T_CaseInfo'
+          fields: ['CaseUUID']
+          unique: true
+          primary: true
+        - index_name: 'IX_T_CaseInfo_BusinessTypeID'
+          fields: ['BusinessTypeID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CaseInfo_ImportSourceFile'
+          fields: ['ImportSourceFile']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CaseInfo_ImportDateTime'
+          fields: ['ImportDateTime']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CaseInfo_LastUpdatedDateTime'
+          fields: ['LastUpdatedDateTime']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CaseInfo_CaseMgmtNumber'
+          fields: ['CaseMgmtNumber']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CaseInfo_SystemStatusID'
+          fields: ['SystemStatusID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CaseInfo_OverallCaseStatusID'
+          fields: ['OverallCaseStatusID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CaseInfo_RequestDateTime'
+          fields: ['RequestDateTime']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CaseInfo_DueDate'
+          fields: ['DueDate']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CaseInfo_PrimaryUserID'
+          fields: ['PrimaryUserID']
+          unique: false
+          primary: false
+      details:
+        design_rationale: '案件のコア情報を保持。Excelキー変動リスク回避のためUUIDを主キーに採用。業務固有情報は別テーブルで管理（SRP準拠）。' # maxLength: 500
+        testing_strategy: 'CRUD操作、特にUUID生成とFK制約のテスト。大量データ挿入テスト(性能)。' # maxLength: 500
+        performance_considerations: '頻繁な検索対象フィールド(各ID, 日付)にインデックス必須。データ量増大時の応答性考慮。' # maxLength: 500
+        standard_compliance:
+          - standard_doc_id: 'design-prin-vba'
+            section: '3.1 BE設計方針'
+            compliance_summary: '独自キー管理方針に従い、変動リスクのあるExcelキーではなくUUIDをPKに採用。'
+          - standard_doc_id: 'design-prin-vba'
+            section: '1. SRP'
+            compliance_summary: '案件コア情報に責務を限定し、業務固有情報を別テーブルに分離。'
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名・フィールド名をPascalCaseで命名。'
+      detailed_design_ref: './detailed-designs/T_CaseInfo.md'
+    - name: 'T_WorkHistory'
+      status: 'FIXED'
+      logical_name: '作業履歴テーブル'
+      description: '案件に対する作業アクションを、抽象化された工程と紐づけて記録する。'
+      fields:
+        - name: 'WorkHistoryID'
+          logical_name: '作業履歴ID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'レコードの一意な識別子'
+        - name: 'CaseUUID'
+          logical_name: '案件独自キー'
+          data_type: 'テキスト'
+          size_format: 38
+          is_pk: false
+          is_fk: true
+          fk_references: 'T_CaseInfo.CaseUUID'
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: 'T_CaseInfo.CaseUUID と紐づく。必須項目。関連レコード検索のためインデックスを設定。'
+        - name: 'ProcessDefinitionID'
+          logical_name: '工程定義ID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_ProcessDefinition.ProcessDefinitionID'
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: 'M_ProcessDefinition.ProcessDefinitionID と紐づく。必須項目。検索・集計用にインデックスを設定。'
+        - name: 'ActionTypeID'
+          logical_name: 'アクション種別ID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_ActionType.ActionTypeID'
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: 'M_ActionType.ActionTypeID と紐づく。必須項目。検索・集計用にインデックスを設定。'
+        - name: 'UserID'
+          logical_name: '担当者ユーザーID'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_User.UserID'
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: 'M_User.UserID と紐づく。このアクションを実行した担当者。必須項目。検索・集計用にインデックスを設定。'
+        - name: 'ActionDateTime'
+          logical_name: 'アクション日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: 'Now()'
+          remarks: 'このアクションが発生した日時。必須項目。検索・ソート用にインデックスを設定。'
+        - name: 'Remarks'
+          logical_name: '備考'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '自由記述欄。'
+        - name: 'WorkDetailMemo'
+          logical_name: '作業内容詳細メモ'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '現場での具体的な作業名や手順などを補足する場合。'
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。'
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。'
+      indexes:
+        - index_name: 'PK_T_WorkHistory'
+          fields: ['WorkHistoryID']
+          unique: true
+          primary: true
+        - index_name: 'IX_T_WorkHistory_CaseUUID'
+          fields: ['CaseUUID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_WorkHistory_ProcessDefinitionID'
+          fields: ['ProcessDefinitionID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_WorkHistory_ActionTypeID'
+          fields: ['ActionTypeID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_WorkHistory_UserID'
+          fields: ['UserID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_WorkHistory_ActionDateTime'
+          fields: ['ActionDateTime']
+          unique: false
+          primary: false
+      details:
+        design_rationale: '案件ごとの作業履歴を工程・アクション単位で記録し、証跡・集計・分析の基礎とする。'
+        testing_strategy: 'CRUD操作、FK制約、インデックスの有効性、履歴の時系列整合性をテスト。'
+        performance_considerations: '案件単位・工程単位での検索・集計パフォーマンスを重視し、主要FK/日時にインデックスを設定。'
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(T_...)、フィールド名(PascalCase)を規約に従い命名。'
+          - standard_doc_id: 'design-prin-vba'
+            section: '1. SRP'
+            compliance_summary: '作業履歴の記録責務に特化し、他の関心事と分離。'
+      detailed_design_ref: './detailed-designs/T_WorkHistory.md'
+    - name: 'T_CheckMiss'
+      status: 'FIXED'
+      logical_name: 'チェックミステーブル'
+      description: 'チェック工程で発見された個々のミスを記録する。'
+      fields:
+        - name: 'CheckMissID'
+          logical_name: 'チェックミスID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'ミス記録の一意な識別子'
+        - name: 'WorkHistoryID'
+          logical_name: '作業履歴ID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: true
+          fk_references: 'T_WorkHistory.WorkHistoryID'
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: 'T_WorkHistory.WorkHistoryID と紐づく。必須項目。関連レコード検索のためインデックスを設定。'
+        - name: 'MissCategoryID'
+          logical_name: 'ミスカテゴリID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_MissCategory.MissCategoryID'
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: 'M_MissCategory.MissCategoryID と紐づく。必須項目。検索・集計用にインデックスを設定。'
+        - name: 'MissDetail'
+          logical_name: 'ミス内容詳細'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '具体的なミスの内容。'
+        - name: 'CorrectedUserID'
+          logical_name: '修正担当者ユーザーID'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_User.UserID'
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: 'M_User.UserID と紐づく（任意）。誰が修正したか。FKだがNULL許容。検索用にインデックスを設定。'
+        - name: 'CorrectedDateTime'
+          logical_name: '修正完了日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: 'いつ修正が完了したか（任意）。検索・ソート用にインデックスを設定。'
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。'
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。'
+      indexes:
+        - index_name: 'PK_T_CheckMiss'
+          fields: ['CheckMissID']
+          unique: true
+          primary: true
+        - index_name: 'IX_T_CheckMiss_WorkHistoryID'
+          fields: ['WorkHistoryID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CheckMiss_MissCategoryID'
+          fields: ['MissCategoryID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CheckMiss_CorrectedUserID'
+          fields: ['CorrectedUserID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_CheckMiss_CorrectedDateTime'
+          fields: ['CorrectedDateTime']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'チェック工程で発見されたミスを個別に記録し、品質分析やフィードバックの基礎とする。'
+        testing_strategy: 'CRUD操作、FK制約、インデックスの有効性、修正履歴の整合性をテスト。'
+        performance_considerations: '作業履歴・ミスカテゴリ・修正担当者での検索・集計パフォーマンスを重視。'
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(T_...)、フィールド名(PascalCase)を規約に従い命名。'
+          - standard_doc_id: 'design-prin-vba'
+            section: '1. SRP'
+            compliance_summary: 'ミス記録の責務に特化し、他の関心事と分離。'
+      detailed_design_ref: './detailed-designs/T_CheckMiss.md'
+    - name: 'T_Log'
+      status: 'FIXED'
+      logical_name: 'ログテーブル'
+      description: 'システムの動作イベントやエラーを記録し、トラブルシューティングや監査証跡として利用する。'
+      fields:
+        - name: 'LogID'
+          logical_name: 'ログID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'ログレコードの一意な識別子。'
+        - name: 'LogDateTime'
+          logical_name: '発生日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: 'Now()'
+          remarks: 'ログイベントが発生した日時。必須項目。検索・ソート用にインデックスを設定。'
+        - name: 'LogLevel'
+          logical_name: 'ログレベル'
+          data_type: 'テキスト'
+          size_format: 20
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: '"INFO", "WARN", "ERROR", "DEBUG" など。必須項目。検索・絞り込み用にインデックスを設定。'
+        - name: 'EventType'
+          logical_name: 'イベント種別'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: '"DataImport", "DataExport", "Login", "Error", "CaseUpdate" など。必須項目。検索・絞り込み用にインデックスを設定。'
+        - name: 'UserID'
+          logical_name: 'ユーザーID'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_User.UserID'
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: 'M_User.UserID と紐づく（操作したユーザー）。システムイベントの場合はNULL。FKだがNULL許容。検索・絞り込み用にインデックスを設定。'
+        - name: 'CaseUUID'
+          logical_name: '案件独自キー'
+          data_type: 'テキスト'
+          size_format: 38
+          is_pk: false
+          is_fk: true
+          fk_references: 'T_CaseInfo.CaseUUID'
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: 'T_CaseInfo.CaseUUID と紐づく（関連する案件がある場合）。FKだがNULL許容。関連ログ検索のためインデックスを設定。'
+        - name: 'Message'
+          logical_name: 'メッセージ'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          remarks: 'ログメッセージの本文。必須項目。'
+        - name: 'SourceProcedure'
+          logical_name: '発生元プロシージャ'
+          data_type: 'テキスト'
+          size_format: 255
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'エラーやイベントが発生したVBAプロシージャ名（任意）。デバッグ用。'
+        - name: 'ErrorNumber'
+          logical_name: 'エラー番号'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'エラー発生時、Err.Number を記録。'
+        - name: 'ErrorDescription'
+          logical_name: 'エラー内容'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: 'エラー発生時、Err.Description を記録。'
+        - name: 'ContextInfo'
+          logical_name: 'コンテキスト情報'
+          data_type: 'メモ型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'None'
+          remarks: '(任意追加) デバッグに役立つ追加情報（例: 処理中の変数内容の一部など）。個人情報を含まないように注意。'
+      indexes:
+        - index_name: 'PK_T_Log'
+          fields: ['LogID']
+          unique: true
+          primary: true
+        - index_name: 'IX_T_Log_LogDateTime'
+          fields: ['LogDateTime']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_Log_LogLevel'
+          fields: ['LogLevel']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_Log_EventType'
+          fields: ['EventType']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_Log_UserID'
+          fields: ['UserID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_Log_CaseUUID'
+          fields: ['CaseUUID']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'システムの動作・エラーを記録し、監査証跡・トラブルシューティング・品質分析の基礎とする。'
+        testing_strategy: 'CRUD操作、各種イベント・エラー発生時の記録、検索・集計パフォーマンステスト。'
+        performance_considerations: '大量データ時の検索・集計パフォーマンスを重視し、主要項目にインデックスを設定。'
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(T_...)、フィールド名(PascalCase)を規約に従い命名。'
+          - standard_doc_id: 'design-prin-vba'
+            section: '3. エラーハンドリング戦略'
+            compliance_summary: '全てのエラー・イベントを記録し、監査証跡を担保。'
+      detailed_design_ref: './detailed-designs/T_Log.md'
+    - name: 'T_Event'
+      status: 'FIXED'
+      logical_name: 'イベントテーブル'
+      description: 'イベント管理機能におけるイベント本体（箱）のヘッダー情報を管理する。'
+      fields:
+        - name: 'EventID'
+          logical_name: 'イベントID'
+          data_type: 'オートナンバー'
+          size_format: '長整数型'
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'PK'
+          remarks: 'イベントの一意な識別子'
+        - name: 'EventTypeID'
+          logical_name: 'イベント種別ID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_EventType.EventTypeID'
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: 'M_EventType.EventTypeID と紐づく。必須項目。検索・絞り込み用にインデックスを設定。'
+        - name: 'EventTitle'
+          logical_name: '件名/概要'
+          data_type: 'テキスト'
+          size_format: 255
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          remarks: 'イベントのタイトル。必須項目。検索用にインデックスを設定。'
+        - name: 'EventDateTime'
+          logical_name: '発生/起票日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: 'Now()'
+          remarks: 'イベントが発生または起票された日時。必須項目。検索・ソート用にインデックスを設定。'
+        - name: 'ReportedUserID'
+          logical_name: '起票者ID'
+          data_type: 'テキスト'
+          size_format: 50
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_User.UserID'
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: 'M_User.UserID と紐づく。システム起票ならNULL。FKだがNULL許容。検索・絞り込み用にインデックスを設定。'
+        - name: 'CurrentStatusID'
+          logical_name: '対応状況ID'
+          data_type: '数値型'
+          size_format: '長整数型'
+          is_pk: false
+          is_fk: true
+          fk_references: 'M_Status.StatusID'
+          allow_null: false
+          required: true
+          index_type: 'Index'
+          default_value: null
+          remarks: 'M_Status.StatusID と紐づく。現在の対応状況。必須項目。既定値は「新規受付」。検索・絞り込み用にインデックスを設定。'
+        - name: 'Priority'
+          logical_name: '優先度'
+          data_type: '数値型'
+          size_format: '整数型'
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '例: 1(高)-5(低) など。NULL許容。検索・ソート用にインデックスを設定。'
+        - name: 'DueDate'
+          logical_name: '対応期限'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          required: false
+          index_type: 'Index'
+          remarks: '期限管理用。NULL許容。検索・ソート用にインデックスを設定。'
+        - name: 'CreatedDateTime'
+          logical_name: 'レコード作成日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) 自動更新想定。'
+        - name: 'UpdatedDateTime'
+          logical_name: 'レコード更新日時'
+          data_type: '日時型'
+          size_format: null
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          required: true
+          index_type: 'None'
+          default_value: 'Now()'
+          remarks: '(監査用) イベント更新時に自動更新想定。'
+      indexes:
+        - index_name: 'PK_T_Event'
+          fields: ['EventID']
+          unique: true
+          primary: true
+        - index_name: 'IX_T_Event_EventTypeID'
+          fields: ['EventTypeID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_Event_EventTitle'
+          fields: ['EventTitle']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_Event_EventDateTime'
+          fields: ['EventDateTime']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_Event_ReportedUserID'
+          fields: ['ReportedUserID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_Event_CurrentStatusID'
+          fields: ['CurrentStatusID']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_Event_Priority'
+          fields: ['Priority']
+          unique: false
+          primary: false
+        - index_name: 'IX_T_Event_DueDate'
+          fields: ['DueDate']
+          unique: false
+          primary: false
+      details:
+        design_rationale: 'イベント管理機能のコアとなるイベント本体情報を管理し、対応状況や起票者等の属性を持たせる。'
+        testing_strategy: 'CRUD操作、FK制約、インデックスの有効性、イベントの状態遷移テスト。'
+        performance_considerations: 'イベント種別・対応状況・起票者・日時等での検索・集計パフォーマンスを重視。'
+        standard_compliance:
+          - standard_doc_id: 'coding-std-vba'
+            section: '1. 命名規則'
+            compliance_summary: 'テーブル名(T_...)、フィールド名(PascalCase)を規約に従い命名。'
+          - standard_doc_id: 'design-prin-vba'
+            section: '1. SRP'
+            compliance_summary: 'イベント本体情報の管理責務に特化し、他の関心事と分離。'
+      detailed_design_ref: './detailed-designs/T_Event.md'
+    - name: "T_EventDetail"
+      status: "FIXED"
+      logical_name: "イベント詳細テーブル"
+      description: "イベントへの追記（スクラップ）を記録するテーブル。イベント本体（T_Event）に対する詳細情報やコメント、添付ファイルパス等を管理する。"
+      fields:
+        - name: "EventDetailID"
+          logical_name: "イベント詳細ID"
+          data_type: "オートナンバー"
+          size_format: "長整数型"
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          index_type: "PK"
+          remarks: "イベント詳細レコードの一意な識別子。"
+        - name: "EventID"
+          logical_name: "イベントID"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: true
+          fk_references: "T_Event.EventID"
+          allow_null: false
+          index_type: "Index"
+          remarks: "T_Eventと紐づく。必須。"
+        - name: "DetailTypeID"
+          logical_name: "詳細種別ID"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: true
+          fk_references: "M_EventDetailType.DetailTypeID"
+          allow_null: false
+          index_type: "Index"
+          remarks: "M_EventDetailTypeと紐づく。必須。"
+        - name: "DetailDateTime"
+          logical_name: "追記日時"
+          data_type: "日時型"
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          index_type: "Index"
+          default_value: "Now()"
+          remarks: "追記日時。必須。"
+        - name: "UserID"
+          logical_name: "追記ユーザーID"
+          data_type: "テキスト"
+          size_format: 50
+          is_pk: false
+          is_fk: true
+          fk_references: "M_User.UserID"
+          allow_null: false
+          index_type: "Index"
+          remarks: "追記したユーザー。必須。"
+        - name: "DetailContent"
+          logical_name: "追記内容"
+          data_type: "メモ型"
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          index_type: "None"
+          remarks: "詳細内容。NULL許容。"
+        - name: "RelatedFilePath"
+          logical_name: "関連ファイルパス"
+          data_type: "テキスト"
+          size_format: 255
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          index_type: "None"
+          remarks: "添付ファイル等へのパス。NULL許容。"
+        - name: "CreatedDateTime"
+          logical_name: "レコード作成日時"
+          data_type: "日時型"
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          index_type: "None"
+          default_value: "Now()"
+          remarks: "(監査用) 自動更新想定。"
+      indexes:
+        - index_name: "PK_T_EventDetail"
+          fields: ["EventDetailID"]
+          unique: true
+          primary: true
+        - index_name: "IX_T_EventDetail_EventID"
+          fields: ["EventID"]
+          unique: false
+          primary: false
+        - index_name: "IX_T_EventDetail_DetailTypeID"
+          fields: ["DetailTypeID"]
+          unique: false
+          primary: false
+        - index_name: "IX_T_EventDetail_UserID"
+          fields: ["UserID"]
+          unique: false
+          primary: false
+        - index_name: "IX_T_EventDetail_DetailDateTime"
+          fields: ["DetailDateTime"]
+          unique: false
+          primary: false
+      details:
+        design_rationale: "イベント本体に対する詳細な追記やコメント、ファイル添付等を柔軟に管理するためのテーブル。"
+        testing_strategy: "CRUD操作、FK制約、インデックスの有効性、追記履歴の時系列表示テスト。"
+        performance_considerations: "イベントID・ユーザーID・日時での検索・集計パフォーマンスを重視。"
+        standard_compliance:
+          - standard_doc_id: "coding-std-vba"
+            section: "1. 命名規則"
+            compliance_summary: "テーブル名・フィールド名をPascalCaseで命名。"
+          - standard_doc_id: "design-prin-vba"
+            section: "1. SRP"
+            compliance_summary: "イベント詳細情報の管理責務に特化。"
+      detailed_design_ref: "./detailed-designs/T_EventDetail.md"
+    - name: "T_EventRelatedCase"
+      status: "FIXED"
+      logical_name: "イベント関連案件テーブル"
+      description: "イベントと案件の多対多関係を管理する中間テーブル。イベントと案件（T_CaseInfo）を紐付ける。"
+      fields:
+        - name: "EventRelatedCaseID"
+          logical_name: "関連案件ID"
+          data_type: "オートナンバー"
+          size_format: "長整数型"
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          index_type: "PK"
+          remarks: "中間テーブルのレコードを識別する代理キー。"
+        - name: "EventID"
+          logical_name: "イベントID"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: true
+          fk_references: "T_Event.EventID"
+          allow_null: false
+          index_type: "Index"
+          remarks: "T_Eventと紐づく。必須。"
+        - name: "CaseUUID"
+          logical_name: "案件独自キー"
+          data_type: "テキスト"
+          size_format: 38
+          is_pk: false
+          is_fk: true
+          fk_references: "T_CaseInfo.CaseUUID"
+          allow_null: false
+          index_type: "Index"
+          remarks: "T_CaseInfoと紐づく。必須。"
+      indexes:
+        - index_name: "PK_T_EventRelatedCase"
+          fields: ["EventRelatedCaseID"]
+          unique: true
+          primary: true
+        - index_name: "IX_T_EventRelatedCase_EventID_CaseUUID"
+          fields: ["EventID", "CaseUUID"]
+          unique: true
+          primary: false
+      details:
+        design_rationale: "イベントと案件の多対多関係を正規化し、柔軟な関連付けを可能にする。"
+        testing_strategy: "CRUD操作、複合ユニーク制約、FK制約のテスト。"
+        performance_considerations: "イベントID・案件IDでの検索・集計パフォーマンスを重視。"
+        standard_compliance:
+          - standard_doc_id: "coding-std-vba"
+            section: "1. 命名規則"
+            compliance_summary: "テーブル名・フィールド名をPascalCaseで命名。"
+          - standard_doc_id: "design-prin-vba"
+            section: "1. SRP"
+            compliance_summary: "イベント-案件関連付けの管理責務に特化。"
+      detailed_design_ref: "./detailed-designs/T_EventRelatedCase.md"
+    - name: "T_EventRelatedUser"
+      status: "FIXED"
+      logical_name: "イベント関連ユーザーテーブル"
+      description: "イベントとユーザーの多対多関係を役割と共に管理する中間テーブル。イベントに関与するユーザーとその役割を紐付ける。"
+      fields:
+        - name: "EventRelatedUserID"
+          logical_name: "関連ユーザーID"
+          data_type: "オートナンバー"
+          size_format: "長整数型"
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          index_type: "PK"
+          remarks: "中間テーブルのレコードを識別する代理キー。"
+        - name: "EventID"
+          logical_name: "イベントID"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: true
+          fk_references: "T_Event.EventID"
+          allow_null: false
+          index_type: "Index"
+          remarks: "T_Eventと紐づく。必須。"
+        - name: "UserID"
+          logical_name: "ユーザーID"
+          data_type: "テキスト"
+          size_format: 50
+          is_pk: false
+          is_fk: true
+          fk_references: "M_User.UserID"
+          allow_null: false
+          index_type: "Index"
+          remarks: "M_Userと紐づく。必須。"
+        - name: "UserRoleID"
+          logical_name: "ユーザー役割ID"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: true
+          fk_references: "M_EventUserRole.UserRoleID"
+          allow_null: false
+          index_type: "Index"
+          remarks: "M_EventUserRoleと紐づく。必須。"
+      indexes:
+        - index_name: "PK_T_EventRelatedUser"
+          fields: ["EventRelatedUserID"]
+          unique: true
+          primary: true
+        - index_name: "IX_T_EventRelatedUser_EventID_UserID_UserRoleID"
+          fields: ["EventID", "UserID", "UserRoleID"]
+          unique: true
+          primary: false
+      details:
+        design_rationale: "イベントに関与するユーザーとその役割を柔軟に管理するための中間テーブル。"
+        testing_strategy: "CRUD操作、複合ユニーク制約、FK制約のテスト。"
+        performance_considerations: "イベントID・ユーザーID・役割IDでの検索・集計パフォーマンスを重視。"
+        standard_compliance:
+          - standard_doc_id: "coding-std-vba"
+            section: "1. 命名規則"
+            compliance_summary: "テーブル名・フィールド名をPascalCaseで命名。"
+          - standard_doc_id: "design-prin-vba"
+            section: "1. SRP"
+            compliance_summary: "イベント-ユーザー関連付けの管理責務に特化。"
+      detailed_design_ref: "./detailed-designs/T_EventRelatedUser.md"
+    - name: "T_EventRelatedLog"
+      status: "FIXED"
+      logical_name: "イベント関連ログテーブル"
+      description: "イベントとログの多対多関係を管理する中間テーブル。エラー発生時の関連ログ紐付けなどに利用。"
+      fields:
+        - name: "EventRelatedLogID"
+          logical_name: "関連ログID"
+          data_type: "オートナンバー"
+          size_format: "長整数型"
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          index_type: "PK"
+          remarks: "中間テーブルのレコードを識別する代理キー。"
+        - name: "EventID"
+          logical_name: "イベントID"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: true
+          fk_references: "T_Event.EventID"
+          allow_null: false
+          index_type: "Index"
+          remarks: "T_Eventと紐づく。必須。"
+        - name: "LogID"
+          logical_name: "ログID"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: true
+          fk_references: "T_Log.LogID"
+          allow_null: false
+          index_type: "Index"
+          remarks: "T_Logと紐づく。必須。"
+      indexes:
+        - index_name: "PK_T_EventRelatedLog"
+          fields: ["EventRelatedLogID"]
+          unique: true
+          primary: true
+        - index_name: "IX_T_EventRelatedLog_EventID_LogID"
+          fields: ["EventID", "LogID"]
+          unique: true
+          primary: false
+      details:
+        design_rationale: "イベントとログの多対多関係を正規化し、エラー発生時の関連ログ紐付け等を柔軟に管理する。"
+        testing_strategy: "CRUD操作、複合ユニーク制約、FK制約のテスト。"
+        performance_considerations: "イベントID・ログIDでの検索・集計パフォーマンスを重視。"
+        standard_compliance:
+          - standard_doc_id: "coding-std-vba"
+            section: "1. 命名規則"
+            compliance_summary: "テーブル名・フィールド名をPascalCaseで命名。"
+          - standard_doc_id: "design-prin-vba"
+            section: "1. SRP"
+            compliance_summary: "イベント-ログ関連付けの管理責務に特化。"
+      detailed_design_ref: "./detailed-designs/T_EventRelatedLog.md"
+    - name: "T_DailyPerformanceSummary"
+      status: "FIXED"
+      logical_name: "日次実績集計テーブル"
+      description: "日次×担当者×業務種別×工程の粒度で実績指標を集計・格納するテーブル。日次バッチ等での更新を想定。"
+      fields:
+        - name: "SummaryDate"
+          logical_name: "集計日"
+          data_type: "日付型"
+          is_pk: true
+          is_fk: false
+          allow_null: false
+          index_type: "PK"
+          remarks: "この実績データの対象日。主キーの一部。"
+        - name: "UserID"
+          logical_name: "担当者ユーザーID"
+          data_type: "テキスト"
+          size_format: 50
+          is_pk: true
+          is_fk: true
+          fk_references: "M_User.UserID"
+          allow_null: false
+          index_type: "PK"
+          remarks: "M_Userと紐づく。主キーの一部。"
+        - name: "BusinessTypeID"
+          logical_name: "業務種別ID"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: true
+          is_fk: true
+          fk_references: "M_BusinessType.BusinessTypeID"
+          allow_null: false
+          index_type: "PK"
+          remarks: "M_BusinessTypeと紐づく。主キーの一部。"
+        - name: "ProcessDefinitionID"
+          logical_name: "工程定義ID"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: true
+          is_fk: true
+          fk_references: "M_ProcessDefinition.ProcessDefinitionID"
+          allow_null: false
+          index_type: "PK"
+          remarks: "M_ProcessDefinitionと紐づく。主キーの一部。"
+        - name: "CompletedActionCount"
+          logical_name: "完了アクション数"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          index_type: "None"
+          default_value: 0
+          remarks: "この担当者がこの日この業務種別・工程で完了アクションを行った回数。"
+        - name: "WorkloadFactorSum"
+          logical_name: "巻き取り工数合計"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          index_type: "None"
+          default_value: 0
+          remarks: "CompletedActionCount × M_BusinessType.StandardWorkloadFactor。"
+        - name: "EstimatedWorkMinutesSum"
+          logical_name: "作業時間(分)合計"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          index_type: "None"
+          default_value: 0
+          remarks: "この担当者がこの日この業務種別・工程に費した作業時間（分）の概算。"
+        - name: "MissOccurredCount"
+          logical_name: "ミス発生件数"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          index_type: "None"
+          default_value: 0
+          remarks: "この担当者の作業に対してこの日に登録されたT_CheckMissの件数。"
+        - name: "CheckPerformedCount"
+          logical_name: "チェック実施件数"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          index_type: "None"
+          default_value: 0
+          remarks: "この担当者がこの日この業務種別・工程で実施したチェックアクションの回数。"
+        - name: "MissPointedOutCount"
+          logical_name: "ミス指摘件数"
+          data_type: "数値型"
+          size_format: "長整数型"
+          is_pk: false
+          is_fk: false
+          allow_null: false
+          index_type: "None"
+          default_value: 0
+          remarks: "この担当者がチェック実施時にT_CheckMissに登録した（指摘した）件数。"
+        - name: "CalculationDateTime"
+          logical_name: "バッチ実行日時"
+          data_type: "日時型"
+          is_pk: false
+          is_fk: false
+          allow_null: true
+          index_type: "None"
+          remarks: "このレコードの集計値を計算したバッチの実行日時（任意）。"
+      indexes:
+        - index_name: "PK_T_DailyPerformanceSummary"
+          fields: ["SummaryDate", "UserID", "BusinessTypeID", "ProcessDefinitionID"]
+          unique: true
+          primary: true
+      details:
+        design_rationale: "日次・担当者・業務種別・工程単位での実績集計を効率的に管理するための集計テーブル。"
+        testing_strategy: "バッチ処理による集計値の正確性、主キー・FK制約、パフォーマンステスト。"
+        performance_considerations: "主キー・検索対象フィールドにインデックスを設定し、大量データ時の集計・検索性能を確保。"
+        standard_compliance:
+          - standard_doc_id: "coding-std-vba"
+            section: "1. 命名規則"
+            compliance_summary: "テーブル名・フィールド名をPascalCaseで命名。"
+          - standard_doc_id: "design-prin-vba"
+            section: "1. SRP"
+            compliance_summary: "実績集計データの管理責務に特化。"
+      detailed_design_ref: "./detailed-designs/T_DailyPerformanceSummary.md"
+    # 詳細設計へ持ち越しテーブル群（プレースホルダー）
+    - name: "T_StagingImport_..."
+      status: "WIP"
+      logical_name: "一時取込テーブル群"
+      description: "コピーExcelの各シート構成に対応する一時テーブル群。具体的なテーブル名・フィールド定義は詳細設計フェーズで定義。"
+      fields: []
+      details:
+        design_rationale: "Excel取込処理の柔軟性確保のため、シートごとに一時テーブルを設計。詳細は詳細設計で定義。"
+        testing_strategy: "詳細設計フェーズで定義。"
+        performance_considerations: "大量データの一時格納・検証パフォーマンスを考慮。"
+        standard_compliance:
+          - standard_doc_id: "design-prin-vba"
+            section: "1. SRP"
+            compliance_summary: "一時データ取込責務に特化。"
+      detailed_design_ref: "./detailed-designs/T_StagingImport_xxx.md"
+    - name: "T_CaseDetail_..."
+      status: "WIP"
+      logical_name: "案件詳細テーブル群"
+      description: "業務種別ごとの主要な業務固有項目を格納するテーブル群。具体的なテーブル作成要否・フィールド定義は詳細設計フェーズで定義。"
+      fields: []
+      details:
+        design_rationale: "業務固有情報をT_CaseInfoから分離し、拡張性・保守性を高める。詳細は詳細設計で定義。"
+        testing_strategy: "詳細設計フェーズで定義。"
+        performance_considerations: "業務ごとのデータ量・検索パフォーマンスを考慮。"
+        standard_compliance:
+          - standard_doc_id: "design-prin-vba"
+            section: "1. SRP"
+            compliance_summary: "業務固有情報の管理責務に特化。"
+      detailed_design_ref: "./detailed-designs/T_CaseDetail_xxx.md"  
+  relationships:
+    status: "WIP" # ステータスは初期段階として WIP
+    diagrams:
+      - diagram_id: "er-diagram-main" # 複数の図があるためIDを付与
+        title: "主要ER図"
+        description: "主要なテーブル間の関連を示すER図 (詳細はMarkdown参照)"
+        mermaid_file: "./diagrams/er-diagrams.mmd" # 計画書記載の例
+    details:
+      # basic-design-03-backend-design.md の 3.3.2. の表から最初の3件を移行
+      - parent_table: "M_BusinessType"
+        parent_pk_field: "BusinessTypeID"
+        child_table: "T_CaseInfo"
+        child_fk_field: "BusinessTypeID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "業務種別削除時、関連案件は削除しない。"
+      - parent_table: "M_BusinessType"
+        parent_pk_field: "BusinessTypeID"
+        child_table: "M_ProcessDefinition"
+        child_fk_field: "BusinessTypeID"
+        relationship_type: "1対多"
+        referential_integrity: false # 子FKがNULL許容のため
+        cascade_update: false
+        cascade_delete: false
+        remarks: "子FKがNULL許容のため整合性OFF推奨。"
+      - parent_table: "M_BusinessType"
+        parent_pk_field: "BusinessTypeID"
+        child_table: "T_DailyPerformanceSummary"
+        child_fk_field: "BusinessTypeID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "業務種別削除時、関連実績は削除しない（通常マスタ削除はしない想定）。"
+      # basic-design-03-backend-design.md の 3.3.2. の表から次の3件を移行
+      - parent_table: "M_ProcessDefinition"
+        parent_pk_field: "ProcessDefinitionID"
+        child_table: "T_WorkHistory"
+        child_fk_field: "ProcessDefinitionID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "工程定義削除時、関連作業履歴は削除しない（通常マスタ削除はしない想定）。"
+      - parent_table: "M_ProcessDefinition"
+        parent_pk_field: "ProcessDefinitionID"
+        child_table: "M_UserTaskAbility"
+        child_fk_field: "ProcessDefinitionID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: true # 親削除時に子も削除
+        remarks: "工程定義削除時、ユーザーの対応可能タスク情報も削除するのが自然。"
+      - parent_table: "M_ProcessDefinition"
+        parent_pk_field: "ProcessDefinitionID"
+        child_table: "T_DailyPerformanceSummary"
+        child_fk_field: "ProcessDefinitionID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "工程定義削除時、関連実績は削除しない（通常マスタ削除はしない想定）。"
+      # basic-design-03-backend-design.md の 3.3.2. の表から次の3件を移行
+      - parent_table: "M_User"
+        parent_pk_field: "UserID"
+        child_table: "T_CaseInfo"
+        child_fk_field: "PrimaryUserID"
+        relationship_type: "1対多"
+        referential_integrity: false # 子FKがNULL許容のため
+        cascade_update: false
+        cascade_delete: false
+        remarks: "子FKがNULL許容のため整合性OFF推奨。ユーザー削除時の扱いは運用で定義。"
+      - parent_table: "M_User"
+        parent_pk_field: "UserID"
+        child_table: "T_WorkHistory"
+        child_fk_field: "UserID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "ユーザー削除時、作業履歴は保持する（証跡のため）。"
+      - parent_table: "M_User"
+        parent_pk_field: "UserID"
+        child_table: "T_CheckMiss"
+        child_fk_field: "CorrectedUserID"
+        relationship_type: "1対多"
+        referential_integrity: false # 子FKがNULL許容のため
+        cascade_update: false
+        cascade_delete: false
+        remarks: "子FKがNULL許容のため整合性OFF推奨。ユーザー削除時の扱いは運用で定義。"
+      # basic-design-03-backend-design.md の 3.3.2. の表から次の3件を移行
+      - parent_table: "M_User"
+        parent_pk_field: "UserID"
+        child_table: "T_Log"
+        child_fk_field: "UserID"
+        relationship_type: "1対多"
+        referential_integrity: false # 子FKがNULL許容のため
+        cascade_update: false
+        cascade_delete: false
+        remarks: "子FKがNULL許容のため整合性OFF推奨。ユーザー削除時、ログは保持する。"
+      - parent_table: "M_User"
+        parent_pk_field: "UserID"
+        child_table: "T_Event"
+        child_fk_field: "ReportedUserID"
+        relationship_type: "1対多"
+        referential_integrity: false # 子FKがNULL許容のため
+        cascade_update: false
+        cascade_delete: false
+        remarks: "子FKがNULL許容のため整合性OFF推奨。ユーザー削除時の扱いは運用で定義。"
+      - parent_table: "M_User"
+        parent_pk_field: "UserID"
+        child_table: "T_EventDetail"
+        child_fk_field: "UserID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "ユーザー削除時、イベント詳細は保持する。"
+      # basic-design-03-backend-design.md の 3.3.2. の表から次の3件を移行
+      - parent_table: "M_User"
+        parent_pk_field: "UserID"
+        child_table: "T_EventRelatedUser"
+        child_fk_field: "UserID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: true # 親削除時に子も削除
+        remarks: "ユーザー削除時、イベントとの関連付け（役割含む）も削除するのが自然。"
+      - parent_table: "M_User"
+        parent_pk_field: "UserID"
+        child_table: "M_UserTaskAbility"
+        child_fk_field: "UserID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: true # 親削除時に子も削除
+        remarks: "ユーザー削除時、そのユーザーの対応可能タスク情報も削除するのが自然。"
+      - parent_table: "M_User"
+        parent_pk_field: "UserID"
+        child_table: "T_DailyPerformanceSummary"
+        child_fk_field: "UserID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "ユーザー削除時、過去の実績は保持する。"
+      # basic-design-03-backend-design.md の 3.3.2. の表から次の3件を移行
+      - parent_table: "M_Role"
+        parent_pk_field: "RoleID"
+        child_table: "M_User"
+        child_fk_field: "RoleID"
+        relationship_type: "1対多"
+        referential_integrity: false # 子FKがNULL許容のため
+        cascade_update: false
+        cascade_delete: false
+        remarks: "子FKがNULL許容のため整合性OFF推奨。"
+      - parent_table: "M_SystemStatus"
+        parent_pk_field: "SystemStatusID"
+        child_table: "T_CaseInfo"
+        child_fk_field: "SystemStatusID"
+        relationship_type: "1対多"
+        referential_integrity: false # 子FKがNULL許容のため
+        cascade_update: false
+        cascade_delete: false
+        remarks: "子FKがNULL許容のため整合性OFF推奨。"
+      - parent_table: "M_OverallCaseStatus"
+        parent_pk_field: "OverallCaseStatusID"
+        child_table: "T_CaseInfo"
+        child_fk_field: "OverallCaseStatusID"
+        relationship_type: "1対多"
+        referential_integrity: false # 子FKがNULL許容のため
+        cascade_update: false
+        cascade_delete: false
+        remarks: "子FKがNULL許容のため整合性OFF推奨。"
+      # basic-design-03-backend-design.md の 3.3.2. の表から次の3件を移行
+      - parent_table: "M_MissCategory"
+        parent_pk_field: "MissCategoryID"
+        child_table: "T_CheckMiss"
+        child_fk_field: "MissCategoryID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "ミスカテゴリ削除時、関連ミス記録は削除しない（通常マスタ削除はしない想定）。"
+      - parent_table: "M_ActionType"
+        parent_pk_field: "ActionTypeID"
+        child_table: "T_WorkHistory"
+        child_fk_field: "ActionTypeID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "アクション種別削除時、関連作業履歴は削除しない（通常マスタ削除はしない想定）。"
+      - parent_table: "T_CaseInfo"
+        parent_pk_field: "CaseUUID"
+        child_table: "T_WorkHistory"
+        child_fk_field: "CaseUUID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "案件削除時、作業履歴は削除しない（作業証跡として保持）。"
+      # basic-design-03-backend-design.md の 3.3.2. の表から次の3件を移行
+      - parent_table: "T_CaseInfo"
+        parent_pk_field: "CaseUUID"
+        child_table: "T_Log"
+        child_fk_field: "CaseUUID"
+        relationship_type: "1対多"
+        referential_integrity: false # 子FKがNULL許容のため
+        cascade_update: false
+        cascade_delete: false
+        remarks: "子FKがNULL許容、案件削除時もログは保持。"
+      - parent_table: "T_CaseInfo"
+        parent_pk_field: "CaseUUID"
+        child_table: "T_EventRelatedCase"
+        child_fk_field: "CaseUUID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false # 関連付けは保持
+        remarks: "案件削除時、イベントとの関連付けは保持する。"
+      - parent_table: "T_WorkHistory"
+        parent_pk_field: "WorkHistoryID"
+        child_table: "T_CheckMiss"
+        child_fk_field: "WorkHistoryID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: true # 親削除時に子も削除
+        remarks: "作業履歴削除時、それに紐づくチェックミス記録も削除するのが自然。"
+      # basic-design-03-backend-design.md の 3.3.2. の表から次の3件を移行
+      - parent_table: "T_Event"
+        parent_pk_field: "EventID"
+        child_table: "T_EventDetail"
+        child_fk_field: "EventID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: true # 親削除時に子も削除
+        remarks: "イベント削除時、その詳細（追記）も削除するのが自然。"
+      - parent_table: "T_Event"
+        parent_pk_field: "EventID"
+        child_table: "T_EventRelatedCase"
+        child_fk_field: "EventID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: true # 親削除時に子も削除
+        remarks: "イベント削除時、案件との関連付けも削除するのが自然。"
+      - parent_table: "T_Event"
+        parent_pk_field: "EventID"
+        child_table: "T_EventRelatedUser"
+        child_fk_field: "EventID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: true # 親削除時に子も削除
+        remarks: "イベント削除時、ユーザーとの関連付けも削除するのが自然。"
+      # basic-design-03-backend-design.md の 3.3.2. の表から次の3件を移行
+      - parent_table: "T_Event"
+        parent_pk_field: "EventID"
+        child_table: "T_EventRelatedLog"
+        child_fk_field: "EventID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: true # 親削除時に子も削除
+        remarks: "イベント削除時、ログとの関連付けも削除するのが自然。"
+      - parent_table: "M_EventType"
+        parent_pk_field: "EventTypeID"
+        child_table: "T_Event"
+        child_fk_field: "EventTypeID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "イベント種別削除時、関連イベントは削除しない（通常マスタ削除はしない想定）。"
+      - parent_table: "M_Status"
+        parent_pk_field: "StatusID"
+        child_table: "T_Event"
+        child_fk_field: "CurrentStatusID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "対応状況マスタ削除時、関連イベントは削除しない（通常マスタ削除はしない想定）。"
+      # basic-design-03-backend-design.md の 3.3.2. の表から残りの3件を移行
+      - parent_table: "M_EventDetailType"
+        parent_pk_field: "DetailTypeID"
+        child_table: "T_EventDetail"
+        child_fk_field: "DetailTypeID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "詳細種別マスタ削除時、関連詳細は削除しない（通常マスタ削除はしない想定）。"
+      - parent_table: "M_EventUserRole"
+        parent_pk_field: "UserRoleID"
+        child_table: "T_EventRelatedUser"
+        child_fk_field: "UserRoleID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false
+        remarks: "ユーザー役割マスタ削除時、関連は削除しない（通常マスタ削除はしない想定）。"
+      - parent_table: "T_Log"
+        parent_pk_field: "LogID"
+        child_table: "T_EventRelatedLog"
+        child_fk_field: "LogID"
+        relationship_type: "1対多"
+        referential_integrity: true
+        cascade_update: true
+        cascade_delete: false # ログ削除時も関連付けは保持
+        remarks: "ログ削除時、イベントとの関連付けは保持する（通常ログ削除はしない想定）。"
+  query_definitions:
+    - query_id: "Q_SearchCases_Admin"
+      status: "FIXED"
+      logical_name: "管理者向け案件検索クエリ"
+      purpose: "管理者が案件情報を複合条件で検索・一覧表示するために使用する。主にメインの案件一覧フォームのレコードソースとなる。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_CaseInfo"
+        - "M_BusinessType"
+        - "M_SystemStatus"
+        - "M_OverallCaseStatus"
+        - "M_User"
+      primary_fields:
+        - "T_CaseInfo.CaseUUID"
+        - "T_CaseInfo.CaseMgmtNumber"
+        - "M_BusinessType.BusinessTypeName"
+        - "T_CaseInfo.RequestDateTime"
+        - "T_CaseInfo.DueDate"
+        - "M_User.UserName"
+        - "M_SystemStatus.SystemStatusName"
+        - "M_OverallCaseStatus.OverallCaseStatusName"
+        - "T_CaseInfo.LastUpdatedDateTime"
+        # - *(その他、一覧表示に必要なフィールド)* # コメントアウトまたは削除
+      filter_conditions_summary: "案件管理番号(部分一致), 業務種別名, 依頼日時(範囲), 納期(範囲), 主担当者名, システム状態名, 案件全体状態名で動的にフィルタリング。"
+      filter_parameters:
+        - name: "caseMgmtNumber"
+          type: "Text"
+          description: "案件管理番号 (部分一致検索用)"
+          required: false
+          control_type: "TextBox"
+        - name: "businessTypeName"
+          type: "Text"
+          description: "業務種別名 (完全一致検索用)"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_BusinessTypes" # 選択肢用クエリID
+        - name: "requestDateFrom"
+          type: "DateTime"
+          description: "依頼日時 From"
+          required: false
+          control_type: "DatePicker"
+        - name: "requestDateTo"
+          type: "DateTime"
+          description: "依頼日時 To"
+          required: false
+          control_type: "DatePicker"
+        - name: "dueDateFrom"
+          type: "DateTime"
+          description: "納期 From"
+          required: false
+          control_type: "DatePicker"
+        - name: "dueDateTo"
+          type: "DateTime"
+          description: "納期 To"
+          required: false
+          control_type: "DatePicker"
+        - name: "primaryUserName"
+          type: "Text"
+          description: "主担当者名 (完全一致検索用)"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_Users" # 選択肢用クエリID
+        - name: "systemStatusName"
+          type: "Text"
+          description: "システム状態名 (完全一致検索用)"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_SystemStatuses" # 選択肢用クエリID
+        - name: "overallCaseStatusName"
+          type: "Text"
+          description: "案件全体状態名 (完全一致検索用)"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_OverallCaseStatuses" # 選択肢用クエリID
+      join_conditions_summary: "T_CaseInfo を主とし、各マスタテーブル(M_BusinessType, M_SystemStatus, M_OverallCaseStatus, M_User)へ LEFT JOIN。"
+      sql_definition: null # SQLはVBAで動的生成するためYAMLには記載しない
+      details:
+        design_rationale: "案件一覧表示のコアとなるクエリ。LEFT JOINで関連情報欠落時も案件は表示。動的フィルタリングで柔軟な検索を実現。"
+        testing_strategy: "各フィルタパラメータの組み合わせテスト。境界値テスト(日付)。大量データでの性能テスト。詳細はMarkdown参照。"
+        performance_considerations: "検索条件フィールドへのインデックス必須。動的SQL生成時のパフォーマンス影響。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+          - standard_doc_id: "design-prin-vba"
+            section: "5. 長時間処理考慮"
+            compliance_summary: "インデックス活用と動的SQL生成で性能考慮。"
+      remarks: "VBA側で条件未指定のパラメータを除外してSQLを動的に構築する必要がある。ソート順は依頼日時の降順をデフォルトとする。"
+      # detailed_design_ref: "./detailed-designs/Q_SearchCases_Admin.md" # 必要に応じて設定
+    - query_id: "Q_GetCaseDetails_Worker"
+      status: "WIP" # T_CaseDetail_... が未定義のため WIP
+      logical_name: "作業者向け案件詳細表示クエリ"
+      purpose: "作業者が特定の案件に関する詳細情報（共通情報および業務固有情報）を表示するフォームで使用する。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_CaseInfo"
+        - "T_CaseDetail_..." # 詳細設計で具体化
+        - "M_BusinessType"
+        - "M_SystemStatus"
+        - "M_OverallCaseStatus"
+        - "M_User"
+      primary_fields:
+        - "T_CaseInfo.CaseUUID"
+        - "T_CaseInfo.CaseMgmtNumber"
+        - "T_CaseInfo.ImportSourceFile"
+        - "T_CaseInfo.ImportDateTime"
+        - "T_CaseInfo.LastUpdatedDateTime"
+        - "T_CaseInfo.RequestDateTime"
+        - "T_CaseInfo.DueDate"
+        - "T_CaseDetail_...フィールド1" # 詳細設計で具体化
+        - "T_CaseDetail_...フィールド2" # 詳細設計で具体化
+        - "M_BusinessType.BusinessTypeName"
+        - "M_SystemStatus.SystemStatusName"
+        - "M_OverallCaseStatus.OverallCaseStatusName"
+        - "M_User.UserName AS PrimaryUserName"
+      filter_conditions_summary: "指定された CaseUUID で T_CaseInfo をフィルタリング。"
+      filter_parameters:
+        - name: "caseUUID"
+          type: "Text" # UUID はテキスト型
+          description: "表示対象案件のUUID"
+          required: true
+      join_conditions_summary: "T_CaseInfo と T_CaseDetail_... を CaseUUID で結合。T_CaseInfo と関連マスタを LEFT JOIN。"
+      sql_definition: null # 詳細設計で具体化
+      details:
+        design_rationale: "案件詳細画面のデータソース。業務固有情報を含むため T_CaseDetail_... と結合。"
+        testing_strategy: "指定した CaseUUID のデータが正しく取得できるか。関連マスタとの結合確認。詳細はMarkdown参照。"
+        performance_considerations: "CaseUUID での検索パフォーマンス。T_CaseDetail_... との結合コスト。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "T_CaseDetail_... の構造は詳細設計で定義されるため、このクエリも詳細設計で具体化する。作業者が実書類の情報で検索する場合、別途クエリが必要になる可能性あり。"
+      detailed_design_ref: "./detailed-designs/Q_GetCaseDetails_Worker.md" # 詳細設計で具体化するため参照設定
+    - query_id: "Q_GetWorkHistory"
+      status: "FIXED"
+      logical_name: "作業履歴表示クエリ"
+      purpose: "特定の案件に関する作業履歴を、関連情報（工程名、アクション名、担当者名）と共に時系列で表示する。主に案件詳細フォーム内のサブフォーム等で使用される。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_WorkHistory"
+        - "M_ProcessDefinition"
+        - "M_ActionType"
+        - "M_User"
+      primary_fields:
+        - "T_WorkHistory.WorkHistoryID"
+        - "T_WorkHistory.ActionDateTime"
+        - "M_ProcessDefinition.ProcessName"
+        - "M_ActionType.ActionTypeName"
+        - "M_User.UserName"
+        - "T_WorkHistory.Remarks"
+        - "T_WorkHistory.WorkDetailMemo"
+      filter_conditions_summary: "指定された CaseUUID で T_WorkHistory をフィルタリング。"
+      filter_parameters:
+        - name: "caseUUID"
+          type: "Text" # UUID はテキスト型
+          description: "表示対象案件のUUID"
+          required: true
+      join_conditions_summary: "T_WorkHistory を主とし、各マスタテーブル(M_ProcessDefinition, M_ActionType, M_User)へ INNER JOIN。"
+      sql_definition: null # 比較的基本的なSQLのため、YAMLには記載せずとも可
+      details:
+        design_rationale: "案件詳細画面での作業履歴表示用。関連マスタと結合し、表示に必要な情報を取得。"
+        testing_strategy: "指定した CaseUUID の履歴が正しく取得・ソートされるか。マスタ結合確認。詳細はMarkdown参照。"
+        performance_considerations: "T_WorkHistory.CaseUUID へのインデックス必須。履歴件数増加時のパフォーマンス。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "INNER JOIN を使用し、関連マスタが存在する履歴のみを表示する（通常、マスタ削除はしない想定）。ソート順は ActionDateTime の昇順。"
+      # detailed_design_ref: "./detailed-designs/Q_GetWorkHistory.md" # 必要に応じて設定
+    - query_id: "Q_GetDailyPerformanceSummary"
+      status: "FIXED"
+      logical_name: "日次実績集計表示クエリ"
+      purpose: "日次で集計された実績データを関連マスタ情報と結合し、指定条件で絞り込んで表示する。ダッシュボードやレポートのデータソースとして使用。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_DailyPerformanceSummary"
+        - "M_User"
+        - "M_BusinessType"
+        - "M_ProcessDefinition"
+      primary_fields:
+        - "T_DailyPerformanceSummary.SummaryDate"
+        - "M_User.UserName"
+        - "M_BusinessType.BusinessTypeName"
+        - "M_ProcessDefinition.ProcessName"
+        - "T_DailyPerformanceSummary.CompletedActionCount"
+        - "T_DailyPerformanceSummary.WorkloadFactorSum"
+        - "T_DailyPerformanceSummary.EstimatedWorkMinutesSum"
+        - "T_DailyPerformanceSummary.MissOccurredCount"
+        - "T_DailyPerformanceSummary.CheckPerformedCount"
+        - "T_DailyPerformanceSummary.MissPointedOutCount"
+        # - *(必要に応じてミス率などを計算するフィールドを追加)* # コメントアウトまたは削除
+      filter_conditions_summary: "集計日(範囲), 担当者名, 業務種別名, 工程名で動的にフィルタリング。"
+      filter_parameters:
+        - name: "summaryDateFrom"
+          type: "DateTime"
+          description: "集計日 From"
+          required: false
+          control_type: "DatePicker"
+        - name: "summaryDateTo"
+          type: "DateTime"
+          description: "集計日 To"
+          required: false
+          control_type: "DatePicker"
+        - name: "userName"
+          type: "Text"
+          description: "担当者名 (完全一致検索用)"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_Users"
+        - name: "businessTypeName"
+          type: "Text"
+          description: "業務種別名 (完全一致検索用)"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_BusinessTypes"
+        - name: "processName"
+          type: "Text"
+          description: "工程名 (完全一致検索用)"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_ProcessDefinitions" # 工程定義マスタ取得クエリ
+      join_conditions_summary: "T_DailyPerformanceSummary を主とし、各マスタテーブル(M_User, M_BusinessType, M_ProcessDefinition)へ INNER JOIN。"
+      sql_definition: null # 集計済みテーブル参照のためSQLは単純
+      details:
+        design_rationale: "ダッシュボード表示用の集計済みデータ取得クエリ。表示に必要なマスタ情報を結合。"
+        testing_strategy: "各フィルタパラメータの組み合わせテスト。境界値テスト(日付)。集計済みデータの正確性確認(別途バッチテスト)。詳細はMarkdown参照。"
+        performance_considerations: "T_DailyPerformanceSummary の主キー(複合)へのインデックス必須。データ量増加時の表示速度。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "このクエリは集計済みのデータを表示するためのものであり、集計処理自体は別途日次バッチ等で実行されることを前提とする。VBA側で条件未指定のパラメータを除外してSQLを動的に構築する必要がある。"
+      # detailed_design_ref: "./detailed-designs/Q_GetDailyPerformanceSummary.md" # 必要に応じて設定
+    - query_id: "Q_GetLeadTimeAnalysisData"
+      status: "FIXED" # 定義自体はFIXEDとする
+      logical_name: "リードタイム分析用データ取得クエリ"
+      purpose: "VBAでのリードタイム計算・分析に必要な元データを取得する。案件ごとの取込日時、依頼日時、完了アクション日時、および関連属性（業務種別など）を取得する。"
+      query_type: "選択クエリ" # 集計を伴うが基本は選択
+      primary_tables:
+        - "T_CaseInfo"
+        - "T_WorkHistory"
+        - "M_ActionType"
+        - "M_BusinessType"
+        # - "M_Holiday" # VBA側で参照するため、クエリの主テーブルからは除外
+      primary_fields:
+        - "T_CaseInfo.CaseUUID"
+        - "M_BusinessType.BusinessTypeName"
+        - "T_CaseInfo.ImportDateTime"
+        - "T_CaseInfo.RequestDateTime"
+        - "CompletionHistory.CompletionDateTime" # サブクエリ/VBAで特定
+        # - LeadTimeMinutes (VBAで計算)
+        # - LeadTimeBusinessDays (VBAで計算)
+        # - IsCarriedOver (VBAで計算)
+      filter_conditions_summary: "分析対象期間（完了日時）、業務種別などでフィルタリング。完了アクション(IsEndAction=True)を持つ履歴を対象とする。"
+      filter_parameters:
+        - name: "completionDateFrom"
+          type: "DateTime"
+          description: "完了日時 From (分析対象期間)"
+          required: false
+          control_type: "DatePicker"
+        - name: "completionDateTo"
+          type: "DateTime"
+          description: "完了日時 To (分析対象期間)"
+          required: false
+          control_type: "DatePicker"
+        - name: "businessTypeID"
+          type: "Number" # IDでフィルタ
+          description: "業務種別ID"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_BusinessTypes"
+      join_conditions_summary: "T_CaseInfo と完了履歴(T_WorkHistory INNER JOIN M_ActionType ON IsEndAction=True)を LEFT JOIN。T_CaseInfo と M_BusinessType を LEFT JOIN。"
+      sql_definition: null # VBAでの処理が主。完了履歴特定のためのサブクエリは詳細設計で検討。
+      details:
+        design_rationale: "リードタイム分析の元データ提供。VBAでの計算を前提とし、必要なキー情報と属性を取得。完了アクションの特定がポイント。"
+        testing_strategy: "完了アクション特定ロジック、リードタイム計算(単純/営業日)、積み残し判定ロジックのテスト(VBA側)。クエリ自体のデータ取得テスト。詳細はMarkdown参照。"
+        performance_considerations: "T_WorkHistoryが大きい場合の完了アクション検索性能。CaseUUID, ActionDateTime, ActionTypeIDへのインデックス重要。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "VBAでの処理(完了アクション特定、リードタイム計算、営業日計算(M_Holiday参照)、積み残し判定、集計)を想定。完了アクション(M_ActionType.IsEndAction)の定義が必要。"
+      detailed_design_ref: "./detailed-designs/Q_GetLeadTimeAnalysisData.md" # VBAロジック含むため参照設定推奨
+    - query_id: "Q_GetCasesForExport"
+      status: "WIP" # T_CaseDetail_... が未定義のため WIP
+      logical_name: "転記対象案件取得クエリ"
+      purpose: "データ転記機能（ステージングDB → 顧客Excel管理表）の対象となる案件情報を取得する。VBAの転記処理ロジックで使用される。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_CaseInfo"
+        - "T_CaseDetail_..." # 詳細設計で具体化
+        - "M_SystemStatus"
+        # - *(その他、転記に必要な情報を持つテーブル)* # コメントアウトまたは削除
+      primary_fields:
+        - "T_CaseInfo.CaseUUID"
+        - "T_CaseInfo.CaseMgmtNumber" # Excel上の行特定に使用する可能性あり
+        - "T_CaseInfo.ImportSourceFile" # 転記先Excel特定用
+        # - *(Excel上の行/列を特定するためのキー情報)* # 詳細設計で具体化
+        # - *(転記対象となるデータ項目)* # 詳細設計で具体化
+        - "M_SystemStatus.SystemStatusName" # 転記対象判定用
+      filter_conditions_summary: "転記対象となるシステムステータス（例: '完了'）でフィルタリング。"
+      filter_parameters:
+        - name: "targetStatusName"
+          type: "Text"
+          description: "転記対象とするシステムステータス名 (例: '完了')"
+          required: true
+      join_conditions_summary: "T_CaseInfo と M_SystemStatus を INNER JOIN。T_CaseInfo と T_CaseDetail_... を結合。"
+      sql_definition: null # 詳細設計で具体化
+      details:
+        design_rationale: "Excel転記処理のデータソース。転記に必要なキー情報とデータ項目を取得。"
+        testing_strategy: "指定したステータスの案件が正しく抽出されるか。転記ロジック側でのデータ利用テスト。詳細はMarkdown参照。"
+        performance_considerations: "システムステータスでのフィルタリング性能。T_CaseDetail_... との結合コスト。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "VBAでループ処理し、1件ずつExcel転記想定。転記ロジックで必要な情報を過不足なく取得する必要あり。T_CaseDetail_...構造未定のため詳細設計で具体化。転記対象ステータスの定義が必要。"
+      detailed_design_ref: "./detailed-designs/Q_GetCasesForExport.md" # 詳細設計で具体化するため参照設定
+    - query_id: "Q_UpdateCaseStatusAfterExport"
+      status: "FIXED"
+      logical_name: "転記後ステータス更新クエリ"
+      purpose: "データ転記処理が正常に完了した案件について、T_CaseInfo テーブルのシステムステータスを更新する（例: '転記済' に変更）。VBAの転記処理ロジックから呼び出される。"
+      query_type: "更新クエリ"
+      primary_tables:
+        - "T_CaseInfo"
+      primary_fields:
+        - "T_CaseInfo.SystemStatusID"
+        - "T_CaseInfo.LastUpdatedDateTime"
+      filter_conditions_summary: "指定された CaseUUID で T_CaseInfo をフィルタリング。"
+      filter_parameters:
+        - name: "newStatusID"
+          type: "Number" # ID は数値型
+          description: "更新後の新しいシステムステータスID (例: '転記済' に対応するID)"
+          required: true
+        - name: "caseUUID"
+          type: "Text" # UUID はテキスト型
+          description: "ステータスを更新する案件のUUID"
+          required: true
+      join_conditions_summary: "なし (単一テーブル更新)"
+      sql_definition: "UPDATE T_CaseInfo SET SystemStatusID = [paramNewStatusID], LastUpdatedDateTime = Now() WHERE CaseUUID = [paramCaseUUID]" # SQLを直接記述
+      details:
+        design_rationale: "転記完了後のステータス更新用アクションクエリ。VBAからパラメータ指定で実行。"
+        testing_strategy: "指定した案件のステータスと最終更新日時が正しく更新されるか。トランザクション管理と連携したテスト。詳細はMarkdown参照。"
+        performance_considerations: "CaseUUID (PK) での更新のため高速。大量更新時のロック考慮。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "VBAの転記処理ループ内で、1件の転記成功ごとに実行想定。トランザクション管理と組み合わせて使用推奨。"
+      # detailed_design_ref: "./detailed-designs/Q_UpdateCaseStatusAfterExport.md" # 必要に応じて設定
+    - query_id: "Q_GetEvents"
+      status: "FIXED"
+      logical_name: "イベント一覧表示クエリ"
+      purpose: "イベント情報 (T_Event) を関連マスタ情報（種別名、ステータス名、起票者名など）と共に一覧表示する。イベント管理フォームのメインリスト表示用。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_Event"
+        - "M_EventType"
+        - "M_Status"
+        - "M_User"
+      primary_fields:
+        - "T_Event.EventID"
+        - "M_EventType.EventTypeName"
+        - "T_Event.EventTitle"
+        - "T_Event.EventDateTime"
+        - "M_User.UserName AS ReportedUserName"
+        - "M_Status.StatusName"
+        - "T_Event.Priority"
+        - "T_Event.DueDate"
+        - "T_Event.UpdatedDateTime"
+      filter_conditions_summary: "イベント種別名, 対応状況名, 発生/起票日時(範囲), 起票者名で動的にフィルタリング。"
+      filter_parameters:
+        - name: "eventTypeName"
+          type: "Text"
+          description: "イベント種別名"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_EventTypes"
+        - name: "statusName"
+          type: "Text"
+          description: "対応状況名"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_Statuses"
+        - name: "eventDateFrom"
+          type: "DateTime"
+          description: "発生/起票日時 From"
+          required: false
+          control_type: "DatePicker"
+        - name: "eventDateTo"
+          type: "DateTime"
+          description: "発生/起票日時 To"
+          required: false
+          control_type: "DatePicker"
+        - name: "reportedUserName"
+          type: "Text"
+          description: "起票者名"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_Users"
+      join_conditions_summary: "T_Event を主とし、各マスタテーブル(M_EventType, M_Status, M_User)へ LEFT JOIN。"
+      sql_definition: null # SQLはVBAで動的生成するためYAMLには記載しない
+      details:
+        design_rationale: "イベント一覧表示用。LEFT JOINで関連情報欠落時もイベント本体は表示。"
+        testing_strategy: "各フィルタパラメータの組み合わせテスト。境界値テスト(日付)。大量データでの性能テスト。詳細はMarkdown参照。"
+        performance_considerations: "検索条件フィールドへのインデックス必須。動的SQL生成時のパフォーマンス影響。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "LEFT JOIN を使用し、関連マスタ情報が欠落している場合でもイベント本体は表示されるようにする。ソート順は EventDateTime の降順をデフォルトとする。"
+      # detailed_design_ref: "./detailed-designs/Q_GetEvents.md" # 必要に応じて設定
+    - query_id: "Q_GetEventDetails"
+      status: "FIXED"
+      logical_name: "イベント詳細表示クエリ"
+      purpose: "特定のイベントに関連する詳細情報（追記履歴）を、関連情報（詳細種別名、追記ユーザー名）と共に時系列で表示する。イベント詳細フォーム内のサブフォーム等で使用される。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_EventDetail"
+        - "M_EventDetailType"
+        - "M_User"
+      primary_fields:
+        - "T_EventDetail.EventDetailID"
+        - "T_EventDetail.DetailDateTime"
+        - "M_EventDetailType.DetailTypeName"
+        - "M_User.UserName AS DetailUserName"
+        - "T_EventDetail.DetailContent"
+        - "T_EventDetail.RelatedFilePath"
+      filter_conditions_summary: "指定された EventID で T_EventDetail をフィルタリング。"
+      filter_parameters:
+        - name: "eventID"
+          type: "Number" # ID は数値型
+          description: "表示対象イベントのID"
+          required: true
+      join_conditions_summary: "T_EventDetail を主とし、各マスタテーブル(M_EventDetailType, M_User)へ INNER JOIN。"
+      sql_definition: null # 比較的基本的なSQLのため、YAMLには記載せずとも可
+      details:
+        design_rationale: "イベント詳細画面での追記履歴表示用。関連マスタと結合し、表示に必要な情報を取得。"
+        testing_strategy: "指定した EventID の履歴が正しく取得・ソートされるか。マスタ結合確認。詳細はMarkdown参照。"
+        performance_considerations: "T_EventDetail.EventID へのインデックス必須。履歴件数増加時のパフォーマンス。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "INNER JOIN を使用し、関連マスタが存在する詳細のみを表示する。ソート順は DetailDateTime の昇順。"
+      # detailed_design_ref: "./detailed-designs/Q_GetEventDetails.md" # 必要に応じて設定
+    - query_id: "Q_GetEventsByCaseUUID"
+      status: "FIXED"
+      logical_name: "案件関連イベント取得クエリ"
+      purpose: "特定の案件に関連付けられたイベントの一覧を取得する。案件詳細画面等で関連イベントを表示するために使用。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_EventRelatedCase"
+        - "T_Event"
+        - "M_EventType"
+        - "M_Status"
+      primary_fields:
+        - "T_Event.EventID"
+        - "M_EventType.EventTypeName"
+        - "T_Event.EventTitle"
+        - "T_Event.EventDateTime"
+        - "M_Status.StatusName"
+      filter_conditions_summary: "指定された CaseUUID で T_EventRelatedCase をフィルタリング。"
+      filter_parameters:
+        - name: "caseUUID"
+          type: "Text" # UUID はテキスト型
+          description: "対象案件のUUID"
+          required: true
+      join_conditions_summary: "T_EventRelatedCase と T_Event を INNER JOIN。T_Event と関連マスタ(M_EventType, M_Status)を LEFT JOIN。"
+      sql_definition: null # 比較的基本的なSQLのため、YAMLには記載せずとも可
+      details:
+        design_rationale: "案件詳細画面から関連イベントへのドリルダウン用。中間テーブル経由でイベント情報を取得。"
+        testing_strategy: "指定した CaseUUID に紐づくイベントが正しく取得・ソートされるか。マスタ結合確認。詳細はMarkdown参照。"
+        performance_considerations: "T_EventRelatedCase.CaseUUID へのインデックス必須。イベント件数増加時のパフォーマンス。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "ソート順は EventDateTime の降順。"
+      # detailed_design_ref: "./detailed-designs/Q_GetEventsByCaseUUID.md" # 必要に応じて設定
+    - query_id: "Q_GetMasterData_BusinessTypes"
+      status: "FIXED"
+      logical_name: "業務種別マスタ取得クエリ"
+      purpose: "フォーム上のコンボボックス等で、有効な業務種別を選択肢として表示するために使用する。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "M_BusinessType"
+      primary_fields:
+        - "BusinessTypeID"
+        - "BusinessTypeName"
+      filter_conditions_summary: "有効フラグ(IsActive)が True のレコードのみ抽出。"
+      filter_parameters: [] # パラメータなし
+      join_conditions_summary: "なし (単一テーブル)"
+      sql_definition: "SELECT BusinessTypeID, BusinessTypeName FROM M_BusinessType WHERE IsActive = True ORDER BY BusinessTypeName;" # SQLを直接記述
+      details:
+        design_rationale: "コンボボックス用のシンプルなマスタデータ取得クエリ。"
+        testing_strategy: "有効な業務種別のみが取得され、指定通りソートされているか確認。"
+        performance_considerations: "IsActive へのインデックス推奨。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリIDを規約に従い命名。"
+      remarks: "他のマスタデータ取得クエリも同様の構成で作成する。クエリ名は Q_GetMasterData_テーブル名複数形 の形式とする。"
+      # detailed_design_ref: null # シンプルなため不要
+    - query_id: "Q_CheckDuplicate_CaseMgmtNumber"
+      status: "FIXED"
+      logical_name: "案件管理番号重複チェッククエリ"
+      purpose: "T_CaseInfo テーブル内で CaseMgmtNumber が重複しているレコードを検出する。データインポート時や定期的なデータチェックで使用。"
+      query_type: "選択クエリ" # 集計を伴う
+      primary_tables:
+        - "T_CaseInfo"
+      primary_fields:
+        - "CaseMgmtNumber"
+        - "Count(*) AS DuplicateCount"
+      filter_conditions_summary: "CaseMgmtNumber が Null でないレコードを対象。"
+      filter_parameters: [] # パラメータなし
+      join_conditions_summary: "なし (単一テーブル)"
+      sql_definition: "SELECT CaseMgmtNumber, Count(*) AS DuplicateCount FROM T_CaseInfo WHERE CaseMgmtNumber Is Not Null GROUP BY CaseMgmtNumber HAVING Count(*) > 1;" # SQLを直接記述
+      details:
+        design_rationale: "データ整合性チェック用。重複する管理番号とその件数を特定。"
+        testing_strategy: "重複データが存在する場合/しない場合に正しく結果が返るか確認。"
+        performance_considerations: "CaseMgmtNumber へのインデックス推奨。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリIDを規約に従い命名。"
+      remarks: "重複している CaseMgmtNumber とその件数を返す。"
+      # detailed_design_ref: null # シンプルなため不要
+    - query_id: "Q_CheckOrphan_WorkHistory"
+      status: "FIXED"
+      logical_name: "孤立作業履歴チェッククエリ"
+      purpose: "親となる案件情報 (T_CaseInfo) が存在しない作業履歴レコード (T_WorkHistory) を検出する。データクレンジングや定期チェックで使用。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_WorkHistory"
+        - "T_CaseInfo"
+      primary_fields:
+        - "T_WorkHistory.WorkHistoryID"
+        - "T_WorkHistory.CaseUUID"
+        # - *(など、特定に必要なフィールド)* # コメントアウトまたは削除
+      filter_conditions_summary: "LEFT JOIN した T_CaseInfo のキーが Null のレコードを抽出。"
+      filter_parameters: [] # パラメータなし
+      join_conditions_summary: "T_WorkHistory LEFT JOIN T_CaseInfo ON T_WorkHistory.CaseUUID = T_CaseInfo.CaseUUID"
+      sql_definition: "SELECT T_WorkHistory.WorkHistoryID, T_WorkHistory.CaseUUID FROM T_WorkHistory LEFT JOIN T_CaseInfo ON T_WorkHistory.CaseUUID = T_CaseInfo.CaseUUID WHERE T_CaseInfo.CaseUUID Is Null;" # SQLを直接記述
+      details:
+        design_rationale: "データ整合性チェック用。親レコードが存在しない子レコード（孤立レコード）を検出。"
+        testing_strategy: "孤立レコードが存在する場合/しない場合に正しく結果が返るか確認。"
+        performance_considerations: "T_WorkHistory.CaseUUID へのインデックス推奨。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリIDを規約に従い命名。"
+      remarks: "関連する T_CaseInfo が見つからない T_WorkHistory レコードを返す。他のテーブルについても同様の孤立レコードチェッククエリを作成可能。"
+      # detailed_design_ref: null # シンプルなため不要
+    - query_id: "Q_CheckForeignKey_CaseInfo_BusinessType"
+      status: "FIXED"
+      logical_name: "FK整合性チェッククエリ例 (CaseInfo-BusinessType)"
+      purpose: "T_CaseInfo テーブルの BusinessTypeID が、対応するマスタ (M_BusinessType) に存在しないレコードを検出する。データ整合性チェックで使用。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_CaseInfo"
+        - "M_BusinessType"
+      primary_fields:
+        - "T_CaseInfo.CaseUUID"
+        - "T_CaseInfo.BusinessTypeID"
+      filter_conditions_summary: "LEFT JOIN した M_BusinessType のキーが Null で、かつ T_CaseInfo.BusinessTypeID が Null でないレコードを抽出。"
+      filter_parameters: [] # パラメータなし
+      join_conditions_summary: "T_CaseInfo LEFT JOIN M_BusinessType ON T_CaseInfo.BusinessTypeID = M_BusinessType.BusinessTypeID"
+      sql_definition: "SELECT T_CaseInfo.CaseUUID, T_CaseInfo.BusinessTypeID FROM T_CaseInfo LEFT JOIN M_BusinessType ON T_CaseInfo.BusinessTypeID = M_BusinessType.BusinessTypeID WHERE T_CaseInfo.BusinessTypeID Is Not Null AND M_BusinessType.BusinessTypeID Is Null;" # SQLを直接記述
+      details:
+        design_rationale: "データ整合性チェック用。外部キーに対応する親レコードが存在しないレコードを検出。"
+        testing_strategy: "FK違反レコードが存在する場合/しない場合に正しく結果が返るか確認。"
+        performance_considerations: "T_CaseInfo.BusinessTypeID へのインデックス推奨。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリIDを規約に従い命名。"
+      remarks: "他の外部キー制約についても同様のチェッククエリを作成可能。"
+      # detailed_design_ref: null # シンプルなため不要
+    - query_id: "Q_DeleteOldLogs"
+      status: "FIXED"
+      logical_name: "古いログ削除クエリ"
+      purpose: "指定した日付より古いログレコードを T_Log テーブルから削除する。定期的なデータベースメンテナンスで使用。"
+      query_type: "削除クエリ"
+      primary_tables:
+        - "T_Log"
+      primary_fields: [] # 削除クエリのため空
+      filter_conditions_summary: "LogDateTime が指定した cutoffDate より古いレコードを対象。"
+      filter_parameters:
+        - name: "cutoffDate"
+          type: "DateTime"
+          description: "削除基準日"
+          required: true
+      join_conditions_summary: "なし (単一テーブル)"
+      sql_definition: "DELETE FROM T_Log WHERE LogDateTime < [cutoffDate];" # SQLを直接記述
+      details:
+        design_rationale: "DBメンテナンス用。古いログを削除し、DBサイズを管理。"
+        testing_strategy: "指定した日付より古いログのみが削除されるか確認。境界値テスト。誤削除防止のため、実行前に件数確認クエリを併用。"
+        performance_considerations: "LogDateTime へのインデックス必須。大量削除時のパフォーマンスとロック時間考慮。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "実行前にバックアップ取得を強く推奨。削除対象件数を確認する選択クエリを別途用意すると安全。"
+      # detailed_design_ref: null # シンプルなため不要
+    - query_id: "Q_GetSettingValue"
+      status: "FIXED"
+      logical_name: "設定値取得クエリ"
+      purpose: "M_Setting テーブルから、指定した設定キーに対応する設定値を取得する。VBAコード内でシステム設定を参照するために使用。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "M_Setting"
+      primary_fields:
+        - "SettingValue"
+      filter_conditions_summary: "指定された SettingKey でフィルタリング。"
+      filter_parameters:
+        - name: "settingKey"
+          type: "Text"
+          description: "取得したい設定のキー"
+          required: true
+      join_conditions_summary: "なし (単一テーブル)"
+      sql_definition: "SELECT SettingValue FROM M_Setting WHERE SettingKey = [settingKey];" # SQLを直接記述
+      details:
+        design_rationale: "VBAから特定の設定値を容易に取得するためのユーティリティクエリ。"
+        testing_strategy: "指定したキーの設定値が正しく取得できるか確認。"
+        performance_considerations: "SettingKey (PK) での検索のため高速。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "DLookup関数でも代替可能だが、クエリとして定義しておくと管理しやすい場合がある。"
+      # detailed_design_ref: null # シンプルなため不要
+    - query_id: "Q_ClearStagingImport"
+      status: "FIXED"
+      logical_name: "一時取込テーブルクリアクエリ"
+      purpose: "データ取込処理の開始前に、一時取込テーブル (T_StagingImport_...) の内容をすべて削除する。"
+      query_type: "削除クエリ"
+      primary_tables:
+        - "T_StagingImport_..." # 対象テーブルは動的に指定
+      primary_fields: [] # 削除クエリのため空
+      filter_conditions_summary: "なし (全件削除)"
+      filter_parameters: [] # パラメータなし
+      join_conditions_summary: "なし (単一テーブル)"
+      sql_definition: "DELETE FROM [TargetTableName];" # VBAでテーブル名を指定して実行
+      details:
+        design_rationale: "データ取込前の準備処理。ステージングテーブルをクリアし、前回のデータを残さない。"
+        testing_strategy: "指定したテーブルの全レコードが削除されるか確認。"
+        performance_considerations: "テーブルサイズによっては時間がかかる可能性。TRUNCATE TABLEが使えれば高速だがAccessではDELETEを使用。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリIDを規約に従い命名。"
+      remarks: "テーブル名は取込対象のExcelシート等に応じて変動するため、VBA側でSQLを動的に生成して実行する必要がある。"
+      # detailed_design_ref: null # シンプルなため不要
+    - query_id: "Q_GetNewCasesFromStaging"
+      status: "WIP" # T_StagingImport_... が未定義のため WIP
+      logical_name: "ステージングからの新規案件データ取得クエリ"
+      purpose: "VBAでの新規案件追加処理に必要なデータを、一時取込テーブルから取得する。T_CaseInfo にまだ存在しない案件データを対象とする。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_StagingImport_..." # 詳細設計で具体化
+        - "T_CaseInfo"
+      primary_fields:
+        - "T_StagingImport_...キーフィールド" # 詳細設計で具体化
+        - "T_StagingImport_...フィールド1" # 詳細設計で具体化
+        - "T_StagingImport_...フィールド2" # 詳細設計で具体化
+        # - *(など、T_CaseInfo への追加に必要なフィールド)* # コメントアウトまたは削除
+      filter_conditions_summary: "LEFT JOIN した T_CaseInfo のキーが Null のレコードを抽出。"
+      filter_parameters: [] # パラメータなし
+      join_conditions_summary: "T_StagingImport_... LEFT JOIN T_CaseInfo ON T_StagingImport_...キー = T_CaseInfo.キー (キーは CaseMgmtNumber など)"
+      sql_definition: null # 詳細設計で具体化
+      details:
+        design_rationale: "データ取込処理の一部。ステージングから新規案件のみを抽出。"
+        testing_strategy: "新規案件のみが正しく抽出されるか確認。既存案件が含まれないこと。詳細はMarkdown参照。"
+        performance_considerations: "結合キーへのインデックス必須。ステージングテーブルのサイズによる影響。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリIDを規約に従い命名。"
+      remarks: "VBAで取得データを基に T_CaseInfo へのレコード追加処理を行う。CaseUUID生成、ImportSourceFile, ImportDateTime設定もVBA側。T_StagingImport_...構造とキー項目は詳細設計で決定。"
+      detailed_design_ref: "./detailed-designs/Q_GetNewCasesFromStaging.md" # 詳細設計で具体化するため参照設定
+    - query_id: "Q_GetExistingCasesForUpdate"
+      status: "WIP" # T_StagingImport_... が未定義のため WIP
+      logical_name: "ステージングからの更新対象案件データ取得クエリ"
+      purpose: "VBAでの既存案件更新処理に必要なデータを、一時取込テーブルと T_CaseInfo から取得する。差分更新を行う場合に利用。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_CaseInfo"
+        - "T_StagingImport_..." # 詳細設計で具体化
+      primary_fields:
+        - "T_CaseInfo.CaseUUID"
+        - "T_CaseInfo.SystemStatusID"
+        - "T_StagingImport_...フィールド1" # 詳細設計で具体化
+        - "T_StagingImport_...フィールド2" # 詳細設計で具体化
+        # - *(など、比較・更新に必要なフィールド)* # コメントアウトまたは削除
+      filter_conditions_summary: "なし (INNER JOIN で既存案件のみ対象)"
+      filter_parameters: [] # パラメータなし
+      join_conditions_summary: "T_CaseInfo INNER JOIN T_StagingImport_... ON T_CaseInfo.キー = T_StagingImport_...キー (キーは CaseMgmtNumber など)"
+      sql_definition: null # 詳細設計で具体化
+      details:
+        design_rationale: "データ取込処理の一部。ステージングと既存案件データを結合し、VBAでの差分比較・更新用データを提供。"
+        testing_strategy: "既存案件のデータが正しく取得できるか確認。VBAでの差分比較ロジックのテスト。詳細はMarkdown参照。"
+        performance_considerations: "結合キーへのインデックス必須。ステージングテーブルと案件テーブルのサイズによる影響。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリIDを規約に従い命名。"
+      remarks: "VBAで取得データを基に差分比較し、必要なら T_CaseInfo を更新。差分更新ロジックはVBA側。T_StagingImport_...構造とキー項目は詳細設計で決定。"
+      detailed_design_ref: "./detailed-designs/Q_GetExistingCasesForUpdate.md" # 詳細設計で具体化するため参照設定
+    - query_id: "Q_SearchLogs"
+      status: "FIXED"
+      logical_name: "ログ検索クエリ"
+      purpose: "T_Log テーブルから、指定された条件（ログレベル、期間、ユーザー、キーワード等）でログレコードを検索・表示する。トラブルシューティングや監査で使用。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_Log"
+        - "M_User"
+        - "T_CaseInfo"
+      primary_fields:
+        - "T_Log.LogID"
+        - "T_Log.LogDateTime"
+        - "T_Log.LogLevel"
+        - "T_Log.EventType"
+        - "T_Log.Message"
+        - "M_User.UserName"
+        - "T_CaseInfo.CaseMgmtNumber"
+        - "T_Log.SourceProcedure"
+        - "T_Log.ErrorNumber"
+        - "T_Log.ErrorDescription"
+        - "T_Log.ContextInfo"
+      filter_conditions_summary: "ログレベル, 発生日時(範囲), ユーザー名, 案件管理番号, メッセージ本文(部分一致)で動的にフィルタリング。"
+      filter_parameters:
+        - name: "logLevel"
+          type: "Text"
+          description: "ログレベル (例: 'ERROR', 'WARN')"
+          required: false
+          control_type: "ComboBox" # 選択肢は固定リスト
+        - name: "logDateFrom"
+          type: "DateTime"
+          description: "発生日時 From"
+          required: false
+          control_type: "DatePicker"
+        - name: "logDateTo"
+          type: "DateTime"
+          description: "発生日時 To"
+          required: false
+          control_type: "DatePicker"
+        - name: "userName"
+          type: "Text"
+          description: "ユーザー名"
+          required: false
+          control_type: "ComboBox"
+          source_query_id: "Q_GetMasterData_Users"
+        - name: "caseMgmtNumber"
+          type: "Text"
+          description: "案件管理番号"
+          required: false
+          control_type: "TextBox"
+        - name: "keyword"
+          type: "Text"
+          description: "メッセージ本文の部分一致検索キーワード"
+          required: false
+          control_type: "TextBox"
+      join_conditions_summary: "T_Log を主とし、M_User と T_CaseInfo へ LEFT JOIN (UserID, CaseUUID が Null の場合もあるため)。"
+      sql_definition: null # SQLはVBAで動的生成するためYAMLには記載しない
+      details:
+        design_rationale: "ログ参照画面のデータソース。柔軟な検索条件でログを絞り込み可能にする。"
+        testing_strategy: "各フィルタパラメータの組み合わせテスト。境界値テスト(日付)。キーワード検索テスト。大量ログでの性能テスト。詳細はMarkdown参照。"
+        performance_considerations: "LogDateTime, LogLevel, UserID, CaseUUID へのインデックス必須。キーワード検索は性能劣化注意。詳細はMarkdown参照。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "VBA側で条件未指定のパラメータを除外してSQLを動的に構築する必要がある。ソート順は LogDateTime の降順。"
+      # detailed_design_ref: "./detailed-designs/Q_SearchLogs.md" # 必要に応じて設定
+    - query_id: "Q_GetOverdueCases"
+      status: "FIXED"
+      logical_name: "納期超過案件取得クエリ"
+      purpose: "現在日時が納期 (DueDate) を過ぎている未完了案件のリストを取得する。管理者へのアラートやダッシュボード表示用。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "T_CaseInfo"
+        - "M_SystemStatus"
+      primary_fields:
+        - "T_CaseInfo.CaseUUID"
+        - "T_CaseInfo.CaseMgmtNumber"
+        - "T_CaseInfo.DueDate"
+        - "M_SystemStatus.SystemStatusName"
+        # - *(など、必要な情報)* # コメントアウトまたは削除
+      filter_conditions_summary: "DueDate が現在日時より過去で、かつシステムステータスが完了を示すものではない案件を抽出。"
+      filter_parameters: [] # パラメータなし
+      join_conditions_summary: "T_CaseInfo INNER JOIN M_SystemStatus ON T_CaseInfo.SystemStatusID = M_SystemStatus.SystemStatusID"
+      sql_definition: "SELECT T_CaseInfo.CaseUUID, T_CaseInfo.CaseMgmtNumber, T_CaseInfo.DueDate, M_SystemStatus.SystemStatusName FROM T_CaseInfo INNER JOIN M_SystemStatus ON T_CaseInfo.SystemStatusID = M_SystemStatus.SystemStatusID WHERE T_CaseInfo.DueDate < Date() AND M_SystemStatus.SystemStatusName NOT IN ('完了', '転記済');" # SQLを直接記述 (完了ステータス名は仮)
+      details:
+        design_rationale: "ダッシュボードやアラート機能のためのユーティリティクエリ。納期遅延案件を特定。"
+        testing_strategy: "納期超過/未超過、完了/未完了の組み合わせで正しく抽出されるか確認。境界値テスト(今日が納期)。"
+        performance_considerations: "DueDate, SystemStatusID へのインデックス必須。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリIDを規約に従い命名。"
+      remarks: "「完了を示すステータス」の具体的な定義（例: M_SystemStatus.SystemStatusName の値）が必要。SQL内のリストは仮。"
+      # detailed_design_ref: null # シンプルなため不要
+    - query_id: "Q_GetUserTaskAbilities"
+      status: "FIXED"
+      logical_name: "ユーザー対応可能タスク取得クエリ"
+      purpose: "特定のユーザーが対応可能なタスク（工程）のリストを、工程名と共に取得する。タスク割り当てや権限管理の参考に利用。"
+      query_type: "選択クエリ"
+      primary_tables:
+        - "M_UserTaskAbility"
+        - "M_ProcessDefinition"
+      primary_fields:
+        - "M_ProcessDefinition.ProcessDefinitionID"
+        - "M_ProcessDefinition.ProcessName"
+        - "M_UserTaskAbility.SkillLevel"
+      filter_conditions_summary: "指定された UserID で M_UserTaskAbility をフィルタリング。"
+      filter_parameters:
+        - name: "userID"
+          type: "Text"
+          description: "対象ユーザーのID"
+          required: true
+      join_conditions_summary: "M_UserTaskAbility INNER JOIN M_ProcessDefinition ON M_UserTaskAbility.ProcessDefinitionID = M_ProcessDefinition.ProcessDefinitionID"
+      sql_definition: "SELECT M_ProcessDefinition.ProcessDefinitionID, M_ProcessDefinition.ProcessName, M_UserTaskAbility.SkillLevel FROM M_UserTaskAbility INNER JOIN M_ProcessDefinition ON M_UserTaskAbility.ProcessDefinitionID = M_ProcessDefinition.ProcessDefinitionID WHERE M_UserTaskAbility.UserID = [userID] ORDER BY M_ProcessDefinition.ProcessName;" # SQLを直接記述
+      details:
+        design_rationale: "ユーザーのスキルセット取得用ユーティリティクエリ。"
+        testing_strategy: "指定したユーザーの対応可能タスクが正しく取得・ソートされるか確認。"
+        performance_considerations: "M_UserTaskAbility.UserID へのインデックス必須。"
+        standard_compliance:
+          - standard_doc_id: "coding-std"
+            section: "1. 命名規則"
+            compliance_summary: "クエリID、パラメータ名を規約に従い命名。"
+      remarks: "ソート順は工程名の昇順。"
+      # detailed_design_ref: null # シンプルなため不要

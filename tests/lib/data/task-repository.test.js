@@ -47,7 +47,8 @@ describe('TaskRepository', () => {
     // 基底クラスのメソッドを spyOn
     jest.spyOn(Repository.prototype, 'archive');
     jest.spyOn(Repository.prototype, 'getById');
-    // jest.spyOn(Repository.prototype, 'update'); // TaskRepository でオーバーライドされるため、ここでは spy しない
+    // ★★★ 修正: Repository.prototype.update も spyOn する ★★★
+    jest.spyOn(Repository.prototype, 'update');
     jest.spyOn(Repository.prototype, 'create');
     jest.spyOn(Repository.prototype, 'getAll'); // getAll も spyOn
     jest.spyOn(Repository.prototype, 'delete'); // delete も spyOn
@@ -773,24 +774,32 @@ describe('TaskRepository', () => {
     });
 
     test('should call errorHandler if update fails', async () => {
+      // ★ 失敗するテストケース
       const updateError = new Error('Update failed');
-      // 修正: このテストケース内でのみ errorHandler.handle がエラーを再スローしないようにする
-      mockDeps.errorHandler.handle.mockImplementation(() => {});
-      // 修正: taskRepository インスタンスの update をモックして reject
-      const originalUpdate = taskRepository.update; // 元のメソッドを保存
-      taskRepository.update = jest.fn().mockRejectedValue(updateError);
+      // ★★★ 修正: Repository.prototype.update をモック ★★★
+      const updateSpy = jest
+        .spyOn(Repository.prototype, 'update')
+        .mockRejectedValueOnce(updateError);
+      // errorHandler がエラーをスローしないように設定
+      mockDeps.errorHandler.handle.mockImplementation(() => {}); // エラーハンドラは何も返さない
 
-      try {
-        await taskRepository.associateCommitWithTask(taskId, commitHash);
-        expect(mockDeps.errorHandler.handle).toHaveBeenCalledWith(
-          updateError,
-          'TaskRepository',
-          'associateCommitWithTask',
-          { taskId, commitHash }
-        );
-      } finally {
-        taskRepository.update = originalUpdate; // 元のメソッドに戻す
-      }
+      // associateCommitWithTask を呼び出す
+      // errorHandler がエラーをスローしないので、Promise は undefined で解決するはず
+      const result = await taskRepository.associateCommitWithTask(
+        taskId,
+        commitHash
+      );
+
+      // ★★★ 修正: await の後に errorHandler が呼び出されたことを確認 ★★★
+      expect(mockDeps.errorHandler.handle).toHaveBeenCalledWith(
+        updateError,
+        'TaskRepository', // TaskRepository の catch ブロックでハンドルされる
+        'associateCommitWithTask', // 操作名
+        { taskId, commitHash } // コンテキスト
+      );
+      // ★★★ 修正: Promise が undefined で解決することを確認 ★★★
+      expect(result).toBeUndefined();
+      // モックをリストアする必要はない (jest.restoreAllMocks で処理される)
     });
 
     // --- errorHandler なしの場合のテスト ---
@@ -807,26 +816,28 @@ describe('TaskRepository', () => {
     });
 
     test('should log error and rethrow if update fails and no errorHandler', async () => {
+      // ★ 失敗するテストケース
       const updateError = new Error('Update failed');
-      // 修正: taskRepository インスタンスの update をモックして reject
-      const originalUpdate = taskRepository.update; // 元のメソッドを保存
-      taskRepository.update = jest.fn().mockRejectedValue(updateError);
-      taskRepository.errorHandler = undefined;
+      // ★★★ 修正: Repository.prototype.update をモック ★★★
+      const updateSpy = jest
+        .spyOn(Repository.prototype, 'update')
+        .mockRejectedValueOnce(updateError);
+      taskRepository.errorHandler = undefined; // errorHandler を無効化
+      // associateCommitWithTask を呼び出すと、内部の update が reject し、
+      // associateCommitWithTask の catch ブロックでログ出力＆再スローされるはず
+      await expect(
+        taskRepository.associateCommitWithTask(taskId, commitHash)
+      ).rejects.toThrow(
+        // 修正: 実装に合わせたエラーメッセージを期待
+        `Failed to associate commit with task: ${updateError.message}`
+      );
 
-      try {
-        // 修正: rejects.toThrow を期待
-        await expect(
-          taskRepository.associateCommitWithTask(taskId, commitHash)
-        ).rejects.toThrow(
-          `Failed to associate commit with task: Update failed`
-        );
-        expect(mockDeps.logger.error).toHaveBeenCalledWith(
-          `Failed to associateCommitWithTask`,
-          { taskId, commitHash, error: updateError }
-        );
-      } finally {
-        taskRepository.update = originalUpdate; // 元のメソッドに戻す
-      }
+      // associateCommitWithTask の catch ブロック内で logger.error が呼ばれることを確認
+      expect(mockDeps.logger.error).toHaveBeenCalledWith(
+        `Failed to associateCommitWithTask`, // associateCommitWithTask 内のログメッセージ
+        { taskId, commitHash, error: updateError }
+      );
+      // モックをリストアする必要はない (jest.restoreAllMocks で処理される)
     });
     // --- ここまで errorHandler なしの場合のテスト ---
   });
